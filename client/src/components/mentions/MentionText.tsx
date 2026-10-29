@@ -4,6 +4,7 @@ import { ANY_MENTION_RE, isMentionIndexReady, mentionTone, resolveMention, useMe
 import { DeadMention } from "./DeadMention";
 import { SIDE_LABEL, parseImageLayout } from "./imageLayout";
 import { openMentionPreview } from "./mentionPreviewStore";
+import { entityMark } from "../../pageMenu";
 import { getCachedUser } from "../../api/currentUser";
 import { useResource } from "../../data/hooks";
 import { findTextTables, tableCellStyle } from "./tableDocument";
@@ -137,6 +138,7 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
             key={`${keyPrefix}-${key++}`}
             type="button"
             className={`mention-link mention--${mentionTone(refType, target)}`}
+            {...entityMark(refType, target, refLabel)}
             onClick={() => openMentionPreview(refType, target)}
           >
             {refLabel}
@@ -164,6 +166,7 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
             key={`${keyPrefix}-${key++}`}
             type="button"
             className={`mention-link mention--${mentionTone(mType, id)}`}
+            {...entityMark(mType, id, mLabel)}
             onClick={() => openMentionPreview(mType, id)}
           >
             {mLabel}

@@ -12,6 +12,7 @@ import { useCurrentUser } from "./api/currentUser";
 import { EmptyState } from "./components/EmptyState";
 import { Loading } from "./components/Loading";
 import { Link } from "react-router-dom";
+import { PageContextMenu } from "./components/PageContextMenu";
 import { MentionPreviewRoot } from "./components/mentions/MentionPreviewRoot";
 
 // Every route below is its own chunk (Vite code-splits on dynamic import)
@@ -193,6 +194,7 @@ function App() {
               <SaveNotices />
               <DataLayerSync />
               <MentionPreviewRoot />
+              <PageContextMenu />
               <ErrorBoundary>
                 <Suspense fallback={<Loading full />}>
                   <Routes>

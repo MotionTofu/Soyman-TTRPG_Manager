@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { APP_SEARCH_EVENT, entityMark } from "../pageMenu";
 import { Link, useLocation } from "react-router-dom";
 import { useResource } from "../data/hooks";
 import { useSearch } from "../data/search";
@@ -114,6 +115,16 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   const dndSystemId = systems?.find((s) => s.name === "D&D 5.5")?.id ?? null;
 
   useEffect(() => {
+    function reveal() {
+      if (narrow) return setRailOpen("search");
+      if (!workspace) setLayout((prev) => {
+        if (!prev.collapsed.includes("search")) return prev;
+        const next = { ...prev, collapsed: prev.collapsed.filter((c) => c !== "search") };
+        saveSideLayout(next);
+        return next;
+      });
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const ae = document.activeElement as HTMLElement | null;
@@ -121,18 +132,20 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
         // Не перехватывать "/" внутри набора механик/описаний — только когда фокус на body
         if (ae && ae !== document.body) return;
         e.preventDefault();
-        if (narrow) return setRailOpen("search");
-        if (!workspace) setLayout((prev) => {
-          if (!prev.collapsed.includes("search")) return prev;
-          const next = { ...prev, collapsed: prev.collapsed.filter((c) => c !== "search") };
-          saveSideLayout(next);
-          return next;
-        });
-        requestAnimationFrame(() => inputRef.current?.focus());
+        reveal();
       }
     }
+    // «Найти в приложении» из ПКМ выделенного текста (§6.12, Q10).
+    function onSearch(e: Event) {
+      setQuery((e as CustomEvent<string>).detail);
+      reveal();
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(APP_SEARCH_EVENT, onSearch);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(APP_SEARCH_EVENT, onSearch);
+    };
   }, [workspace, narrow]);
 
   // ] и F4 из оболочки сворачивают панель до значков, а не прячут её.
@@ -278,6 +291,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
             <div
               key={`${r.type}-${r.id}`}
               className="search-result"
+              {...entityMark(r.type, r.id, r.title)}
               draggable
               onDragStart={(e) => handleDragStart(e, r)}
             >

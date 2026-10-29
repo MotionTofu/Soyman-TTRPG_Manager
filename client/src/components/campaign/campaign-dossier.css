@@ -198,9 +198,6 @@
 }
 .campaign-dossier .dossier-text-action:hover { background: transparent; color: var(--paper-ink); text-decoration: underline; }
 .campaign-dossier .dossier-text-action--danger { color: var(--paper-alarm); }
-.dossier-action-menu .context-menu,
-.dossier-action-menu .context-menu-title,
-.dossier-action-menu .context-menu button { font-family: var(--font-body); }
 /* «Память» (Q22): погибшие и ушедшие одной строкой. */
 .dossier-memory { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); margin: 0 0 var(--sp-5); }
 .dossier-memory > summary { cursor: pointer; }

@@ -7416,98 +7416,133 @@ details.card[open] summary {
    gap between the hero/tiles/list sections (var(--sp-8)); each section's
    own inner padding stays compact (cards keep their normal 12/16). */
 
+/* Контекстное меню «Д» (design-system.md §6.12, макет — холст, страница
+   «Сквозное»): лист бумаги с кромкой тушью и лёгкой тенью, шапка — чёрная
+   плашка, наведение — тушь с инверсией, без кислоты. Опасное — малиновым. */
 .context-menu {
-  background: var(--bg-elevated);
-  border: var(--card-border-width, 1px) solid var(--line);
-  border-radius: var(--card-radius);
-  padding: var(--sp-2);
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  min-width: 180px;
-  z-index: 100;
-  /* Меню не может быть шире и выше экрана. Раскрытое «Переместить» на Полотне
-     перечисляет все сеттинги и кампании — на 375 px это 670 px высоты, и без
-     ограничения нижние пункты оказывались за краем без возможности до них
-     добраться. Прижатие меню к экрану считает `ContextMenu` по этому же
-     замеру, поэтому предел нужен здесь, а не там. */
-  max-width: calc(100vw - 16px);
+  min-width: 240px;
+  max-width: min(340px, calc(100vw - 16px));
+  /* Меню не может быть выше экрана: раскрытое «Переместить» на Полотне
+     перечисляет все сеттинги и кампании — на 375 px это 670 px. */
   max-height: calc(100vh - 16px);
   overflow-y: auto;
+  padding: 0 0 var(--sp-2);
+  background: var(--sheet);
+  color: var(--ink);
+  border: var(--edge-width, 2px) solid var(--edge);
+  box-shadow: 0 10px 28px rgba(21, 21, 21, 0.22);
+  font-family: var(--font-body);
+  font-size: var(--fs-body, 14px);
+  outline: none;
 }
-/* Подпись меню, а не пункт: не кликается, не подсвечивается и отделена
-   линией — иначе первая строка читалась бы как ещё одно действие. */
+:root[data-theme-mode="dark"] .context-menu { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
+.context-menu:not(:has(> .context-menu-title)) { padding-top: var(--sp-2); }
+/* Подпись меню, а не пункт: чему принадлежат действия ниже. */
 .context-menu-title {
-  padding: var(--sp-3) var(--sp-4) var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
   margin-bottom: var(--sp-2);
-  border-bottom: 1px solid var(--line);
+  padding: 7px var(--sp-4) 6px;
+  background: var(--surface);
+  color: var(--on-surface);
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   line-height: 1.25;
-  color: var(--muted);
-  max-width: 260px;
+  text-transform: uppercase;
 }
+.context-menu-title > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .context-menu-divider {
   margin: var(--sp-2) 0;
   border: 0;
   border-top: 1px solid var(--line);
 }
-:is(.paper-scope, .entity-page--paper) .context-menu-divider { border-top-color: var(--paper-rule); }
 .context-menu button {
-  background: transparent;
-  border: none;
-  text-align: left;
-  border-radius: var(--card-radius);
-  padding: var(--sp-3) var(--sp-4);
-}
-.context-menu button:hover {
-  background: var(--paper-2);
-  border-color: transparent;
-}
-/* Пункт меню, а не кнопка: плотная бордовая заливка из общего правила
-   button.danger превратила бы строку выпадающего меню в кричащую плашку,
-   поэтому здесь остаётся только цвет текста. */
-.context-menu button.danger {
   display: flex;
-  justify-content: flex-start;
-  text-align: left;
+  align-items: center;
+  gap: var(--sp-5);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  border-color: transparent;
-  color: var(--danger-bg);
-  font-weight: 600;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.context-menu button.danger:hover {
-  background: var(--paper-2);
-  border-color: transparent;
+.context-menu button:is(:hover, :focus-visible, .open) {
+  background: var(--ink);
+  color: var(--sheet);
+  outline: none;
 }
+/* Пункт меню, а не кнопка: заливка из общего button.danger превратила бы
+   строку в кричащую плашку, поэтому здесь остаётся только цвет текста. */
+.context-menu .context-menu-item.danger { justify-content: flex-start; background: transparent; color: var(--danger-bg); font-weight: 600; }
+.context-menu .context-menu-item.danger:is(:hover, :focus-visible) { background: var(--danger-bg); color: var(--danger-text); }
+.context-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .context-menu-hint {
-  float: right;
-  margin-left: var(--sp-7);
+  margin-left: auto;
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
+.context-menu button:is(:hover, :focus-visible, .open) .context-menu-hint { color: inherit; }
 .context-menu-foot {
   margin-top: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4) var(--sp-1);
+  padding: var(--sp-2) var(--sp-4) 0;
   border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--muted);
 }
-.context-menu-group {
-  display: flex;
-  flex-direction: column;
+.context-menu-group { display: flex; flex-direction: column; }
+.context-menu--sub { z-index: 101; min-width: 200px; padding-top: var(--sp-2); }
+/* Шторка телефона (Q7): снизу во всю ширину, пункты под палец. */
+.context-menu-scrim { position: fixed; inset: 0; z-index: 99; background: rgba(0, 0, 0, 0.35); }
+.context-menu--sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: none;
+  max-height: 75vh;
+  padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  border-width: var(--edge-width, 2px) 0 0;
 }
-.context-menu-group-toggle {
-  width: 100%;
+.context-menu--sheet button { min-height: 48px; }
+.context-menu-submenu { display: flex; flex-direction: column; padding-left: var(--sp-5); border-left: 2px solid var(--line); margin-left: var(--sp-5); }
+/* «⋯» строки и карточки (Q6): на ПК — при наведении и фокусе, на телефоне — всегда. */
+.entity-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
 }
-.context-menu-submenu {
-  display: flex;
-  flex-direction: column;
-  padding-left: var(--sp-5);
-  border-left: 2px solid var(--line);
-  margin: var(--sp-1) 0 var(--sp-1) var(--sp-5);
-}
+:is([data-entity-id]:hover, [data-entity-id]:focus-within) .entity-dots,
+.entity-dots:is(:focus-visible, [aria-expanded="true"]) { opacity: 1; }
+.entity-dots:hover { background: var(--ink); color: var(--sheet); }
+@media (pointer: coarse) { .entity-dots { opacity: 1; width: 40px; height: 40px; } }
+/* Просмотр картинки из ПКМ: во весь экран, щелчок или Esc закрывает. */
+.image-view { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: var(--sp-6); background: rgba(0, 0, 0, 0.85); cursor: zoom-out; }
+.image-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
 .entity-header-actions {
   display: flex;

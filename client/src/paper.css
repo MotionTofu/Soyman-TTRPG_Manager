@@ -80,7 +80,7 @@
 
 /* Один вид меню для папочного профиля и любых отдельных бумажных карточек.
    paper-wash — прозрачная заливка полей, для всплывающего листка не годится. */
-:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) {
+:is(.paper-scope, .entity-page--paper) .wb-menu__list {
   background: var(--paper-base);
   border-color: var(--edge);
   border-radius: 0;
@@ -88,14 +88,14 @@
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
 }
-:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) :is(button, a) {
+:is(.paper-scope, .entity-page--paper) .wb-menu__list :is(button, a) {
   color: var(--paper-ink);
   border-radius: 3px;
 }
-:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) button.danger {
+:is(.paper-scope, .entity-page--paper) .wb-menu__list button.danger {
   color: var(--paper-alarm);
 }
-:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) :is(button, a):hover {
+:is(.paper-scope, .entity-page--paper) .wb-menu__list :is(button, a):hover {
   background: var(--paper-acid);
 }
 
