@@ -125,3 +125,49 @@
   padding: 0 var(--sp-5);
   font-size: var(--fs-meta);
 }
+
+/* Ярлыки вкладок (§6.2): скос справа, внахлёст; активный — цвета листа,
+   сливается с ним, кислотная полоса сверху. Полоса стоит над листом
+   (.d-sheet, лист профиля). */
+.d-tabs {
+  gap: 0;
+  padding: 0;
+  box-shadow: none;
+  align-items: flex-end;
+  position: relative;
+  z-index: 2;
+}
+:is(.d-tabs, .entity-page--paper > .tabs) button {
+  margin-right: calc(-1 * var(--sp-5));
+  padding: var(--sp-4) var(--sp-7) var(--sp-4) var(--sp-5);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 100%, 0 100%);
+  background: var(--tab);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+}
+:is(.d-tabs, .entity-page--paper > .tabs) button:hover {
+  color: var(--ink);
+}
+:is(.d-tabs, .entity-page--paper > .tabs) button.active {
+  z-index: 1;
+  padding-top: var(--sp-5);
+  border-top-color: transparent;
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: inset 0 4px 0 var(--acid);
+}
+
+/* Лист — рабочая поверхность экрана в тушь-рамке (§6.3). */
+.d-sheet {
+  padding: var(--sp-7) var(--sp-8) var(--sp-8);
+  border: var(--edge-width) solid var(--edge);
+  outline: 1px solid var(--edge);
+  outline-offset: -8px;
+  background: var(--sheet);
+}

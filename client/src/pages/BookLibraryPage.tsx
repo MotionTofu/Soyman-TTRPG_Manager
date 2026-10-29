@@ -22,6 +22,19 @@ import {LIBRARY_AFFECTS,type LibraryBook,type LibraryCatalog,type LibraryDepartm
 import type {MasteringSection,System} from "../types";
 import "./mastering-library.css";
 import "./book-library.css";
+import {formatDateKeyRu} from "../utils/date";
+
+const FORMAT_LABEL:Record<LibraryBook["format"],string>={pdf:"PDF",markdown:"Маркдаун",workbook:"Тетрадь"};
+
+/** «Продолжить чтение» — главный блок читального зала (макет «Д» Roll-Library, §5). */
+function ContinueReading({book,cover,onOpen}:{book:LibraryBook|undefined;cover:string|undefined;onOpen:()=>void}){
+ if(!book)return <section className="library-room-intro d-focal"><h2 className="d-plate">Продолжить чтение</h2><p>Открой книгу — здесь появится место, на котором ты остановился.</p></section>;
+ return <section className="library-room-intro library-continue d-focal">
+  <span className="library-continue__cover">{cover?<img src={cover} alt=""/>:<NavIcon name="book"/>}</span>
+  <div className="library-continue__text"><h2 className="d-plate">Продолжить чтение</h2><h3>{book.title}</h3><p className="d-mono">{[FORMAT_LABEL[book.format],book.last_opened?`открыто ${formatDateKeyRu(book.last_opened.slice(0,10))}`:null].filter(Boolean).join(" · ")}</p></div>
+  <button className="d-btn d-btn--primary" onClick={onOpen}>Читать дальше</button>
+ </section>;
+}
 
 const EMPTY_BOOKS:LibraryBook[]=[],EMPTY_DEPARTMENTS:LibraryDepartment[]=[],EMPTY_SHELVES:LibraryShelf[]=[],EMPTY_SYSTEMS:System[]=[];
 const collator=new Intl.Collator("ru",{numeric:true,sensitivity:"base"});
@@ -102,17 +115,19 @@ export function BookLibraryPage(){
  return <PageFrame section="mastering" title="Библиотека" actions={<Link to="/mastering/cutscenes" className="button">Катсцены</Link>} className={`mastering-page mastering-library${selectedId?" is-reading":""}`}>
  {confirmDialog}<SectionBackground/>
  {!selectedId&&<>
- <div className="tabs library-departments" aria-label="Подразделы библиотеки"><button className={department==="room"?"active":""} onClick={()=>changeDepartment("room")}>Читальный зал</button>{departments.map(item=><button key={item.id} className={department===String(item.id)?"active":""} onClick={()=>changeDepartment(String(item.id))}>{item.name}</button>)}<button className={department==="none"?"active":""} onClick={()=>changeDepartment("none")}>Без подраздела</button><button aria-label="Создать подраздел" onClick={()=>setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length})}>+</button></div>
- <div className="mastering-toolbar"><label className="mastering-search"><NavIcon name="search"/><input type="search" aria-label="Поиск по всем книгам" placeholder="Найти книгу…" value={query} onChange={event=>setQuery(event.target.value)}/></label><button onClick={()=>setFiltersOpen(!filtersOpen)}>Фильтры</button><button onClick={()=>upload.current?.click()}>Загрузить PDF / .md</button><button onClick={()=>setOrganization({kind:"shelf",id:null,name:"",department:department==="room"||department==="none"?null:Number(department),position:shelves.length})}>+ Полка</button><button className="primary" onClick={()=>newBook()}>+ Книга</button><input ref={upload} type="file" accept=".pdf,.md,.zip" hidden onChange={event=>{void importFile(event.target.files?.[0]);event.target.value="";}}/></div>
+ <div className="tabs d-tabs library-departments" aria-label="Подразделы библиотеки"><button className={department==="room"?"active":""} onClick={()=>changeDepartment("room")}>Читальный зал</button>{departments.map(item=><button key={item.id} className={department===String(item.id)?"active":""} onClick={()=>changeDepartment(String(item.id))}>{item.name}</button>)}<button className={department==="none"?"active":""} onClick={()=>changeDepartment("none")}>Без подраздела</button><button aria-label="Создать подраздел" onClick={()=>setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length})}>+</button></div>
+ <div className="library-sheet d-sheet">
+ <div className="mastering-toolbar"><label className="mastering-search"><NavIcon name="search"/><input type="search" aria-label="Поиск по всем книгам" placeholder="Найти книгу…" value={query} onChange={event=>setQuery(event.target.value)}/></label><button onClick={()=>setFiltersOpen(!filtersOpen)}>Фильтры</button><button onClick={()=>upload.current?.click()}>Загрузить PDF / .md</button><button onClick={()=>setOrganization({kind:"shelf",id:null,name:"",department:department==="room"||department==="none"?null:Number(department),position:shelves.length})}>+ Полка</button><button onClick={()=>newBook()}>+ Книга</button><input ref={upload} type="file" accept=".pdf,.md,.zip" hidden onChange={event=>{void importFile(event.target.files?.[0]);event.target.value="";}}/></div>
  {department!=="room"&&department!=="none"&&<button className="library-department-settings" onClick={()=>{const item=departments.find(item=>item.id===Number(department));if(item)setOrganization({kind:"department",id:item.id,name:item.name,position:item.position,department:null});}}>Настройки подраздела</button>}
  {filtersOpen&&<div className="mastering-filters"><label>Формат<select value={format} onChange={e=>setFormat(e.target.value)}><option value="">Все</option><option value="pdf">PDF</option><option value="markdown">Маркдаун</option><option value="workbook">Тетрадь</option></select></label><label>Система<select value={system} onChange={e=>setSystem(e.target.value)}><option value="">Все</option><option value="none">Без системы</option>{systems.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label><input type="checkbox" checked={notesOnly} onChange={e=>setNotesOnly(e.target.checked)}/>С заметками</label><Link to="/resources">Другие материалы</Link><Link to="/workbooks">Тетради и шаблоны</Link></div>}
  {first.error&&<LoadErrorCard message={first.error} onRetry={first.reload}/>} {first.loading&&!first.data&&<ListSkeleton variant="tiles"/>}
  <div className="mastering-shelves">
- {department==="room"&&!filtersActive&&<><div className="library-room-intro"><h2>Продолжить чтение</h2>{recent.length?<button className="primary" onClick={()=>openBook(recent[0].id,recent.map(book=>book.id))}>{recent[0].title} →</button>:<p>Открой книгу — здесь появится место, на котором ты остановился.</p>}</div>{!!pins.length&&<MasteringShelf shelf={null} title="Закладки" shelfKey="pins" {...shelfProps(pins)} onAdd={()=>newBook()}/>} {!!recent.length&&<MasteringShelf shelf={null} title="Недавно открытые" shelfKey="recent" {...shelfProps(recent)} onAdd={()=>newBook()}/>}<h2 className="library-all-label">Все полки</h2></>}
+ {department==="room"&&!filtersActive&&<><ContinueReading book={recent[0]} cover={recent[0]?.cover_image?covers.get(recent[0].cover_image):undefined} onOpen={()=>openBook(recent[0].id,recent.map(book=>book.id))}/>{!!pins.length&&<MasteringShelf shelf={null} title="Закладки" shelfKey="pins" {...shelfProps(pins)} onAdd={()=>newBook()}/>} {!!recent.length&&<MasteringShelf shelf={null} title="Недавно открытые" shelfKey="recent" {...shelfProps(recent)} onAdd={()=>newBook()}/>}<h2 className="library-all-label">Все полки</h2></>}
  {visibleShelves.map(shelf=>{const items=books.filter(book=>book.shelf_id===shelf.id);if(filtersActive&&!items.length)return null;return <MasteringShelf key={shelf.id} shelf={shelfView(shelf)} {...shelfProps(items)} categoryLabel={department==="room"?departments.find(d=>d.id===shelf.department_id)?.name:undefined} initialDescending={!!shelf.descending} onSort={descending=>{void run(()=>write.put(`/book-library/shelves/${shelf.id}`,{descending}),{affects:LIBRARY_AFFECTS});}} onAdd={()=>newBook(shelf)} onEditShelf={()=>setOrganization({kind:"shelf",id:shelf.id,name:shelf.name,department:shelf.department_id,position:shelf.position})}/>;})}
  {!!books.filter(book=>book.shelf_id==null).length&&<MasteringShelf shelf={null} {...shelfProps(books.filter(book=>book.shelf_id==null))} onAdd={()=>newBook()}/>}
  {!books.length&&!first.loading&&<p>Здесь пока нет книг. Добавь книгу или загрузи файл.</p>}
  {first.data&&books.length<first.data.total&&<button onClick={()=>setPages(pages+1)}>Загрузить ещё · {first.data.total-books.length}</button>}
+ </div>
  </div>
  </>}
  {selection.error&&<LoadErrorCard message={selection.error} action={<button onClick={closeBook}>На полку</button>}/>}
