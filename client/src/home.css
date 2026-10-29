@@ -254,7 +254,7 @@
 }
 .home-hero-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-title);
   font-size: var(--fs-h1);
   font-weight: 400;
   text-transform: var(--name-transform);

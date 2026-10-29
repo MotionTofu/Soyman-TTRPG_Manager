@@ -192,7 +192,11 @@
   --primary-bg: #151515;
   --primary-text: #ffffff;
   --player-bar-text: #F1EEDF;
-  --font-display: 'Rubik Dirt', 'Oswald', sans-serif;
+  --font-display: 'Oswald', 'Sofia Sans Semi Condensed', sans-serif;
+  /* Голос Display v2 (§3.1): Rubik Dirt — только название страницы, герой,
+     имя на листе. Потёртый шрифт мельче 26 px не читается, поэтому он не
+     в --font-display, которым набраны заголовки карточек и навигация. */
+  --font-title: 'Rubik Dirt', 'Oswald', sans-serif;
   --font-body: 'Sofia Sans Semi Condensed', sans-serif;
   /* Typography voices (design doc §4.1). Display/Body vary per theme (see
      themes.ts); UI and Mono are the same everywhere — the doc doesn't call
@@ -556,7 +560,7 @@ h1, h2 {
   letter-spacing: -0.01em;
   line-height: .92;
 }
-h1 { font-size: var(--fs-h1); }
+h1 { font-size: var(--fs-h1); font-family: var(--font-title); font-weight: 400; }
 h2 { font-size: var(--fs-h2); }
 h3, h4 {
   margin: 0 0 var(--sp-4) 0;
@@ -3836,7 +3840,7 @@ body.live-hide-search.live-hide-dock .app-content {
   /* Desktop-only per the design brief — the <860px off-canvas drawer reuses
      this same markup but reverts to the body font (see the mobile media
      query below), since the mobile chrome leans on the bottom nav instead. */
-  font-family: var(--font-display);
+  font-family: var(--font-body);
 }
 .app-nav a:hover {
   background: var(--bg-elevated);
@@ -3858,7 +3862,7 @@ body.live-hide-search.live-hide-dock .app-content {
   gap: var(--sp-5);
   padding: var(--sp-4) var(--sp-4);
   border-radius: var(--card-radius);
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   color: var(--muted);
   cursor: default;
   opacity: 0.6;
