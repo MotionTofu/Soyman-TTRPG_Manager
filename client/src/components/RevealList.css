@@ -96,7 +96,7 @@
   width: 14px;
   height: 14px;
   box-sizing: border-box;
-  border: 1.5px solid var(--ink);
+  border: 1px solid var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -124,7 +124,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: var(--sp-2);
-  row-gap: 2px;
+  row-gap: var(--sp-1);
   align-items: start;
   cursor: pointer;
 }

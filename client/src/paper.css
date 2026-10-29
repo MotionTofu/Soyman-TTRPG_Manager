@@ -810,7 +810,7 @@
 .session-review__owner select {
   width: auto;
   max-width: 100%;
-  padding: 1px 4px;
+  padding: var(--sp-0) var(--sp-2);
   font-size: var(--fs-meta);
 }
 .session-review__acts {
@@ -1050,10 +1050,10 @@
   display: flex;
   gap: var(--sp-4);
 }
-.pop-row--tree[data-depth="1"] { padding-left: calc(var(--sp-3) + 28px); }
-.pop-row--tree[data-depth="2"] { padding-left: calc(var(--sp-3) + 56px); }
-.pop-row--tree[data-depth="3"] { padding-left: calc(var(--sp-3) + 84px); }
-.pop-row--tree[data-depth="4"] { padding-left: calc(var(--sp-3) + 112px); }
+.pop-row--tree[data-depth="1"] { padding-left: calc(var(--sp-3) + var(--sp-8)); }
+.pop-row--tree[data-depth="2"] { padding-left: calc(var(--sp-3) + var(--sp-10)); }
+.pop-row--tree[data-depth="3"] { padding-left: calc(var(--sp-3) + var(--sp-10)); }
+.pop-row--tree[data-depth="4"] { padding-left: calc(var(--sp-3) + var(--sp-10)); }
 .pop-row__twisty {
   width: 14px;
   flex: 0 0 auto;

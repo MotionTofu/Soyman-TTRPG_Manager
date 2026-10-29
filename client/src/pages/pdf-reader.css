@@ -79,7 +79,7 @@
 .pdf-reader__note-card .pdf-reader__note-body { margin: .35rem 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .86rem; line-height: 1.4; }
 .pdf-reader__note-actions { display: flex; flex-wrap: wrap; gap: .2rem .55rem; margin-top: .4rem; }
 .pdf-reader__note-actions button { border: 0; padding: .1rem 0; background: transparent; color: inherit; text-decoration: underline; font-size: .72rem; }
-.pdf-reader__note-detail { position: absolute; inset: auto .5rem .5rem .5rem; z-index: 3; max-height: 70%; overflow: auto; padding: .7rem; background: var(--paper, #e9e5dd); border: 2px solid var(--ink, #333); box-shadow: 0 0 18px #0006; }
+.pdf-reader__note-detail { position: absolute; inset: auto .5rem .5rem .5rem; z-index: 3; max-height: 70%; overflow: auto; padding: .7rem; background: var(--paper, #e9e5dd); border: var(--edge-width) solid var(--ink, #333); box-shadow: 0 0 18px #0006; }
 .pdf-reader__note-detail-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
 .pdf-reader__note-detail-head button { border: 0; background: transparent; font-size: 1.3rem; line-height: 1; }
 .pdf-reader__note-detail blockquote { margin: .6rem 0; padding: .5rem; background: #fff3df; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -98,7 +98,7 @@
 .pdf-reader__highlight-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .pdf-reader__highlight { position: absolute; background: rgba(215, 78, 32, .25); border-bottom: 2px solid #b54431; mix-blend-mode: multiply; }
 .pdf-reader__highlight.is-active { background: rgba(215, 78, 32, .48); border-bottom-width: 3px; }
-.pdf-reader__selection-menu, .pdf-reader__composer { position: absolute; z-index: 8; padding: .65rem; color: var(--ink, #1c1c1c); background: var(--paper, #e9e5dd); border: 2px solid var(--ink, #333); box-shadow: 4px 4px 16px #0006; }
+.pdf-reader__selection-menu, .pdf-reader__composer { position: absolute; z-index: 8; padding: .65rem; color: var(--ink, #1c1c1c); background: var(--paper, #e9e5dd); border: var(--edge-width) solid var(--ink, #333); box-shadow: 4px 4px 16px #0006; }
 .pdf-reader__selection-menu { z-index: 10; width: min(22rem, calc(100% - 24px)); }
 .pdf-reader__selection-menu > div { display: flex; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
 .pdf-reader__selection-menu span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }

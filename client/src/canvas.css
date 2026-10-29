@@ -1802,7 +1802,7 @@
 }
 .node-clue > input[type="checkbox"] {
   grid-row: span 2;
-  margin-top: 3px;
+  margin-top: var(--sp-2);
 }
 .node-clue__text {
   font-weight: 600;

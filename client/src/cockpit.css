@@ -558,7 +558,7 @@
   gap: var(--sp-5);
 }
 .app-content.has-player .session-live {
-  padding-bottom: calc(var(--player-bar-height) + 25px);
+  padding-bottom: calc(var(--player-bar-height) + var(--sp-7));
 }
 .session-live-idea-events {
   display: grid;

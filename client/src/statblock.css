@@ -138,7 +138,7 @@
   margin-top: var(--sp-3);
 }
 .sb-body {
-  padding: var(--pad-y) var(--pad-x) calc(var(--pad-y) + 4px);
+  padding: var(--pad-y) var(--pad-x) calc(var(--pad-y) + var(--sp-2));
   font-size: var(--fs);
 }
 
@@ -1069,7 +1069,7 @@ summary.sb-section {
 .dnd-free-cast {
   align-self: flex-start;
   min-height: 28px;
-  padding: 2px var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
@@ -1126,7 +1126,7 @@ summary.sb-section {
    «Созданные предметы» рядом, на узком — столбиком. Строка — кнопка во
    всю ширину, открывает окно. */
 .dnd-replica-block {
-  gap: 10px;
+  gap: var(--sp-5);
   min-width: 0;
 }
 .dnd-replica-heading {
@@ -1140,7 +1140,7 @@ summary.sb-section {
 .dnd-replica-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--sp-6);
   align-items: start;
 }
 @media (max-width: 760px) {
@@ -1152,20 +1152,20 @@ summary.sb-section {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 14px 16px;
+  padding: var(--sp-6) var(--sp-6);
 }
 .dnd-replica-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 10px;
+  gap: var(--sp-5);
+  padding-bottom: var(--sp-5);
 }
 .dnd-replica-head-title {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
+  gap: var(--sp-3);
   min-width: 0;
 }
 .dnd-replica-head-title .dnd-special-mark {
@@ -1192,10 +1192,10 @@ summary.sb-section {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--sp-5);
   width: 100%;
   min-height: 48px;
-  padding: 6px 2px;
+  padding: var(--sp-3) var(--sp-1);
   border: 0;
   border-top: 1px solid rgba(23, 23, 23, 0.16);
   border-radius: 0;
@@ -1221,15 +1221,15 @@ summary.sb-section {
 }
 .dnd-replica-made {
   flex: none;
-  padding: 1px 8px;
+  padding: var(--sp-0) var(--sp-4);
   font-size: var(--fs-label);
   background: rgba(23, 23, 23, 0.1);
 }
 .dnd-replica-add {
   min-height: 44px;
-  margin-top: 6px;
-  padding: 0 10px;
-  border: 2px dashed rgba(23, 23, 23, 0.45);
+  margin-top: var(--sp-3);
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) dashed rgba(23, 23, 23, 0.45);
   border-radius: 0;
   background: none;
   color: inherit;
@@ -1247,9 +1247,9 @@ summary.sb-section {
 .dnd-replica-base {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-5);
   min-height: 44px;
-  padding: 0 10px;
+  padding: 0 var(--sp-5);
   border-top: 1px solid rgba(23, 23, 23, 0.16);
   cursor: pointer;
 }
@@ -1261,7 +1261,7 @@ summary.sb-section {
 .dnd-replica-foot {
   position: sticky;
   bottom: 0;
-  padding: 10px 0;
+  padding: var(--sp-5) 0;
   background: var(--paper-2);
 }
 .dnd-replica-base.is-picked {

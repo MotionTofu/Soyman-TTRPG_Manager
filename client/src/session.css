@@ -8,7 +8,7 @@
   padding-bottom: var(--sp-7);
 }
 .app-content.has-player .session-profile {
-  padding-bottom: calc(var(--player-bar-height) + 32px);
+  padding-bottom: calc(var(--player-bar-height) + var(--sp-8));
 }
 
 /* Профиль сцены: нижний запас под оверлей аудиоплеера, иначе конец
@@ -17,7 +17,7 @@
   padding-bottom: var(--sp-7);
 }
 .app-content.has-player .scene-detail {
-  padding-bottom: calc(var(--player-bar-height) + 25px);
+  padding-bottom: calc(var(--player-bar-height) + var(--sp-7));
 }
 
 /* ----------------------------------------------------------- заголовок */
@@ -1373,12 +1373,12 @@ details.sp-card--loot .entry-title {
 .sp-battle__row:disabled { opacity: 1; }
 .sp-battle__name { font-family: var(--font-ui, inherit); font-weight: 600; text-transform: uppercase; }
 .sp-battle__tag {
-  padding: 1px 6px; border: var(--card-border-width) solid var(--line);
+  padding: var(--sp-0) var(--sp-3); border: var(--card-border-width) solid var(--line);
   font-family: var(--font-mono); font-size: var(--fs-small, 13px);
 }
 .sp-battle__tag.is-carry { background: var(--accent, #f3ff3a); color: var(--ink, #1c1c1c); }
 .sp-battle__meta { flex-basis: 100%; }
 .sp-battle-log { list-style: none; margin: 0 0 var(--sp-3); padding: 0; max-height: 320px; overflow: auto; }
-.sp-battle-log__row { padding: 2px 0; border-top: 1px dotted var(--line); }
+.sp-battle-log__row { padding: var(--sp-1) 0; border-top: 1px dotted var(--line); }
 .sp-battle-log__row.is-turn { font-weight: 600; }
 .sp-battle-log__row.is-undone { text-decoration: line-through; color: var(--muted, #7a7872); }

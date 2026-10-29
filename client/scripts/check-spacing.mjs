@@ -29,13 +29,19 @@
  * `check-type-scale.mjs`, `rasterAssets.ts` и `CONTEXT.md`.
  *
  * ИСКЛЮЧЕНИЕ БЕЗ МЕТКИ — печатная вёрстка: `.cheatsheet-*`, `.dnd-cheatsheet-*`,
- * `.combat-*`, `.fill-box` верстаются в миллиметрах под бумагу.
+ * `.combat-*`, `.fill-box` верстаются в миллиметрах под бумагу. И лист с
+ * визардом персонажа (`fantasy-punk-skin.css`, `dnd-sheet.css`,
+ * `components/dnd/*.css`) — облик OneShot до его перевода
+ * (docs/design-system.md §13), как и в барьере кегля.
+ *
+ * КРОМКА v2 — `--edge-width` (2px): органы управления и тушь-рамка (§4.2).
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const ALLOW_SELECTOR = /cheatsheet|\.combat-(row|field)|\.fill-box/i;
+const ALLOW_FILE = /^(fantasy-punk-skin\.css|dnd-sheet\.css|components\/dnd\/[^/]+\.css)$/;
 // Пробелы вокруг тире — только внутри строки: `\s` съедал перевод строки,
 // и пустая метка брала причиной следующую строку (F-49, найдено 2026-09-18).
 const EXCUSE_SP = /шаг мимо шкалы намеренно[ \t]*[—-][ \t]*(\S[^\r\n*]*)/;
@@ -66,7 +72,8 @@ function walk(dir) {
 function check(path) {
   const text = readFileSync(path, "utf8");
   const rel = relative(ROOT, path).replace(/\\/g, "/");
-  const rule = /([^{}]+)\{([^{}]*)\}/g;
+  if (ALLOW_FILE.test(rel)) return;
+  const rule =/([^{}]+)\{([^{}]*)\}/g;
   let m;
   while ((m = rule.exec(text))) {
     const head = m[1].replace(/\s+/g, " ").trim();
@@ -97,7 +104,9 @@ function check(path) {
     // Коробка нулевого размера с толстой рамкой — это CSS-треугольник
     // (носик поповера, каретка), а не обводка. Форма, а не контур.
     const isTriangle = /\bwidth:\s*0\b/.test(body) && /\bheight:\s*0\b/.test(body);
-    const b = isTriangle ? null : BORDER.exec(body);
+    // Рядом с border-image ширина рамки — срез растровой подложки, а не контур.
+    const isSlice = /\bborder-image\s*:/.test(body);
+    const b = isTriangle || isSlice ? null : BORDER.exec(body);
     if (b && b[1] !== "0" && b[1] !== "1") {
       const where = `${rel}:${line()}  ${selector.slice(0, 44)} — border: ${b[1]}px`;
       const why = reasonIn(head, EXCUSE_BW) ?? reasonIn(body, EXCUSE_BW);
@@ -121,7 +130,7 @@ if (offenders.length) {
   console.error(`
 Шаг: var(--sp-0) 1 · --sp-1 2 · --sp-2 4 · --sp-3 6 · --sp-4 8 · --sp-5 12
      --sp-6 16 · --sp-7 24 · --sp-8 32 · --sp-9 48 · --sp-10 64
-Обводка: var(--card-border-width) и var(--card-border-width-strong);
+Обводка: var(--card-border-width) и var(--card-border-width-strong) 1 · var(--edge-width) 2;
      поверхность со своей глубиной объявляет пару у себя.
 
 Если отступление осознанное — назовите причину строкой рядом:

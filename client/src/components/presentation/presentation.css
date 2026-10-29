@@ -163,7 +163,7 @@ button.pres-title {
   left: 50%;
   bottom: 4px;
   transform: translateX(-50%);
-  padding: 1px var(--sp-3);
+  padding: var(--sp-0) var(--sp-3);
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
   font-family: var(--font-mono);
