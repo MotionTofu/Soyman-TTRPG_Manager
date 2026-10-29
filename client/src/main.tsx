@@ -33,7 +33,7 @@ installCutsceneKeyboard()
 // Apply the saved theme before the first render so there's no flash of the
 // default theme — a single CSS-variable write beats waiting for an effect.
 const themePrefs = loadThemePrefs()
-applyTheme(findTheme(themePrefs.themeId, themePrefs.customThemes))
+applyTheme(findTheme(themePrefs.themeId))
 applyCanvasPaletteVars()
 // Тот же довод: флаг дуотона ставится до первой отрисовки, иначе обложки
 // мигнут исходным цветом перед обработкой.

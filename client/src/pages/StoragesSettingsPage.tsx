@@ -6,8 +6,6 @@ import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { ModulesTab } from "../components/ModulesTab";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { DatabaseSizeCard } from "../components/DatabaseSizeCard";
-import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
-import { ThemeEditorModal } from "../components/ThemeEditorModal";
 import { hasElectronAPI, isPathSafeForExplorer } from "../electronApi";
 import { NavIcon } from "../components/NavIcons";
 import { SectionHeading } from "../components/SectionHeading";
@@ -15,9 +13,8 @@ import { PageFrame } from "../components/PageFrame";
 import { EmptyState } from "../components/EmptyState";
 import type { AppSettings, StorageProfile } from "../types";
 import {
-  allThemes, applyTheme, findTheme, loadThemePrefs,
+  BUILTIN_THEMES, applyTheme, findTheme, loadThemePrefs,
   saveThemePrefs, loadRadiusOverride, saveRadiusOverride,
-  type Theme,
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -88,9 +85,6 @@ export function StoragesSettingsPage() {
 
   const [importDragOver, setImportDragOver] = useState(false);
 
-  // Theme context menu + editor
-  const [themeMenu, setThemeMenu] = useState<{ x: number; y: number; theme: Theme } | null>(null);
-  const [themeEditor, setThemeEditor] = useState<Theme | null>(null);
 
   // Поле затухания берёт значение с сервера при загрузке и после сохранения.
   const fadeMs = appSettings?.fade_duration_ms;
@@ -103,8 +97,8 @@ export function StoragesSettingsPage() {
     afterWrite([{ path: "/app-settings" }]);
   }
   useEffect(() => {
-    applyTheme(findTheme(prefs.themeId, prefs.customThemes));
-  }, [prefs.themeId, prefs.customThemes]);
+    applyTheme(findTheme(prefs.themeId));
+  }, [prefs.themeId]);
   function selectTheme(themeId: string) {
     const next = { ...prefs, themeId };
     setPrefs(next);
@@ -113,7 +107,7 @@ export function StoragesSettingsPage() {
   function changeRadius(px: number) {
     setRadius(px);
     saveRadiusOverride(px === 0 ? null : px);
-    applyTheme(findTheme(prefs.themeId, prefs.customThemes));
+    applyTheme(findTheme(prefs.themeId));
   }
   function changeHideFinance(hide: boolean) {
     setHideFinance(hide);
@@ -424,7 +418,6 @@ export function StoragesSettingsPage() {
     return s.name.toLowerCase().includes(qq) || s.vaultRoot.toLowerCase().includes(qq);
   }), [storages, q]);
   const hasElectron = useMemo(() => hasElectronAPI(), []);
-  const themes = useMemo(() => allThemes(prefs.customThemes), [prefs.customThemes]);
 
   // activeTab внизу намеренно: перенос наверх сдвинул бы индексы хуков и
   // сломал бы сохраненное состояние у существующих пользователей до перезагрузки.
@@ -712,7 +705,7 @@ export function StoragesSettingsPage() {
           <details className="card res-group" open={themesOpen} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; setThemesOpen(o); saveSectionOpen("themes", o); }}>
             <summary className="res-group__band">
               <span className="res-group__title">Темы</span>
-              <span className="res-group__count">{themes.length}</span>
+              <span className="res-group__count">{BUILTIN_THEMES.length}</span>
             </summary>
             <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
               <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>Тема применяется мгновенно. Скругление и обработка изображений — общие для всех тем.</p>
@@ -729,14 +722,14 @@ export function StoragesSettingsPage() {
                 </span>
               </label>
               <div className="grid-cards" style={{ marginTop: 6 }}>
-                {themes.map((th) => {
+                {BUILTIN_THEMES.map((th) => {
                   const selected = th.id === prefs.themeId;
                   return (
-                    <div key={th.id} className={`card theme-card${selected ? " is-selected" : ""}`} onClick={() => selectTheme(th.id)} onContextMenu={(e) => { e.preventDefault(); setThemeMenu({ x: e.clientX, y: e.clientY, theme: th }); }} role="button" aria-pressed={selected} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectTheme(th.id); } }}>
+                    <div key={th.id} className={`card theme-card${selected ? " is-selected" : ""}`} onClick={() => selectTheme(th.id)} role="button" aria-pressed={selected} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectTheme(th.id); } }}>
                       <div className="theme-swatches">
                         <span className="theme-swatch" style={{ background: th.vars["--paper"] }} aria-hidden="true" />
                         <span className="theme-swatch" style={{ background: th.vars["--paper-2"] }} aria-hidden="true" />
-                        <span className="theme-swatch theme-swatch--accent" style={{ background: th.vars["--accent"] }} aria-hidden="true" />
+                        <span className="theme-swatch theme-swatch--accent" style={{ background: th.vars["--acid"] }} aria-hidden="true" />
                         <span className="theme-swatch" style={{ background: th.vars["--ink"] }} aria-hidden="true" />
                       </div>
                       <div style={{ fontFamily: th.vars["--font-display"], fontWeight: 600 }}>{th.name}</div>
@@ -745,37 +738,6 @@ export function StoragesSettingsPage() {
                   );
                 })}
               </div>
-              {themeMenu && (
-                <ContextMenu
-                  x={themeMenu.x}
-                  y={themeMenu.y}
-                  title={themeMenu.theme.name}
-                  items={[
-                    ...(themeMenu.theme.id !== prefs.themeId ? [{
-                      label: "Установить",
-                      onClick: () => selectTheme(themeMenu.theme.id),
-                    }] : []),
-                    {
-                      label: "Редактировать",
-                      onClick: () => setThemeEditor(themeMenu.theme),
-                    },
-                  ] as ContextMenuItem[]}
-                  onClose={() => setThemeMenu(null)}
-                />
-              )}
-              {themeEditor && (
-                <ThemeEditorModal
-                  theme={themeEditor}
-                  prefs={prefs}
-                  onSave={(newPrefs) => {
-                    setPrefs(newPrefs);
-                    saveThemePrefs(newPrefs);
-                    applyTheme(findTheme(newPrefs.themeId, newPrefs.customThemes));
-                    setThemeEditor(null);
-                  }}
-                  onClose={() => setThemeEditor(null)}
-                />
-              )}
             </div>
           </details>
 

@@ -1,13 +1,8 @@
 // Theme registry + application logic for SoyMan_ttrpg.
 //
-// Every theme is a flat map of CSS custom properties. Built-in themes are
-// computed once (below) from a small palette description. `applyTheme()`
-// writes the resulting vars onto document.documentElement, so index.css only
-// ever reads var(--xxx) and never needs per-theme selectors.
-//
-// "Классическая" is a literal (non-computed) copy of this app's original
-// hardcoded palette, kept byte-for-byte so switching the theming system on
-// doesn't change anything visually until the user actually picks a theme.
+// Every theme is a flat map of CSS custom properties. `applyTheme()` writes
+// the vars onto document.documentElement, so index.css only ever reads
+// var(--xxx). Тем ровно две — светлая и тёмная (docs/design-system.md §2).
 //
 // This file is INTENTIONALLY independent from any statblock theming
 // (statblocks keep their own .sb-scope/theme-* class switch and their own
@@ -271,16 +266,18 @@ function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): T
   return { id, name, mode, vars };
 }
 
-// Three zine skins from docs/design-system-punk-zine.md §3.1 plus the two
-// themes the user kept. Порядок здесь — это порядок в списке выбора; тема по
-// умолчанию задаётся отдельно (DEFAULT_THEME_ID), чтобы её можно было менять,
-// не переставляя список.
+// Дизайн-система v2 «Д» (docs/design-system.md §2): ровно две встроенные
+// темы. Значения закреплены документом, поэтому темы собраны skinTheme из
+// явной палитры, а не смешиванием buildTheme.
 //
-// riot/neon are written as literal palettes rather than buildTheme configs:
-// the doc pins their exact values, and buildTheme's mixing would drift from
-// them. They still emit the same variable set — see zineVars() below.
+// `--accent` — прежнее имя «акцента»: в коде ~400 мест берут его цветом
+// текста и рамки. Кислоту туда ставить нельзя (на светлой бумаге она не
+// читается, и доза §5 разошлась бы на весь экран), поэтому `--accent` —
+// чернильный акцент, как был у «Соевого нуара», а кислота — отдельный
+// `--acid`, который экраны берут только для главного действия и активного
+// состояния.
 
-// Fills in everything buildTheme would derive, from an explicit §3.1 palette.
+// Fills in everything buildTheme would derive, from an explicit palette.
 function skinTheme(
   id: string,
   name: string,
@@ -288,63 +285,55 @@ function skinTheme(
   d: {
     paper: string; paper2: string; ink: string; ink2: string; muted: string;
     accent: string; accent2: string; surface: string; onSurface: string;
-    line: string; glow: string; elevated: string;
+    line: string; elevated: string;
     fontDisplay: string; fontBody: string;
-    bandBg?: string; bandImage?: string; pageTexture?: string; cardBodyTexture?: string;
-    playerBarText?: string;
+    bandBg: string; pageTexture: string; playerBarText: string;
     semantic: SemanticSet;
+    v2: Record<string, string>;
   }
 ): Theme {
   const sem = fixSemanticSet(d.semantic, mode);
-  const primaryBg = d.bandBg || d.accent;
   return {
     id,
     name,
     mode,
     vars: {
-      // Скины собирают переменные сами, мимо buildTheme, — и без этой строки
-      // «Соевый бунт» и «Соевый неон» остались бы вовсе без заливки источника
-      // навыка: `var(--skill-source-*)` не разрешился бы ни во что.
       ...skillSourceVars(mode, d.paper, d.ink),
       "--paper": d.paper,
       "--paper-2": d.paper2,
       "--ink": d.ink,
       "--ink-2": d.ink2,
-      // Уровень на листе — вторыми чернилами: у скинов свои кричащие акценты,
-      // и золото было бы в них третьим цветом (разбор 2026-09-11).
       "--level-ink": d.ink2,
       "--muted": d.muted,
       "--surface": d.surface,
       "--on-surface": d.onSurface,
-      // See buildTheme's note: `--muted` is derived against the page and is
-      // unreadable on an inverted plate, so plates carry their own muted.
+      // `--muted` считается против страницы и на плашке не читается —
+      // у плашки свой приглушённый.
       "--on-surface-muted": mixHex(d.onSurface, d.surface, 0.34),
       "--line": d.line,
-      "--glow": d.glow,
-      // See buildTheme()'s comment: --bg-elevated/--text-bright have no
-      // exact §3.1 equivalent, so skins keep emitting them directly.
+      "--glow": "none",
       "--bg-elevated": d.elevated,
       "--text-bright": d.ink,
       "--accent": d.accent,
       "--accent-text": pickTextOn(d.accent),
       "--accent-soft": d.accent + "2a",
       "--accent-2": d.accent2,
-      "--primary-bg": primaryBg,
-      "--primary-text": pickTextOn(primaryBg.startsWith("#") ? primaryBg : d.accent),
-      "--player-bar-text": d.playerBarText || pickTextOn(primaryBg.startsWith("#") ? primaryBg : d.accent),
+      "--primary-bg": d.bandBg,
+      "--primary-text": pickTextOn(d.bandBg),
+      "--player-bar-text": d.playerBarText,
       "--font-display": d.fontDisplay,
       "--font-body": d.fontBody,
       "--font-ui": "'Oswald', var(--font-body)",
       "--font-mono": "'JetBrains Mono', ui-monospace, 'PT Mono', monospace",
-      // §1.3: 1px по всему контуру — исправлено 2026-08-30 по решению владельца (2px → 1px)
+      // Радиус 0; пользовательская настройка — поверх (§4.3).
       "--card-radius": "0px",
       "--card-border-width": "1px",
       "--card-clip": "none",
-      "--card-band-bg": d.bandBg || "var(--paper-2)",
-      "--card-band-image": d.bandImage || "none",
-      "--page-texture": d.pageTexture || "none",
-      "--card-body-texture": d.cardBodyTexture || "none",
-      "--name-transform": "uppercase",
+      "--card-band-bg": d.bandBg,
+      "--card-band-image": "none",
+      "--page-texture": d.pageTexture,
+      "--card-body-texture": "none",
+      "--name-transform": "none",
       "--name-stroke": "none",
       "--calendar-mark-image": "none",
       "--status-planned": pastelBg(sem.hold),
@@ -363,55 +352,63 @@ function skinTheme(
       "--pay-paid-soft": sem.paid + "22",
       "--pay-free": sem.free,
       "--pay-free-soft": sem.free + "22",
+      "--scrim": mode === "dark" ? d.paper : d.ink,
+      "--danger": sem.danger,
+      ...d.v2,
     },
   };
 }
 
-// ZINE — the base skin: aged paper, ink, one blood red. Palette from §3.1.
-const ZINE_THEME = buildTheme("zine", "Соевый панк", "light", {
-  bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
+// Светлая — бумага, тушь, кислота у главного, малиновый мелкими метками.
+const LIGHT_THEME = skinTheme("light", "Светлая", "light", {
+  paper: "#E4E1D9", paper2: mixHex("#E4E1D9", "#000000", 0.035), elevated: mixHex("#E4E1D9", "#000000", 0.06),
+  ink: "#151515", ink2: "#34322F", muted: "#5A5650",
+  accent: "#151515", accent2: "#34322F",
+  surface: "#151515", onSurface: "#F1EEDF",
+  line: "rgba(21,21,21,.16)",
   fontDisplay: "'Rubik Dirt', 'Oswald', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  textMutedOverride: "#6E675C",
-  cardBorderWidth: 1, cardRadius: 0,
-  bandBg: "#12100E",
-  bandImage: "radial-gradient(#ffffff33 1.5px, transparent 1.5px) 0 0/8px 8px",
-  pageTexture: "radial-gradient(rgba(18,16,14,.06) 1px, transparent 1px) 0 0/3px 3px",
-  cardBodyTexture: "radial-gradient(rgba(18,16,14,.04) 1px, transparent 1px) 0 0/3px 3px",
-  nameTransform: "uppercase",
-  // A hand-drawn squiggle in the accent — the "pencil underline" the
-  // reference calendar marks today/selected with, instead of a filled box.
-  calendarMarkImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 6' preserveAspectRatio='none'%3E%3Cpath d='M1 3.5c2-3 4-3 6 0s4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0 4 3 6 0 4-3 6 0' fill='none' stroke='%23c31f1f' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\")",
-  semanticOverrides: { gm: "#12100E", player: "#D6321E", paid: "#D6321E", free: "#3a6b3a", active: "#3a6b3a", hold: "#6E675C", danger: "#D6321E" },
+  bandBg: "#151515",
+  pageTexture: "radial-gradient(rgba(21,21,21,.05) 1px, transparent 1px) 0 0/3px 3px",
+  playerBarText: "#F1EEDF",
+  // Роли и статусы различаются подписью и начертанием (§2.2): цвет — только
+  // у требующего внимания, и это малиновый.
+  semantic: { gm: "#151515", player: "#C2105A", paid: "#151515", free: "#5A5650", active: "#151515", hold: "#5A5650", danger: "#C2105A" },
+  v2: {
+    "--sheet": "#F4F2EC", "--edge": "#151515",
+    "--acid": "#F3FF3A", "--acid-text": "#151515",
+    "--mark": "#C2105A", "--on-mark": "#FFFFFF",
+    "--danger-bg": "#C2105A", "--danger-bg-hover": "#D8236C", "--danger-text": "#FFFFFF",
+    "--nav": "#151515", "--nav-ink": "#EEECE6", "--nav-muted": "#9C988F",
+    "--tab": "#D8D4CA", "--field": "#FFFFFF", "--ph": "#E9E6DE",
+  },
 });
 
-// RIOT — the same world inverted: a black sheet with paper scraps on it.
-const RIOT_THEME = skinTheme("riot", "Соевый бунт", "dark", {
-  paper: "#0B0B0B", paper2: "#141414", elevated: "#1C1C1C",
-  ink: "#F2EDE1", ink2: "#C9C2B4", muted: "#8A8378",
-  accent: "#C7261B", accent2: "#F2EDE1",
-  surface: "#F2EDE1", onSurface: "#0B0B0B",
-  line: "rgba(242,237,225,.22)", glow: "none",
-  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  bandBg: "#F2EDE1",
-  pageTexture: "radial-gradient(rgba(242,237,225,.05) 1px, transparent 1px) 0 0/3px 3px",
-  semantic: { gm: "#F2EDE1", player: "#C7261B", paid: "#C7261B", free: "#8A8378", active: "#F2EDE1", hold: "#8A8378", danger: "#C7261B" },
+// Тёмная — палитра «Соевого покоя»; характер даёт грамматика, не цвет (Q9).
+const DARK_THEME = skinTheme("dark", "Тёмная", "dark", {
+  paper: "#092328", paper2: mixHex("#092328", "#ffffff", 0.04), elevated: mixHex("#092328", "#ffffff", 0.08),
+  ink: "#DCE6DF", ink2: "#BFD0C4", muted: "#93BC9C",
+  accent: "#CEDAD0", accent2: "#8BBB92",
+  surface: "#CEDAD0", onSurface: "#092328",
+  line: "rgba(206,218,208,.16)",
+  fontDisplay: "'Rubik Dirt', 'Oswald', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
+  bandBg: "#CEDAD0",
+  pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",
+  playerBarText: "#092328",
+  semantic: { gm: "#DCE6DF", player: "#FF5FA2", paid: "#DCE6DF", free: "#93BC9C", active: "#DCE6DF", hold: "#93BC9C", danger: "#FF5FA2" },
+  v2: {
+    "--sheet": "#0D2C31", "--edge": "#CEDAD0",
+    "--acid": "#F3FF3A", "--acid-text": "#151515",
+    "--mark": "#FF5FA2", "--on-mark": "#092328",
+    "--danger-bg": "#FF5FA2", "--danger-bg-hover": "#FF7DB4", "--danger-text": "#092328",
+    "--nav": "#051619", "--nav-ink": "#DCE6DF", "--nav-muted": "#7FA592",
+    "--tab": "#0A262B", "--field": "#0A262B", "--ph": "#0A262B",
+  },
 });
 
-// NEON — acid. The only skin that uses --glow (§3.1).
-const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
-  paper: "#07070A", paper2: "#0F0F14", elevated: "#16161C",
-  ink: "#F0FFE8", ink2: "#B9D6AC", muted: "#727E6D",
-  accent: "#FF2E88", accent2: "#B6FF2E",
-  surface: "#0F0F14", onSurface: "#F0FFE8",
-  line: "rgba(182,255,46,.35)", glow: "0 0 12px rgba(182,255,46,.45)",
-  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  bandBg: "#0F0F14",
-  bandImage: "repeating-linear-gradient(0deg, rgba(182,255,46,.07) 0 2px, transparent 2px 4px)",
-  playerBarText: "#FF2E88",
-  semantic: { gm: "#FF2E88", player: "#B6FF2E", paid: "#B6FF2E", free: "#B6FF2E", active: "#B6FF2E", hold: "#6F7A6A", danger: "#FF2E88" },
-});
-
-const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
+// Облик листа и визарда — «Соевый нуар» OneShot (решение владельца
+// 2026-09-27). В выборе тем его нет: лист кладёт эти переменные на body сам
+// (CharacterDetailPage), пока оболочка листа не переведена на «Д» (§6.10).
+export const SHEET_THEME = buildTheme("noir", "Соевый нуар", "light", {
   bg: "#e8e4da", text: "#1c1c1c", accent: "#1c1c1c", border: "#2a2a2a",
   fontDisplay: "'Cormorant SC', serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
@@ -421,89 +418,47 @@ const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   cardBorderWidth: 1,
 });
 
-const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация", "dark", {
-  bg: "#0e0c14", text: "#c4b8d4", accent: "#b366e8", border: "#4a2f5c",
-  fontDisplay: "'PT Serif', serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  bandBg: "radial-gradient(ellipse at 30% -10%, #3a1f4a, #0e0c14 70%)",
-  textMutedOverride: "#7fd88a",
-  levelInk: "#e0c15f",
-  semanticOverrides: { gm: "#b366e8", player: "#7fd88a", paid: "#e0c15f", free: "#7fd88a", active: "#7fd88a", hold: "#6b5a78", danger: "#e05f5f" },
-  statusCapsuleOverrides: { planned: { bg: "#2c1c38", fg: "#c9a8e0" } },
-  cardBorderWidth: 1,
-});
+export const BUILTIN_THEMES: Theme[] = [LIGHT_THEME, DARK_THEME];
 
-const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
-  bg: "#092328",
-  text: "#CEDAD0",
-  accent: "#8BBB92",
-  accent2: "#2A835F",
-  border: "#12544F",
-  fontDisplay: "'Cormorant SC', serif",
-  fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  // Приглушённый текст — ровно самый светлый из палитры, а не микс
-  // к фону: так вся четвёрка (#092328/#12544F/#2A835F/#8BBB92) живёт
-  // в теме как есть, и при этом muted остаётся читаемым на тёмной бумаге.
-  textMutedOverride: "#8BBB92",
-  levelInk: "#D2C49E",
-  bandBg: "#0E3C3C",
-  bandImage: "repeating-linear-gradient(180deg, rgba(139,187,146,.07) 0 3px, transparent 3px 22px)",
-  pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",
-  cardBodyTexture: "radial-gradient(rgba(139,187,146,.04) 1px, transparent 1px) 0 0/3px 3px",
-  playerBarText: "#CEDAD0",
-  semanticOverrides: { gm: "#8BBB92", player: "#8FD0A8", paid: "#D2C49E", free: "#8BBB92", active: "#8BBB92", hold: "#7A9E8E", danger: "#E08E8E" },
-  statusCapsuleOverrides: {
-    planned: { bg: "#1A3A36", fg: "#8BBB92" },
-    held: { bg: "#143528", fg: "#8BBB92" },
-    cancelled: { bg: "#3A2526", fg: "#F08080" },
-    rescheduled: { bg: "#2F3320", fg: "#C8C9A0" },
-  },
-  cardBorderWidth: 1,
-});
-// Инвертированные плашки в «Покое» — тёмные, а не светлый инк, чтобы
-// бестиарий (.creature-card__band), группы ресурсов (.res-group__band),
-// вырезка (.home-article-band) и т.п. были темнее, как просили.
-// 2026-09-02: поднят контраст заголовков 3.6→7.5 — прежнее #0E3C3C/#CEDAD0
-// сливалось при ховере (свет на свет 1.2:1, текст на фоне 3.6). Теперь
-// #071E22/#F0F5F0 — читается на Retina и на дешёвом TN.
-PEACE_THEME.vars["--surface"] = "#071E22";
-PEACE_THEME.vars["--on-surface"] = "#F0F5F0";
-PEACE_THEME.vars["--on-surface-muted"] = "#A8CDB0";
-
-export const BUILTIN_THEMES: Theme[] = [PEACE_THEME, SOY_NOIR_THEME, NEON_THEME, ABERRANT_THEME, RIOT_THEME, ZINE_THEME];
-
-// Тема по умолчанию — «Соевый Нуар»: на неё же настроен предзагрузочный
-// :root в index.css (защита от вспышки чужой палитры до запуска JS).
-export const DEFAULT_THEME_ID = "noir";
+// На светлую настроен предзагрузочный :root в index.css (защита от вспышки
+// чужой палитры до запуска JS).
+export const DEFAULT_THEME_ID = "light";
 
 // ---------- persistence + application ----------
 const STORAGE_KEY = "rpgManagerTheme";
 
 export interface StoredThemePrefs {
   themeId: string;
-  customThemes: Theme[];
 }
 
-function isSafeParsedObject(obj: unknown): boolean {
-  if (!obj || typeof obj !== "object") return false;
-  const s = JSON.stringify(obj);
-  return !s.includes("__proto__") && !s.includes("\"constructor\"") && !s.includes("\"prototype\"");
+// Тёмные темы до v2. Сохранённый выбор переводится по режиму: тёмная → «Тёмная»,
+// остальное → «Светлая» (Q5). Свои темы хранили режим сами.
+const LEGACY_DARK_IDS = new Set(["peace", "neon", "aberrant", "riot"]);
+
+/** Старый id темы → одна из двух тем v2. */
+export function migrateThemeId(themeId: unknown, customThemes: unknown): string {
+  if (themeId === "light" || themeId === "dark") return themeId;
+  if (typeof themeId !== "string") return DEFAULT_THEME_ID;
+  if (LEGACY_DARK_IDS.has(themeId)) return "dark";
+  if (Array.isArray(customThemes)) {
+    const custom = customThemes.find((t) => t && typeof t === "object" && (t as Theme).id === themeId) as Theme | undefined;
+    if (custom?.mode === "dark") return "dark";
+  }
+  return "light";
 }
+
 export function loadThemePrefs(): StoredThemePrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      if (raw.includes("__proto__") || raw.includes("constructor") || raw.includes("prototype")) throw new Error("polluted");
-      const parsed = JSON.parse(raw) as StoredThemePrefs;
-      if (!isSafeParsedObject(parsed)) throw new Error("polluted");
-      const themeId = typeof parsed.themeId === "string" && /^[a-z0-9_-]{1,64}$/i.test(parsed.themeId) ? parsed.themeId : DEFAULT_THEME_ID;
-      const customThemes = Array.isArray(parsed.customThemes) ? parsed.customThemes.filter((t) => t && typeof t.id === "string" && isSafeParsedObject(t)) : [];
-      return { themeId, customThemes };
+      const parsed = JSON.parse(raw) as { themeId?: unknown; customThemes?: unknown } | null;
+      return { themeId: migrateThemeId(parsed?.themeId, parsed?.customThemes) };
     }
   } catch {
     /* ignore — reset to default */
     try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }
-  return { themeId: DEFAULT_THEME_ID, customThemes: [] };
+  return { themeId: DEFAULT_THEME_ID };
 }
 
 export function saveThemePrefs(prefs: StoredThemePrefs) {
@@ -514,17 +469,8 @@ export function saveThemePrefs(prefs: StoredThemePrefs) {
   }
 }
 
-export function allThemes(customThemes: Theme[] = []): Theme[] {
-  return [...BUILTIN_THEMES, ...customThemes];
-}
-
-export function findTheme(id: string, customThemes: Theme[] = []): Theme {
-  const themes = allThemes(customThemes);
-  return (
-    themes.find((t) => t.id === id) ||
-    themes.find((t) => t.id === DEFAULT_THEME_ID) ||
-    BUILTIN_THEMES[0]
-  );
+export function findTheme(id: string): Theme {
+  return BUILTIN_THEMES.find((t) => t.id === id) || BUILTIN_THEMES[0];
 }
 
 // Personal corner-radius override (px), independent of the active theme —
@@ -560,17 +506,4 @@ export function applyTheme(theme: Theme) {
   if (radiusOverride != null) root.style.setProperty("--card-radius", `${radiusOverride}px`);
   root.setAttribute("data-theme-mode", theme.mode);
   root.setAttribute("data-theme-id", theme.id);
-}
-
-// Creates a new custom theme from a name + base mode + accent color, mirroring
-// the "Новая тема" flow in the design prototype.
-export function createCustomTheme(name: string, mode: ThemeMode, accent: string): Theme {
-  const base = mode === "dark"
-    ? { bg: "#14141a", text: "#ece9f5", border: "#2b2b38" }
-    : { bg: "#f5f6f8", text: "#1c1e26", border: "#e1e3ea" };
-  return buildTheme("custom-" + Date.now(), name, mode, {
-    ...base, accent,
-    fontDisplay: "'Cormorant Garamond', serif",
-    fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  });
 }

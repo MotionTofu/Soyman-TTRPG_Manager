@@ -6,12 +6,6 @@
   display: flex;
   flex-direction: column;
 }
-[data-theme-id="peace"] .creature-card {
-  border-color: var(--paper) !important;
-}
-[data-theme-id="peace"] .creature-card:hover {
-  border-color: var(--accent-2) !important;
-}
 .creature-card--page {
   max-width: 420px;
 }
@@ -340,12 +334,6 @@
   display: flex;
   flex-direction: column;
   cursor: pointer;
-}
-[data-theme-id="peace"] .monster-tile {
-  border-color: var(--paper) !important;
-}
-[data-theme-id="peace"] .monster-tile:hover {
-  border-color: var(--accent-2) !important;
 }
 .monster-tile:hover {
   border-color: var(--accent);

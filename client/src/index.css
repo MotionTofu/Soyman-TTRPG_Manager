@@ -141,36 +141,58 @@
    включится, если ничего не выбрано. Не второй источник истины: меняя тему по
    умолчанию, надо переснять сюда её значения. */
 :root {
-  /* Design-doc vocabulary (design-system-punk-zine.md §3.1). themes.ts emits
+  /* Дизайн-система v2 (docs/design-system.md §2.1) — светлая тема. */
+  --skill-source-class: #2c3d52;
+  --skill-source-background: #2d4a3e;
+  --skill-source-both: #4d3038;
+  --skill-source-ink: #ece7df;
+  --skill-source-ink-muted: #a8a29a;
+  --level-ink: #34322F;
+  --calendar-mark-image: none;
+  --scrim: #151515;
+  --danger: #C2105A;
+  --sheet: #F4F2EC;
+  --edge: #151515;
+  --acid: #F3FF3A;
+  --acid-text: #151515;
+  --mark: #C2105A;
+  --on-mark: #FFFFFF;
+  --nav: #151515;
+  --nav-ink: #EEECE6;
+  --nav-muted: #9C988F;
+  --tab: #D8D4CA;
+  --field: #FFFFFF;
+  --ph: #E9E6DE;
+  /* Design-doc vocabulary (docs/design-system.md §2.1). themes.ts emits
      these alongside the legacy names below; both come from the same source
      value, so the old names are exact aliases. */
-  --paper: #e8e4da;
-  --paper-2: #e0dcd2;
-  --ink: #1c1c1c;
-  --ink-2: #42413f;
-  --muted: #63625f;
-  --surface: #1c1c1c;
-  --on-surface: #e8e4da;
+  --paper: #E4E1D9;
+  --paper-2: #dcd9d1;
+  --ink: #151515;
+  --ink-2: #34322F;
+  --muted: #5A5650;
+  --surface: #151515;
+  --on-surface: #F1EEDF;
   /* Muted text ON an inverted plate. --muted is derived against the page and
      is unreadable on the plate, so header bands carry their own muted (see
-     themes.ts). Mirrors "Соевый нуар", like the rest of this pre-JS block. */
-  --on-surface-muted: #a3a099;
-  --line: #2a2a2a;
+     themes.ts). Mirrors the light theme, like the rest of this pre-JS block. */
+  --on-surface-muted: #a6a49a;
+  --line: rgba(21,21,21,.16);
   --glow: none;
   /* --bg-elevated and --text-bright have no exact design-doc equivalent
      (elevated-surface and dark-mode-brightened-ink derivations that don't
      map 1:1 onto any single §3.1 token — see themes.ts buildTheme()), so
      they stay as their own tokens rather than aliases. */
-  --bg-elevated: #dad6cd;
-  --text-bright: #1c1c1c;
-  --accent: #1c1c1c;
+  --bg-elevated: #d6d4cc;
+  --text-bright: #151515;
+  --accent: #151515;
   --accent-text: #ffffff;
-  --accent-soft: #1c1c1c2a;
-  --accent-2: #1c1c1c;
-  --primary-bg: #1c1c1c;
+  --accent-soft: #1515152a;
+  --accent-2: #34322F;
+  --primary-bg: #151515;
   --primary-text: #ffffff;
-  --player-bar-text: #1c1c1c;
-  --font-display: 'Cormorant SC', serif;
+  --player-bar-text: #F1EEDF;
+  --font-display: 'Rubik Dirt', 'Oswald', sans-serif;
   --font-body: 'Sofia Sans Semi Condensed', sans-serif;
   /* Typography voices (design doc §4.1). Display/Body vary per theme (see
      themes.ts); UI and Mono are the same everywhere — the doc doesn't call
@@ -194,37 +216,36 @@
   --card-border-width: 1px;
   --card-border-width-strong: 1px;
   --card-clip: none;
-  --card-band-bg: var(--paper-2);
-  --card-band-image: repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px);
-  --page-texture: radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px;
-  --card-body-texture: radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px;
+  --card-band-bg: #151515;
+  --card-band-image: none;
+  --page-texture: radial-gradient(rgba(21,21,21,.05) 1px, transparent 1px) 0 0/3px 3px;
+  --card-body-texture: none;
   --name-transform: none;
   --name-stroke: none;
-  --status-planned: #c1c7d1;
-  --status-planned-fg: #282e38;
-  --status-held: #a1ccb1;
-  --status-held-fg: #083318;
-  --status-cancelled: #f1a8a8;
-  --status-cancelled-fg: #580f0f;
-  --status-rescheduled: #e1ba9d;
-  --status-rescheduled-fg: #482104;
-  --role-gm: #7c3aed;
-  --role-gm-soft: #7c3aed22;
-  --role-player: #0369a1;
-  --role-player-soft: #0369a122;
-  --pay-paid: #b45309;
-  --pay-paid-soft: #b4530922;
-  --pay-free: #15803d;
-  --pay-free-soft: #15803d22;
-  /* Опасное действие («Архивировать», «Удалить») — одна заливка на все темы.
-     Цвет намеренно не выводится из --status-cancelled: та пастель означает
-     статус «отменена» в бейджах и на календаре, и, будучи надетой на кнопку
-     контуром, читалась как «кнопка недоступна». Здесь нужна плотная тёмно-
-     бордовая заливка, которая одинаково узнаётся на светлой бумаге зина и на
-     тёмных скинах, поэтому значение фиксированное, а не потемовое. */
-  --danger-bg: #c02020;
-  --danger-bg-hover: #dc3030;
-  --danger-text: #ffffff;
+  --status-planned: #bdbbb9;
+  --status-planned-fg: #242220;
+  --status-held: #a1a1a1;
+  --status-held-fg: #080808;
+  --status-cancelled: #e79fbd;
+  --status-cancelled-fg: #4e0624;
+  --status-rescheduled: #a1a1a1;
+  --status-rescheduled-fg: #080808;
+  --role-gm: #151515;
+  --role-gm-soft: #15151522;
+  --role-player: #C2105A;
+  --role-player-soft: #C2105A22;
+  --pay-paid: #151515;
+  --pay-paid-soft: #15151522;
+  --pay-free: #5A5650;
+  --pay-free-soft: #5A565022;
+  /* Опасное действие («Архивировать», «Удалить»). Цвет намеренно не
+     выводится из --status-cancelled: та пастель означает статус «отменена»,
+     и контуром на кнопке читалась как «кнопка недоступна». С v2 — малиновый
+     темы (§2.2: опасное — мелкая метка, отдельного красного нет); значения
+     задаёт themes.ts, здесь — светлая до запуска JS. */
+  --danger-bg: #C2105A;
+  --danger-bg-hover: #D8236C;
+  --danger-text: #FFFFFF;
 
   /* Name/title size scale — same on every theme, this is about scale not
      color/shape, so it lives here rather than in themes.ts. */
@@ -3841,21 +3862,6 @@ body.live-hide-search.live-hide-dock .app-content {
   padding: var(--sp-0) var(--sp-2);
 }
 
-/* Neon theme — each section's page-level <h1> (SectionHeading level="page",
-   `section` prop) gets its own acid-neon color instead of the single --ink
-   color every other theme uses. The left nav itself stays the theme's plain
-   ink color (see .app-nav a above) — only the page heading is colored. */
-[data-theme-id="neon"] .section-heading h1[data-section="home"] { color: #FF2E88; }
-[data-theme-id="neon"] .section-heading h1[data-section="campaigns"] { color: #39FF6A; }
-[data-theme-id="neon"] .section-heading h1[data-section="settings"] { color: #00E5FF; }
-[data-theme-id="neon"] .section-heading h1[data-section="storages"] { color: #00E5FF; }
-[data-theme-id="neon"] .section-heading h1[data-section="systems"] { color: #C400FF; }
-[data-theme-id="neon"] .section-heading h1[data-section="players"] { color: #FFF200; }
-[data-theme-id="neon"] .section-heading h1[data-section="invite"] { color: #FF8A00; }
-[data-theme-id="neon"] .section-heading h1[data-section="mastering"],
-[data-theme-id="neon"] .section-heading h1[data-section="resources"],
-[data-theme-id="neon"] .section-heading h1[data-section="graph"] { color: #00FFC6; }
-[data-theme-id="neon"] .section-heading h1[data-section="health"] { color: #FF3B30; }
 .nav-icon {
   width: 18px;
   height: 18px;
@@ -5617,10 +5623,6 @@ details.card[open] summary {
        shadow with a comma-separated "none" layer is invalid CSS and drops
        the whole declaration.) */
     box-shadow: var(--glow);
-  }
-  /* Единственный светящийся элемент системы — здесь. */
-  [data-theme-id="neon"] .mobile-bottom-nav-halo {
-    background: radial-gradient(circle, color-mix(in oklab, var(--accent) 50%, transparent) 0%, transparent 72%);
   }
   /* Compound selector (two classes) is needed to out-specificity the
      generic ".mobile-bottom-nav button" rule above (class+element beats a
@@ -9937,22 +9939,9 @@ details.card summary.res-group__band:hover .res-group__count,
 details.card summary.res-group__band:hover .res-group__title {
   color: var(--accent-text);
 }
-/* Peace: accent #8BBB92 на светлом тексте давал 1.3:1 — меняем ховер на тёмный accent2 #2A835F + белый текст (7:1) */
-[data-theme-id="peace"] details.card summary.res-group__band:hover {
-  background: var(--accent-2);
-  color: #FFFFFF;
-}
-[data-theme-id="peace"] details.card summary.res-group__band:hover .res-group__count,
-[data-theme-id="peace"] details.card summary.res-group__band:hover .res-group__title {
-  color: #FFFFFF;
-}
 .player-section-header:hover {
   background: var(--accent);
   color: var(--accent-text);
-}
-[data-theme-id="peace"] .player-section-header:hover {
-  background: var(--accent-2);
-  color: #FFFFFF;
 }
 details[open] > .res-group__band .chevron-icon {
   transform: rotate(90deg);
@@ -10524,24 +10513,11 @@ details[open] > .res-group__band .chevron-icon {
   cursor: pointer;
   list-style: none;
 }
-[data-theme-id="peace"] .campaign-overview-header {
-  background: #0E3C3C;
-  color: var(--ink);
-}
-[data-theme-id="peace"] details.card summary.campaign-overview-header:hover {
-  background: #104846;
-  color: var(--ink);
-}
 /* Глобально для «Покоя» все инвертированные плашки (бестиарий .creature-card__band,
    группы ресурсов .res-group__band, вырезка .home-article-band и т.п., везде где
    используется --surface) — тот же тёмный #0E3C3C вместо светлого var(--ink).
    Дублирует правку в themes.ts (inline vars выше по приоритету), !important
    нужен чтобы перебить inline при хот-релоаде. */
-[data-theme-id="peace"] {
-  --surface: #0E3C3C !important;
-  --on-surface: #E0EDE2 !important;
-  --on-surface-muted: #8BBB92 !important;
-}
 .campaign-overview-header::-webkit-details-marker {
   display: none;
 }

@@ -230,13 +230,6 @@
   pointer-events: none;
   background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
 }
-[data-theme-id="peace"] .home-hero-session {
-  color: color-mix(in srgb, var(--ink) 90%, transparent);
-}
-[data-theme-id="peace"] .home-hero-eyebrow,
-[data-theme-id="peace"] .home-hero-date {
-  color: var(--muted);
-}
 .home-hero-content {
   position: absolute;
   left: var(--sp-7);

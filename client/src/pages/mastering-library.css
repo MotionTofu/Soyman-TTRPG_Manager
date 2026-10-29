@@ -68,10 +68,10 @@
 .mastering-cover-settings [role="alert"] { margin: 0; }
 
 /* Генерированные материалы — только для темы, под которую они созданы. */
-[data-theme-id="peace"] .mastering-book:not(.has-cover)::after { inset: 0; border: 0; background: url('/textures/mastering-book-cloth.webp') center / 100% 100%; opacity: .4; mix-blend-mode: luminosity; z-index: -1; }
-[data-theme-id="peace"] .mastering-book--1:not(.has-cover)::after { opacity: .16; }
-[data-theme-id="peace"] .mastering-shelf::after { content: ""; display: block; height: 8px; background: var(--paper-2) url('/textures/mastering-shelf-wood.webp') center / 384px 192px repeat-x; border-top: 1px solid var(--line); box-shadow: 0 2px 3px color-mix(in srgb, var(--ink) 15%, transparent); }
-[data-theme-id="peace"] .mastering-shelf__track { border-bottom: 0; }
+[data-theme-id="dark"] .mastering-book:not(.has-cover)::after { inset: 0; border: 0; background: url('/textures/mastering-book-cloth.webp') center / 100% 100%; opacity: .4; mix-blend-mode: luminosity; z-index: -1; }
+[data-theme-id="dark"] .mastering-book--1:not(.has-cover)::after { opacity: .16; }
+[data-theme-id="dark"] .mastering-shelf::after { content: ""; display: block; height: 8px; background: var(--paper-2) url('/textures/mastering-shelf-wood.webp') center / 384px 192px repeat-x; border-top: 1px solid var(--line); box-shadow: 0 2px 3px color-mix(in srgb, var(--ink) 15%, transparent); }
+[data-theme-id="dark"] .mastering-shelf__track { border-bottom: 0; }
 .mastering-form-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5); }
 .mastering-form-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--sp-4); }
 .mastering-form-actions > .danger { margin-right: auto; }

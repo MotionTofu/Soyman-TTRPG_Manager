@@ -11,7 +11,7 @@ import { CharacterDossier, CharacterDossierModal, CharacterRelationsModal } from
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useCurrentUser } from "../api/currentUser";
 import type { Character } from "../types";
-import { findTheme } from "../themes";
+import { SHEET_THEME } from "../themes";
 import { SheetNotesColumn } from "../components/dnd/SheetNotesColumn";
 
 /**
@@ -55,7 +55,7 @@ export function CharacterDetailPage() {
   // body кладётся тема OneShot («noir»), на уходе снимается.
   useEffect(() => {
     const body = document.body;
-    const vars = Object.entries(findTheme("noir").vars);
+    const vars = Object.entries(SHEET_THEME.vars);
     body.classList.add("sheet-fullscreen");
     for (const [k, v] of vars) body.style.setProperty(k, v);
     return () => {

@@ -22,10 +22,7 @@ interface SectionHeadingProps {
   /** Right-aligned custom node (e.g. clock) — "section" level only, renders before/after action. */
   right?: ReactNode;
   /** Which nav destination this page-level heading belongs to (matches the
-   *  left-nav icon names) — "page" level only. Lets per-theme CSS (e.g. the
-   *  Neon theme) color each section's <h1> without hardcoding routes into
-   *  the theme system. See index.css's `[data-theme-id="neon"]
-   *  .section-heading h1[data-section=...]` rules. */
+   *  left-nav icon names) — "page" level only; lands in `data-section`. */
   section?: NavIconName;
   /** Compact page heading — keeps h1 but reduces particle count and vertical
    *  padding. Used to reclaim space without removing the landmark heading.
