@@ -10,11 +10,11 @@ import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { copySessionPrep } from "../sessionCopy";
-import { SectionHeading } from "../components/SectionHeading";
 import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { CreateCampaignTile } from "../components/CreateCampaignTile";
 import { OnboardingHero } from "../components/OnboardingHero";
 import { HomeArticleCard } from "../components/HomeArticleCard";
+import { HomeHero } from "../components/HomeHero";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
 import { sessionLabel } from "../sessionLabel";
@@ -327,103 +327,54 @@ export function HomeCalendarPage() {
         />
       )}
 
+      {/* P1 D-02: дубль EmptyState «Начни с хранилища» убран — единый OnboardingHero покрывает §1.11 */}
+      {initialLoad && !nearestSession && campaigns.length === 0 && sessionStorage.getItem("justCreated") && (
+        <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "10px 12px", borderLeft: "3px solid var(--accent)" }}>
+          <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
+          <span className="muted" style={{ marginLeft: 8, fontSize: "var(--fs-meta)" }}>Начни с Системы — первый шаг ниже.</span>
+        </div>
+      )}
+      {/* Герой — ближайшая игра во всю ширину над колонками (макет «Д»). */}
+      {nearestSession ? (
+        // Ведёт в карточку сессии, а не в пульт: с главной ныряют
+        // ГОТОВИТЬ ближайшую игру; кнопка в пульт есть в навигационном
+        // виджете из любой точки приложения (подробнее — HomeHero).
+        <HomeHero
+          session={nearestSession}
+          campaign={nearestCampaign}
+          cover={bgStyle(bgUrl, authBgBlob)}
+          started={heroStarted}
+          onHeld={() => setFinanceSessionId(nearestSession.id)}
+        />
+      ) : (
+        <OnboardingHero
+          systems={systems}
+          settings={settings}
+          campaigns={campaigns}
+          players={players}
+          sessionsCount={sessions.length}
+          onRefresh={() =>
+            void invalidateAffects(client, [
+              { path: "/calendar" },
+              { kind: "campaign", card: true },
+              { kind: "system", card: true },
+              { kind: "setting", card: true },
+              { kind: "player" },
+            ])
+          }
+        />
+      )}
+
       <div className="home-layout">
         <div className="home-main">
-          {/* P1 D-02: дубль EmptyState «Начни с хранилища» убран — единый OnboardingHero покрывает §1.11 */}
-          {initialLoad && !nearestSession && campaigns.length === 0 && sessionStorage.getItem("justCreated") && (
-            <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "10px 12px", borderLeft: "3px solid var(--accent)" }}>
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
-              <span className="muted" style={{ marginLeft: 8, fontSize: "var(--fs-meta)" }}>Начни с Системы — первый шаг ниже.</span>
-            </div>
-          )}
-          {/* Hero — nearest upcoming session's campaign, full-bleed cover. */}
-          {nearestSession ? (
-            // Ведёт в карточку сессии, а не в пульт: с главной ныряют
-            // ГОТОВИТЬ ближайшую игру. Кнопка в пульт есть в навигационном
-            // виджете из любой точки приложения — второй кнопкой поверх героя
-            // она спорила бы с этим обещанием.
-            //
-            // «Состоялась» лежит РЯДОМ со ссылкой, а не внутри неё: <button>
-            // внутри <a> — невалидная вложенность, и клик по кнопке уводил бы
-            // заодно на страницу сессии. Обёртка позиционирует её поверх.
-            <div className="home-hero-wrap">
-            <Link
-              to={`/sessions/${nearestSession.id}`}
-              className="card home-hero"
-              aria-label={`Ближайшая сессия: ${nearestSession.campaign_name}${nearestSession.title ? `, ${nearestSession.title}` : ""}`}
-            >
-              <div className="home-hero-cover cover-halftone">
-                {bgStyle(bgUrl, authBgBlob) ? (
-                  <div className="cover-art cover-photo">
-                    <div className="cover-art-image" style={{ backgroundImage: bgStyle(bgUrl, authBgBlob) }} />
-                  </div>
-                ) : (
-                  <div className="cover-art cover-art-fallback zine-grain" />
-                )}
-                <div className="home-hero-scrim" />
-                <div className="home-hero-content">
-                  <span className="home-hero-eyebrow">Ближайшая сессия</span>
-                  <h2 className="home-hero-title">{nearestSession.campaign_name}</h2>
-                  {nearestSession.title && (
-                    <span className="home-hero-session">{nearestSession.title}</span>
-                  )}
-                  {/* Номер, дата и время — факты, а не выдуманная метрика
-                      готовности: индикатор «начата ли подготовка» приложение
-                      считало бы за мастера и врал бы (пустые заметки ещё не
-                      значат неготовность), а раз соврёт — ему перестанут
-                      верить. */}
-                  <span className="home-hero-date">
-                    {[
-                      nearestSession.session_number ? `Сессия №${nearestSession.session_number}` : null,
-                      formatNearestDate(nearestSession.date),
-                      nearestSession.start_time,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-              </div>
-            </Link>
-            {heroStarted && (
-              <button
-                type="button"
-                className="home-hero-held"
-                title="Разобрать игру: кто пришёл, кто заплатил, что случилось"
-                onClick={(e) => { e.stopPropagation(); setFinanceSessionId(nearestSession.id); }}
-              >
-                Состоялась
-              </button>
-            )}
-            </div>
-          ) : (
-            <OnboardingHero
-              systems={systems}
-              settings={settings}
-              campaigns={campaigns}
-              players={players}
-              sessionsCount={sessions.length}
-              onRefresh={() =>
-                void invalidateAffects(client, [
-                  { path: "/calendar" },
-                  { kind: "campaign", card: true },
-                  { kind: "system", card: true },
-                  { kind: "setting", card: true },
-                  { kind: "player" },
-                ])
-              }
-            />
-          )}
-
           {/* Неразобранные игры. Стоит под героем, а не над ним: ближайшая игра
               важнее — за ней сюда и приходят, — а бухгалтерия не должна вставать
               между Мастером и подготовкой. Список строками, а не одной строкой
               со счётчиком: это разные кампании и разные вечера, и Мастер сам
               решает, с какой начать и где бросить. */}
           {overdueSessions.length > 0 && (
-            <div className="card stack home-overdue" style={{ gap: 8 }}>
-              <SectionHeading level="section" icon="calendar">
-                Игры прошли, но не отмечены
-              </SectionHeading>
+            <div className="d-block stack home-overdue" style={{ gap: 8 }}>
+              <h2 className="d-plate">Игры прошли, но не отмечены</h2>
               {overdueSessions.map((s) => (
                 <div key={s.id} className="row home-overdue-row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <div className="stack" style={{ gap: 2, minWidth: 0 }}>
@@ -435,7 +386,8 @@ export function HomeCalendarPage() {
                       {s.start_time ? ` · ${s.start_time}` : ""}
                     </span>
                   </div>
-                  <button className="primary" onClick={() => setFinanceSessionId(s.id)}>
+                  {/* Не кислота: кислота на экране одна — у «Готовить» в герое. */}
+                  <button type="button" className="d-btn d-btn--sm" onClick={() => setFinanceSessionId(s.id)}>
                     Разобрать
                   </button>
                 </div>
@@ -446,10 +398,12 @@ export function HomeCalendarPage() {
           {/* Tiles — quick campaign row. */}
           {/* Пустое состояние: вместо скрытия entire блока показываем
               плитку создания — она служит и CTA, и объяснением, что тут будет. */}
-          <div className="home-section home-section-campaigns">
-            <SectionHeading level="section" icon="campaigns" action={{ label: "все кампании", to: "/campaigns" }}>
-              Кампании
-            </SectionHeading>
+          <div className="d-block home-section home-section-campaigns">
+            <div className="d-plate-row">
+              <h2 className="d-plate">Кампании</h2>
+              {finance && <span className="d-note">{finance.campaigns} в работе</span>}
+              <Link className="d-end home-more" to="/campaigns">Все кампании ›</Link>
+            </div>
             <div className="home-tiles">
               {campaigns.slice(0, 3).map((c) => (
                 <CampaignCoverTile key={c.id} campaign={c} />
@@ -476,10 +430,8 @@ export function HomeCalendarPage() {
         <div className="home-rail">
           {/* 2.2 §1.11: на пустой БД «Сводка» — кладбище нулей — не показываем */}
           {finance && campaigns.length > 0 && (
-            <div className="card stack home-rail-stats">
-              <SectionHeading level="section" icon="graph">
-                Сводка
-              </SectionHeading>
+            <div className="d-block stack home-rail-stats">
+              <h2 className="d-plate">Сводка</h2>
               {/* Плашки, а не кости: на главной силуэт кости выбивался из
                   ряда прямоугольных блоков вокруг. Кость осталась там, где
                   она значит бросок, — в характеристиках существ. */}
@@ -516,10 +468,11 @@ export function HomeCalendarPage() {
 
           {/* 2.2 календарь до первой кампании не нужен — сессии некуда вязать */}
           {campaigns.length > 0 && (
-            <div className="card stack home-rail-calendar">
-              <SectionHeading level="section" icon="calendar" right={<LocalClock />}>
-                Календарь
-              </SectionHeading>
+            <div className="d-block stack home-rail-calendar">
+              <div className="d-plate-row">
+                <h2 className="d-plate">Календарь</h2>
+                <span className="d-end d-note"><LocalClock /></span>
+              </div>
               <MiniCalendar
                 events={miniEvents}
                 onDayClick={(date) => openCreateModal(date)}

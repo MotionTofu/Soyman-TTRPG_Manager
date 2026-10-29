@@ -22,27 +22,6 @@
   gap: var(--sp-5);
 }
 
-.home-hero {
-  padding: 0;
-  overflow: hidden;
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 511.989 511.989'%3E%3Cg transform='scale(-1,1) translate(-511.989,0)'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='white' stroke='white' stroke-width='16' stroke-linejoin='round'/%3E%3Cpath d='M48.641,496.629c-2.726,0-5.46-1.031-7.539-3.123L18.47,470.881c-2-2-3.125-4.703-3.125-7.531s1.125-5.547,3.125-7.547l79.194-79.201c2-2,4.719-3.125,7.546-3.125c2.828,0,5.539,1.125,7.539,3.125l22.625,22.623c4.172,4.172,4.172,10.922,0,15.096l-79.193,79.186C54.102,495.598,51.368,496.629,48.641,496.629z' fill='%23965353'/%3E%3Cpath d='M63.727,448.256c-7.055-7.047-16.429-10.938-26.398-10.938c-9.976,0-19.351,3.891-26.398,10.938c-14.554,14.562-14.554,38.25,0,52.795c7.047,7.047,16.422,10.938,26.398,10.938c9.969,0,19.344-3.891,26.398-10.938C78.282,486.506,78.282,462.818,63.727,448.256z' fill='%23FFCE54'/%3E%3Cpolygon points='59.954,414.32 97.664,452.021 112.749,436.943 75.039,399.224' fill='%237F4545'/%3E%3Cpath d='M161.779,406.131c-2.835,0-5.546-1.125-7.546-3.125l-45.249-45.264c-2.008-2-3.125-4.703-3.125-7.531s1.117-5.547,3.125-7.547L355.649,95.998c1.625-1.625,3.75-2.688,6.031-3.016l52.797-7.547c3.328-0.469,6.672,0.641,9.047,3.016s3.499,5.734,3.016,9.062l-7.547,52.795c-0.312,2.281-1.375,4.391-3.016,6.031L169.318,403.006C167.318,405.006,164.607,406.131,161.779,406.131z' fill='%23FFCE54'/%3E%3Cpath d='M139.147,383.506c-2.727,0-5.461-1.047-7.539-3.123c-4.164-4.172-4.164-10.922,0-15.094l186.324-186.324c4.172-4.172,10.922-4.172,15.077,0c4.172,4.157,4.172,10.922,0,15.078l-186.316,186.34C144.608,382.459,141.882,383.506,139.147,383.506z' fill='%23F6BB42'/%3E%3Cpath d='M199.49,418.086L93.898,312.492c-2.43-2.422-5.867-3.531-9.257-2.984c-3.383,0.547-6.297,2.688-7.828,5.766L61.728,345.43c-2.055,4.109-1.25,9.078,2,12.312l90.505,90.514c2.047,2.047,4.781,3.125,7.546,3.125c1.617,0,3.25-0.359,4.766-1.125l30.172-15.078c3.062-1.547,5.21-4.453,5.757-7.844C203.021,423.959,201.912,420.506,199.49,418.086z' fill='%23ED5564'/%3E%3C/g%3E%3C/svg%3E") 2 2, pointer;
-}
-.home-hero-cover {
-  position: relative;
-  width: 100%;
-  /* Пропорция от СВОЕЙ колонки, а не от ширины окна: vw не знает, что между
-     двумя боковыми панелями колонке достаётся вдвое меньше, и при свёрнутом
-     окне рисовал 300 px высоты на 489 px ширины — почти квадрат вместо
-     обложки. Границы держат её читаемой в обе стороны. */
-  aspect-ratio: 16 / 6;
-  min-height: 200px;
-  max-height: 300px;
-  isolation: isolate;
-  overflow: hidden;
-}
 .home-hero-empty {
   min-height: 220px;
   display: flex;
@@ -224,60 +203,6 @@
   font-size: var(--fs-meta);
   margin: 0;
 }
-.home-hero-scrim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--scrim) 95%, transparent) 100%);
-}
-.home-hero-content {
-  position: absolute;
-  left: var(--sp-7);
-  right: var(--sp-7);
-  bottom: var(--sp-6);
-  /* Над растром (z-index 1 у .cover-halftone::before): §5.2 запрещает
-     халфтон под текстом. */
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.home-hero-eyebrow {
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  /* Подпись лежит на инвертированной поверхности — значит свой muted, а не
-     тот, что выведен против бумаги. */
-  color: var(--on-surface-muted);
-}
-.home-hero-title {
-  margin: 0;
-  font-family: var(--font-title);
-  font-size: var(--fs-h1);
-  font-weight: 400;
-  text-transform: var(--name-transform);
-  line-height: 0.92;
-  color: var(--accent);
-}
-/* Название сессии, если задано: второй голос — проза курсивом, между
-   титульным и значением. Разрыв ×1.6 держится за счёт смены гарнитуры. */
-.home-hero-session {
-  font-family: var(--font-body);
-  font-size: var(--fs-meta);
-  font-style: italic;
-  color: color-mix(in srgb, var(--paper) 90%, transparent);
-}
-/* Номер, дата и время — значения, значит моношрифт. Это то, чего герою не
-   хватало: он говорил куда идти, но не в каком состоянии то, куда идёшь. */
-.home-hero-date {
-  margin-top: var(--sp-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  color: var(--on-surface-muted);
-}
-
 /* auto-FIT, а не auto-fill и не жёсткие repeat(4). auto-fill на колонке в
    984 px раскладывался на пять мест, четыре плитки занимали четыре, и справа
    оставалась дыра. Жёсткие четыре колонки, наоборот, ломали узкое окно: при
@@ -468,9 +393,6 @@
   }
 }
 @media (max-width: 860px) {
-  .home-hero-cover {
-    height: 186px;
-  }
   /* Клетка — цель для пальца, а не для мыши: при обычном поле карточки в
      14 px на 375-м экране выходило 42 px, на два ниже порога в 44. Поле
      карточки календаря ужимается ровно настолько, чтобы клетка добрала. */
@@ -515,39 +437,11 @@
   .home-rail > * {
     flex: 0 0 auto;
   }
-  .home-hero { order: 1; }
   .home-rail-calendar { order: 2; }
   .home-section-campaigns { order: 3; }
   .home-rail-stats { order: 4; }
   .home-section-article { order: 5; }
 }
-/* Кнопка «Состоялась» поверх героя.
-   Лежит вне <a>, поэтому обёртке нужна своя система координат. Ничего кроме
-   позиции она не делает: вид берёт у обычной primary-кнопки, чтобы не
-   заводить третий вид кнопки ради одного места. */
-.home-hero-wrap {
-  position: relative;
-}
-.home-hero-held {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
-  background: var(--surface);
-  color: var(--on-surface);
-  border: var(--card-border-width) solid var(--on-surface);
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: var(--sp-3) var(--sp-5);
-  cursor: pointer;
-}
-.home-hero-held:hover {
-  background: var(--on-surface);
-  color: var(--surface);
-}
-
 /* Плашка неразобранных игр. Разделители между строками — те же 1 px, что и
    везде (§1.3); последняя строка без линии, чтобы не дублировать край карточки. */
 .home-overdue-row {
@@ -557,4 +451,149 @@
 .home-overdue-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+/* Герой главной — «Д» (макет Roll-Home, docs/design-system.md §6.8): лист в
+   тушь-рамке, название и факты слева, обложка справа. Во всю ширину над
+   колонками. */
+.home-hero2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-8);
+  margin-bottom: var(--sp-7);
+}
+.home-hero2__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.home-hero2__eyebrow {
+  margin: 0;
+}
+.home-hero2__title {
+  margin: var(--sp-4) 0 var(--sp-3);
+  font-size: var(--fs-hero);
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+}
+.home-hero2__sub {
+  margin: 0 0 var(--sp-6);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  letter-spacing: 0.04em;
+}
+.home-hero2__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 var(--sp-6);
+  align-self: stretch;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.home-hero2__facts > div {
+  display: contents;
+}
+.home-hero2__facts :is(dt, dd) {
+  margin: 0;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.home-hero2__facts dt {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.home-hero2__facts dd {
+  font-size: var(--fs-lead);
+}
+.home-hero2__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-5);
+  margin-top: var(--sp-7);
+}
+.home-hero2__cover {
+  position: relative;
+  display: block;
+  min-height: 300px;
+  border: var(--edge-width) solid var(--edge);
+  background: var(--ph);
+  overflow: hidden;
+}
+.home-hero2__cover-image,
+.home-hero2__cover-image .cover-art-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+.home-hero2__cover-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 300px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+@media (max-width: 1100px) {
+  .home-hero2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .home-hero2__cover {
+    order: -1;
+    min-height: 190px;
+  }
+  .home-hero2__title {
+    font-size: var(--fs-h1);
+  }
+}
+
+/* Ссылка «Все кампании ›» в строке плашки. */
+.home-more {
+  font-size: var(--fs-label);
+  color: var(--ink-2);
+}
+
+/* Сводка — крупные числа Oswald, подписи машинописью (макет Roll-Home). */
+.home-rail-stats .finance-summary-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5) var(--sp-6);
+}
+.home-rail-stats .finance-summary-row {
+  display: contents;
+}
+.home-rail-stats :is(.stat-plate, .stat-plate-lead) {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+}
+.home-rail-stats .stat-plate-value {
+  display: block;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink);
+}
+.home-rail-stats .stat-plate-unit {
+  margin-left: var(--sp-1);
+  font-size: var(--fs-data);
+  color: var(--ink);
+}
+.home-rail-stats .stat-plate-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }

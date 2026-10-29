@@ -8,7 +8,7 @@
 body[data-cursor-set="lawfull-good"] { cursor: url("/cursors/lawfull-good-01-arrow.png") 6 2, default; }
 body[data-cursor-set="lawfull-good"] [data-cc="hand"] { cursor: url("/cursors/lawfull-good-02-hand.png") 14 1, pointer !important; }
 body[data-cursor-set="lawfull-good"] [data-cc="wait"] { cursor: url("/cursors/lawfull-good-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="lawfull-good"] .home-hero { cursor: url("/cursors/lawfull-good-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="lawfull-good"] .home-hero2__cover { cursor: url("/cursors/lawfull-good-04-weapon.png") 13 16, pointer; }
 body[data-cursor-set="lawfull-good"] [data-cc="help"] { cursor: url("/cursors/lawfull-good-08-help.png") 14 16, help !important; }
 body[data-cursor-set="lawfull-good"] [data-cc="move"] { cursor: url("/cursors/lawfull-good-09-move.png") 16 16, move !important; }
 body[data-cursor-set="lawfull-good"] [data-cc="text"] { cursor: url("/cursors/lawfull-good-10-text.png") 12 16, text !important; }
@@ -26,7 +26,7 @@ body[data-cursor-set="lawfull-good"] [data-cc="se"] { cursor: url("/cursors/lawf
 body[data-cursor-set="neutral-good"] { cursor: url("/cursors/neutral-good-01-arrow.png") 6 2, default; }
 body[data-cursor-set="neutral-good"] [data-cc="hand"] { cursor: url("/cursors/neutral-good-02-hand.png") 14 2, pointer !important; }
 body[data-cursor-set="neutral-good"] [data-cc="wait"] { cursor: url("/cursors/neutral-good-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="neutral-good"] .home-hero { cursor: url("/cursors/neutral-good-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="neutral-good"] .home-hero2__cover { cursor: url("/cursors/neutral-good-04-weapon.png") 12 16, pointer; }
 body[data-cursor-set="neutral-good"] [data-cc="help"] { cursor: url("/cursors/neutral-good-08-help.png") 13 16, help !important; }
 body[data-cursor-set="neutral-good"] [data-cc="move"] { cursor: url("/cursors/neutral-good-09-move.png") 16 16, move !important; }
 body[data-cursor-set="neutral-good"] [data-cc="text"] { cursor: url("/cursors/neutral-good-10-text.png") 9 16, text !important; }
@@ -44,7 +44,7 @@ body[data-cursor-set="neutral-good"] [data-cc="se"] { cursor: url("/cursors/neut
 body[data-cursor-set="chaotic-good"] { cursor: url("/cursors/chaotic-good-01-arrow.png") 6 2, default; }
 body[data-cursor-set="chaotic-good"] [data-cc="hand"] { cursor: url("/cursors/chaotic-good-02-hand.png") 14 1, pointer !important; }
 body[data-cursor-set="chaotic-good"] [data-cc="wait"] { cursor: url("/cursors/chaotic-good-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="chaotic-good"] .home-hero { cursor: url("/cursors/chaotic-good-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="chaotic-good"] .home-hero2__cover { cursor: url("/cursors/chaotic-good-04-weapon.png") 13 16, pointer; }
 body[data-cursor-set="chaotic-good"] [data-cc="help"] { cursor: url("/cursors/chaotic-good-08-help.png") 14 16, help !important; }
 body[data-cursor-set="chaotic-good"] [data-cc="move"] { cursor: url("/cursors/chaotic-good-09-move.png") 15 16, move !important; }
 body[data-cursor-set="chaotic-good"] [data-cc="text"] { cursor: url("/cursors/chaotic-good-10-text.png") 10 16, text !important; }
@@ -62,7 +62,7 @@ body[data-cursor-set="chaotic-good"] [data-cc="se"] { cursor: url("/cursors/chao
 body[data-cursor-set="lawfull-neutral"] { cursor: url("/cursors/lawfull-neutral-01-arrow.png") 5 2, default; }
 body[data-cursor-set="lawfull-neutral"] [data-cc="hand"] { cursor: url("/cursors/lawfull-neutral-02-hand.png") 14 1, pointer !important; }
 body[data-cursor-set="lawfull-neutral"] [data-cc="wait"] { cursor: url("/cursors/lawfull-neutral-03-hourglass.png") 13 16, wait !important; }
-body[data-cursor-set="lawfull-neutral"] .home-hero { cursor: url("/cursors/lawfull-neutral-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="lawfull-neutral"] .home-hero2__cover { cursor: url("/cursors/lawfull-neutral-04-weapon.png") 13 16, pointer; }
 body[data-cursor-set="lawfull-neutral"] [data-cc="help"] { cursor: url("/cursors/lawfull-neutral-08-help.png") 14 16, help !important; }
 body[data-cursor-set="lawfull-neutral"] [data-cc="move"] { cursor: url("/cursors/lawfull-neutral-09-move.png") 16 16, move !important; }
 body[data-cursor-set="lawfull-neutral"] [data-cc="text"] { cursor: url("/cursors/lawfull-neutral-10-text.png") 9 16, text !important; }
@@ -80,7 +80,7 @@ body[data-cursor-set="lawfull-neutral"] [data-cc="se"] { cursor: url("/cursors/l
 body[data-cursor-set="true-neutral"] { cursor: url("/cursors/true-neutral-01-arrow.png") 6 2, default; }
 body[data-cursor-set="true-neutral"] [data-cc="hand"] { cursor: url("/cursors/true-neutral-02-hand.png") 13 2, pointer !important; }
 body[data-cursor-set="true-neutral"] [data-cc="wait"] { cursor: url("/cursors/true-neutral-03-hourglass.png") 13 16, wait !important; }
-body[data-cursor-set="true-neutral"] .home-hero { cursor: url("/cursors/true-neutral-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="true-neutral"] .home-hero2__cover { cursor: url("/cursors/true-neutral-04-weapon.png") 12 16, pointer; }
 body[data-cursor-set="true-neutral"] [data-cc="help"] { cursor: url("/cursors/true-neutral-08-help.png") 12 16, help !important; }
 body[data-cursor-set="true-neutral"] [data-cc="move"] { cursor: url("/cursors/true-neutral-09-move.png") 16 15, move !important; }
 body[data-cursor-set="true-neutral"] [data-cc="text"] { cursor: url("/cursors/true-neutral-10-text.png") 10 16, text !important; }
@@ -98,7 +98,7 @@ body[data-cursor-set="true-neutral"] [data-cc="se"] { cursor: url("/cursors/true
 body[data-cursor-set="chaotic-neutral"] { cursor: url("/cursors/chaotic-neutral-01-arrow.png") 6 2, default; }
 body[data-cursor-set="chaotic-neutral"] [data-cc="hand"] { cursor: url("/cursors/chaotic-neutral-02-hand.png") 14 1, pointer !important; }
 body[data-cursor-set="chaotic-neutral"] [data-cc="wait"] { cursor: url("/cursors/chaotic-neutral-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="chaotic-neutral"] .home-hero { cursor: url("/cursors/chaotic-neutral-04-weapon.png") 15 16, pointer; }
+body[data-cursor-set="chaotic-neutral"] .home-hero2__cover { cursor: url("/cursors/chaotic-neutral-04-weapon.png") 15 16, pointer; }
 body[data-cursor-set="chaotic-neutral"] [data-cc="help"] { cursor: url("/cursors/chaotic-neutral-08-help.png") 14 16, help !important; }
 body[data-cursor-set="chaotic-neutral"] [data-cc="move"] { cursor: url("/cursors/chaotic-neutral-09-move.png") 15 16, move !important; }
 body[data-cursor-set="chaotic-neutral"] [data-cc="text"] { cursor: url("/cursors/chaotic-neutral-10-text.png") 12 16, text !important; }
@@ -116,7 +116,7 @@ body[data-cursor-set="chaotic-neutral"] [data-cc="se"] { cursor: url("/cursors/c
 body[data-cursor-set="lawfull-evil"] { cursor: url("/cursors/lawfull-evil-01-arrow.png") 5 2, default; }
 body[data-cursor-set="lawfull-evil"] [data-cc="hand"] { cursor: url("/cursors/lawfull-evil-02-hand.png") 12 1, pointer !important; }
 body[data-cursor-set="lawfull-evil"] [data-cc="wait"] { cursor: url("/cursors/lawfull-evil-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="lawfull-evil"] .home-hero { cursor: url("/cursors/lawfull-evil-04-weapon.png") 14 16, pointer; }
+body[data-cursor-set="lawfull-evil"] .home-hero2__cover { cursor: url("/cursors/lawfull-evil-04-weapon.png") 14 16, pointer; }
 body[data-cursor-set="lawfull-evil"] [data-cc="help"] { cursor: url("/cursors/lawfull-evil-08-help.png") 13 16, help !important; }
 body[data-cursor-set="lawfull-evil"] [data-cc="move"] { cursor: url("/cursors/lawfull-evil-09-move.png") 16 15, move !important; }
 body[data-cursor-set="lawfull-evil"] [data-cc="text"] { cursor: url("/cursors/lawfull-evil-10-text.png") 12 16, text !important; }
@@ -134,7 +134,7 @@ body[data-cursor-set="lawfull-evil"] [data-cc="se"] { cursor: url("/cursors/lawf
 body[data-cursor-set="neutral-evil"] { cursor: url("/cursors/neutral-evil-01-arrow.png") 6 2, default; }
 body[data-cursor-set="neutral-evil"] [data-cc="hand"] { cursor: url("/cursors/neutral-evil-02-hand.png") 12 1, pointer !important; }
 body[data-cursor-set="neutral-evil"] [data-cc="wait"] { cursor: url("/cursors/neutral-evil-03-hourglass.png") 13 16, wait !important; }
-body[data-cursor-set="neutral-evil"] .home-hero { cursor: url("/cursors/neutral-evil-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="neutral-evil"] .home-hero2__cover { cursor: url("/cursors/neutral-evil-04-weapon.png") 12 16, pointer; }
 body[data-cursor-set="neutral-evil"] [data-cc="help"] { cursor: url("/cursors/neutral-evil-08-help.png") 11 16, help !important; }
 body[data-cursor-set="neutral-evil"] [data-cc="move"] { cursor: url("/cursors/neutral-evil-09-move.png") 16 15, move !important; }
 body[data-cursor-set="neutral-evil"] [data-cc="text"] { cursor: url("/cursors/neutral-evil-10-text.png") 9 16, text !important; }
@@ -152,7 +152,7 @@ body[data-cursor-set="neutral-evil"] [data-cc="se"] { cursor: url("/cursors/neut
 body[data-cursor-set="chaotic-evil"] { cursor: url("/cursors/chaotic-evil-01-arrow.png") 5 2, default; }
 body[data-cursor-set="chaotic-evil"] [data-cc="hand"] { cursor: url("/cursors/chaotic-evil-02-hand.png") 14 1, pointer !important; }
 body[data-cursor-set="chaotic-evil"] [data-cc="wait"] { cursor: url("/cursors/chaotic-evil-03-hourglass.png") 14 16, wait !important; }
-body[data-cursor-set="chaotic-evil"] .home-hero { cursor: url("/cursors/chaotic-evil-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="chaotic-evil"] .home-hero2__cover { cursor: url("/cursors/chaotic-evil-04-weapon.png") 13 16, pointer; }
 body[data-cursor-set="chaotic-evil"] [data-cc="help"] { cursor: url("/cursors/chaotic-evil-08-help.png") 13 16, help !important; }
 body[data-cursor-set="chaotic-evil"] [data-cc="move"] { cursor: url("/cursors/chaotic-evil-09-move.png") 16 15, move !important; }
 body[data-cursor-set="chaotic-evil"] [data-cc="text"] { cursor: url("/cursors/chaotic-evil-10-text.png") 12 16, text !important; }
