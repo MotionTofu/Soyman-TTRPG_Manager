@@ -3923,7 +3923,13 @@ body.live-hide-search.live-hide-dock .app-content {
   margin-left: auto;
   margin-right: auto;
 }
+/* Запас под накладную панель плеера — одно правило на все страницы: высота
+   панели и тот же воздух, что сверху. Страницам свой запас не нужен.
+   Окна во всю высоту (доска Полотна, .page-fill) берут остаток без воздуха. */
 .app-content.has-player {
+  padding-bottom: calc(var(--player-bar-height) + var(--sp-7));
+}
+.app-content.has-player:has(.page-fill, .canvas-page--board) {
   padding-bottom: var(--player-bar-height);
 }
 
@@ -7086,7 +7092,6 @@ details.card[open] summary {
 .invitations-page {
   position: relative;
   gap: var(--sp-7);
-  padding-bottom: calc(var(--player-bar-height, 52px) + var(--sp-6));
 }
 .list-page__tab-count {
   margin-left: var(--sp-1);

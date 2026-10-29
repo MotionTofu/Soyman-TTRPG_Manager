@@ -4,21 +4,7 @@
    design_revision.md §1. Различия делаются формой, толщиной и
    инверсией: разница должна переживать чёрно-белую печать. */
 
-.session-profile {
-  padding-bottom: var(--sp-7);
-}
-.app-content.has-player .session-profile {
-  padding-bottom: calc(var(--player-bar-height) + var(--sp-8));
-}
-
-/* Профиль сцены: нижний запас под оверлей аудиоплеера, иначе конец
-   страницы уезжает под фиксированную плашку. */
-.scene-detail {
-  padding-bottom: var(--sp-7);
-}
-.app-content.has-player .scene-detail {
-  padding-bottom: calc(var(--player-bar-height) + var(--sp-7));
-}
+/* Запас под панель плеера даёт .app-content.has-player (index.css). */
 
 /* ----------------------------------------------------------- заголовок */
 

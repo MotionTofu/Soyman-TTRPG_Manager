@@ -135,7 +135,7 @@ export function PlayersWorkspace() {
   }
 
   return (
-    <div className="stack" style={{ position: "relative", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
+    <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
       <ListPage
         headingSection="players"

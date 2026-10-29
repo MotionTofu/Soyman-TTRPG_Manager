@@ -552,13 +552,9 @@
 /* Пульт — общий каркас */
 .session-live {
   gap: var(--sp-7);
-  padding-bottom: var(--sp-7);
 }
 .session-live .stack {
   gap: var(--sp-5);
-}
-.app-content.has-player .session-live {
-  padding-bottom: calc(var(--player-bar-height) + var(--sp-7));
 }
 .session-live-idea-events {
   display: grid;
