@@ -121,3 +121,30 @@
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* «В бой» тихой подписью: в каждой строке, поэтому не должна перетягивать
+   взгляд с имён. Рамка — только под курсором строки. */
+.to-init {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.resource-row:hover .to-init {
+  border-color: var(--line);
+}
+.to-init:hover {
+  border-color: var(--edge);
+  color: var(--ink);
+}
+.to-init.is-sent {
+  color: var(--ink-2);
+}
