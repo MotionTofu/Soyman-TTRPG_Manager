@@ -106,12 +106,6 @@
   stroke: var(--line);
   stroke-width: 1.5;
 }
-.canvas-flow .react-flow__controls-button {
-  background: var(--bg-elevated);
-  border-bottom: var(--card-border-width) solid var(--line);
-  color: var(--text-bright);
-  fill: currentColor;
-}
 .canvas-flow .react-flow__attribution {
   display: none;
 }
@@ -1590,21 +1584,6 @@
   background: var(--paper);
 }
 
-/* Тёмная тема: стикеры не остаются светлыми пастелями на тёмном полотне.
-   Перекрываем инлайн-значения из STICKER_COLORS (ставятся через style) — без
-   !important не перебить style-атрибут. */
-[data-theme-mode="dark"] {
-  --sticker-yellow: #3C3520 !important;
-  --sticker-blue: #25394B !important;
-  --sticker-green: #243B26 !important;
-  --sticker-pink: #3E2A36 !important;
-  --sticker-sand: #3B2E25 !important;
-  --sticker-lavender: #2F3342 !important;
-}
-[data-theme-mode="dark"] .canvas-node--sticker {
-  color: var(--ink);
-  border-color: var(--paper) !important;
-}
 
 /* ─── Узловой дизайн (гриллинг 2026-09-28) ─────────────────────────────── */
 
@@ -1835,4 +1814,130 @@
 .node-clue__del {
   padding: 0 var(--sp-2);
   min-width: 0;
+}
+
+/* ─── Рестайл «Д» по макету Roll-Canvas (гриллинг 2026-10-29) ───────────── */
+
+/* Панель доски (Q1–Q2): название и счёт, кнопки «положить в центр», условные
+   действия доски, справа отмена, поиск и масштаб. */
+.canvas-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-5);
+  min-height: 52px;
+  padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line);
+  background: var(--sheet);
+}
+.canvas-tool__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.canvas-tool__add {
+  display: flex;
+  gap: var(--sp-1);
+  margin-left: var(--sp-5);
+}
+.canvas-tool__add button {
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  cursor: pointer;
+}
+.canvas-tool__add button:hover { background: var(--tab); color: var(--ink); }
+.canvas-tool__end {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+}
+.canvas-tool__zoom {
+  min-width: 52px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.canvas-tool__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  margin-top: var(--sp-2);
+}
+
+/* Карточка узла (Q3): кромка тушью, лист темы, сверху полоса цвета типа со
+   знаком и видом, название — в теле. Цвет полосы остаётся за палитрой
+   Полотна (`--cv-node-*`), кромка — общая. */
+.canvas-node.canvas-node--card {
+  border: var(--edge-width) solid var(--edge);
+  background: var(--sheet);
+}
+.canvas-node--entity.canvas-node--card { width: 220px; }
+.canvas-node--card .canvas-node__band {
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  min-height: 28px;
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: 0;
+}
+.canvas-node--card .canvas-node__band .type-glyph { width: 14px; height: 14px; }
+.canvas-node--card .canvas-node__kind {
+  opacity: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-node--card .canvas-node__portrait {
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+}
+.canvas-node--card .canvas-node__name {
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+/* Стикер (Q4): бумажка под скотчем, чуть повёрнута. В тёмной теме бумага
+   остаётся бумагой — приглушённой, с тёмным текстом, как в макете. */
+.canvas-node--sticker {
+  position: relative;
+  border: 0;
+  color: #151515;
+  transform: rotate(2deg);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+}
+.canvas-node--sticker::before {
+  content: "";
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  width: 110px;
+  height: 28px;
+  transform: translateX(-50%);
+  background: var(--skin-tape) center / contain no-repeat;
+  pointer-events: none;
+}
+.canvas-node--sticker .canvas-node__body { padding: var(--sp-6) var(--sp-5) var(--sp-5); }
+.canvas-sticker__title {
+  font-size: var(--fs-lead);
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.canvas-sticker__note {
+  font-size: var(--fs-meta);
+  white-space: pre-wrap;
+  opacity: 0.85;
+}
+[data-theme-mode="dark"] .canvas-node--sticker { filter: brightness(0.85); }
+[data-theme-mode="dark"] .canvas-node--sticker[data-color="paper"] {
+  color: var(--ink);
+  filter: none;
+  outline: 1px solid var(--line);
 }

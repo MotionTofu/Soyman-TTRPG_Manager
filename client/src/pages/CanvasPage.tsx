@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { TypeGlyph } from "../components/TypeGlyph";
 import {
   Background,
-  ControlButton,
   Handle,
   MarkerType,
   MiniMap,
@@ -10,7 +10,6 @@ import {
   ReactFlow,
   applyNodeChanges,
   useEdgesState,
-  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -262,7 +261,7 @@ function SceneNode({ data, selected }: NodeProps<Node<SceneNodeData>>) {
   const typeLabel = data.nodeType ? NODE_TYPE_LABELS[data.nodeType] : null;
   return (
     <div
-      className={`canvas-node${data.nodeType ? ` canvas-node--t-${data.nodeType}` : ""}${selected ? " is-selected" : ""}${data.isRehearsing ? " is-rehearsing" : ""}`}
+      className={`canvas-node canvas-node--card${data.nodeType ? ` canvas-node--t-${data.nodeType}` : ""}${selected ? " is-selected" : ""}${data.isRehearsing ? " is-rehearsing" : ""}`}
     >
       {/* Слева всё, из чего сцена собрана. Ромб — «история»: сюда приходит
           переход. Квадраты — состав: место, участники, предметы. Тип разъёма
@@ -302,13 +301,15 @@ function SceneNode({ data, selected }: NodeProps<Node<SceneNodeData>>) {
           title={h.label}
         />
       ))}
+      {/* Полоса типа со знаком, название — в теле (макет Roll-Canvas, Q3). */}
       <div className="canvas-node__band">
-        <span className="canvas-node__name">{data.name}</span>
+        <TypeGlyph type="scene" />
         <span className="canvas-node__kind">
-          {[typeLabel, data.nodeRole !== "normal" ? NODE_ROLE_LABELS[data.nodeRole] : null].filter(Boolean).join(" · ") || "Узел"}
+          {[typeLabel ?? "Сцена", data.nodeRole !== "normal" ? NODE_ROLE_LABELS[data.nodeRole] : null].filter(Boolean).join(" · ")}
         </span>
       </div>
       <div className="canvas-node__body">
+        <span className="canvas-node__name">{data.name}</span>
         {data.nodeRole === "proactive" && data.nodeTrigger && (
           <div className="canvas-node__trigger" title={data.nodeTrigger}>
             Когда: {data.nodeTrigger}
@@ -433,33 +434,35 @@ const ENTITY_PAGE_PATH: Record<string, string> = {
 
 function EntityNode({ data, selected }: NodeProps<Node<EntityNodeData>>) {
   return (
-    <div className={`canvas-node canvas-node--entity canvas-node--${data.nodeType}${selected ? " is-selected" : ""}`}>
+    <div className={`canvas-node canvas-node--entity canvas-node--card canvas-node--${data.nodeType}${selected ? " is-selected" : ""}`}>
+      {/* Полоса цвета типа со знаком и видом, название — в теле (макет
+          Roll-Canvas, Q3). Портрет — самый быстрый опознавательный знак: за
+          столом ноду опознают, а не читают, — поэтому он в полосе. */}
       <div className="canvas-node__band">
-        {/* Портрет — самый быстрый опознавательный знак: за столом ноду
-            опознают, а не читают. */}
+        <TypeGlyph type={data.nodeType} />
+        <span className="canvas-node__kind">
+          {data.nodeType === "location" && typeof data.role === "string" && data.role
+            ? (LOCATION_ROLE_LABELS[data.role as LocationRole] ?? ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)
+            : (ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)}
+        </span>
         {data.thumbUrl ? (
           <img src={data.thumbUrl} alt="" className="canvas-node__portrait" />
         ) : (
           <div className="canvas-node__portrait canvas-node__portrait--empty" />
         )}
-        <span className="canvas-node__name">{data.name}</span>
       </div>
       <div className="canvas-node__body">
-        <div className="canvas-node__chips">
-          <span className="canvas-node__chip">
-            {data.nodeType === "location" && typeof data.role === "string" && data.role
-              ? (LOCATION_ROLE_LABELS[data.role as LocationRole] ?? ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)
-              : (ENTITY_TYPE_LABEL[data.nodeType] ?? data.nodeType)}
-          </span>
-          {/* Упоминания рёбрами не рисуются — схема утонула бы. Но «упомянут и
-              не подцеплен» стоит показать: в текстах существо есть, в составе
-              нет. */}
-          {data.mentionedIn > 0 && (
+        <span className="canvas-node__name">{data.name}</span>
+        {/* Упоминания рёбрами не рисуются — схема утонула бы. Но «упомянут и
+            не подцеплен» стоит показать: в текстах существо есть, в составе
+            нет. */}
+        {data.mentionedIn > 0 && (
+          <div className="canvas-node__chips">
             <span className="canvas-node__chip" title="Упомянут в текстах сцен, но не подцеплен">
               Упомянут: {data.mentionedIn}
             </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {/* Квадрат — сущность, ромб — история. Тип разъёма передан формой, а не
           цветом: в палитре ровно три цвета.
@@ -698,10 +701,14 @@ function PlaylistNode({ data, selected }: NodeProps<Node<PlaylistNodeData>>) {
 }
 function StickerNode({ data, selected }: NodeProps<Node<StickerNodeData>>) {
   return (
-    <div className={`canvas-node canvas-node--sticker${selected ? " is-selected" : ""}`} style={{ background: STICKER_COLORS[data.color] ?? STICKER_COLORS.paper, border: "1.5px solid var(--line)", boxShadow: "0 1px 0 rgba(18,16,14,0.06)" }}>
-      <div className="canvas-node__body" style={{ padding: 10 }}>
-        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-meta)", fontWeight: 600, whiteSpace: "pre-wrap" }}>{data.name || data.text || "Заметка"}</span>
-        {data.note && <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", whiteSpace: "pre-wrap", opacity: 0.85 }}><MentionText text={data.note} /></span>}
+    <div
+      className={`canvas-node canvas-node--sticker${selected ? " is-selected" : ""}`}
+      data-color={STICKER_COLORS[data.color] ? data.color : "paper"}
+      style={{ background: STICKER_COLORS[data.color] ?? STICKER_COLORS.paper }}
+    >
+      <div className="canvas-node__body">
+        <span className="canvas-sticker__title">{data.name || data.text || "Заметка"}</span>
+        {data.note && <span className="canvas-sticker__note"><MentionText text={data.note} /></span>}
       </div>
     </div>
   );
@@ -2301,7 +2308,7 @@ export function CanvasPage() {
     setCreatureCard({ type, id, x: Math.max(8, left), y: Math.max(8, top) });
   }, []);
   const [canvasMenuOpen, setCanvasMenuOpen] = useState(false);
-  const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
+  const [zoomPct, setZoomPct] = useState(100);
   const [showCanvasWizard, setShowCanvasWizard] = useState(false);
   const [showOpenWizard, setShowOpenWizard] = useState(false);
   // Палитра закрыта по умолчанию: за столом холст нужен целиком, а пополняют
@@ -5117,6 +5124,36 @@ export function CanvasPage() {
     [board, loadBoard, nodes, onNodesDelete, createGroup, groupColorItems]
   );
 
+  // Стикер и картинка — одно действие для меню по правой кнопке и для кнопок
+  // панели (Q1 рестайла): там кладут под курсор, здесь — в центр экрана.
+  const addSticker = useCallback(async (at: { x: number; y: number }) => {
+    const text = await promptText({ title: "Стикер", message: "Текст стикера", defaultValue: "Заметка", confirmLabel: "Создать" });
+    if (text == null) return;
+    await boardAction(
+      () => write.post("/canvas/stickers", { board_id: board?.board_id, text: text || "Заметка", color: "yellow", x: Math.round(at.x), y: Math.round(at.y) }),
+      { retry: false, failure: "Новый стикер" }
+    );
+  }, [board, boardAction, promptText]);
+  const addImage = useCallback((at: { x: number; y: number }) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp,image/gif";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file || !board?.board_id) return;
+      const form = new FormData();
+      form.append("file", file);
+      form.append("board_id", String(board.board_id));
+      form.append("x", String(Math.round(at.x)));
+      form.append("y", String(Math.round(at.y)));
+      await boardAction(() => write.post("/canvas/images/upload", form, { timeoutMs: UPLOAD_TIMEOUT_MS }), {
+        retry: false,
+        failure: "Картинка на холсте",
+      });
+    };
+    input.click();
+  }, [board, boardAction]);
+
   const handlePaneContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent) => {
       (event as React.MouseEvent).preventDefault();
@@ -5136,39 +5173,8 @@ export function CanvasPage() {
       }
       const flowPos = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) ?? { x: 0, y: 0 };
       const items: ContextMenuItem[] = [
-        {
-          label: "Создать стикер",
-          onClick: async () => {
-            const text = await promptText({ title: "Стикер", message: "Текст стикера", defaultValue: "Заметка", confirmLabel: "Создать" });
-            if (text == null) return;
-            await boardAction(
-              () => write.post("/canvas/stickers", { board_id: board?.board_id, text: text || "Заметка", color: "yellow", x: Math.round(flowPos.x), y: Math.round(flowPos.y) }),
-              { retry: false, failure: "Новый стикер" }
-            );
-          },
-        },
-        {
-          label: "Загрузить изображение",
-          onClick: () => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = "image/png,image/jpeg,image/webp,image/gif";
-            input.onchange = async () => {
-              const file = input.files?.[0];
-              if (!file || !board?.board_id) return;
-              const form = new FormData();
-              form.append("file", file);
-              form.append("board_id", String(board.board_id));
-              form.append("x", String(Math.round(flowPos.x)));
-              form.append("y", String(Math.round(flowPos.y)));
-              await boardAction(() => write.post("/canvas/images/upload", form, { timeoutMs: UPLOAD_TIMEOUT_MS }), {
-                retry: false,
-                failure: "Картинка на холсте",
-              });
-            };
-            input.click();
-          },
-        },
+        { label: "Создать стикер", onClick: () => { void addSticker(flowPos); } },
+        { label: "Загрузить изображение", onClick: () => addImage(flowPos) },
         {
           // Та же операция, что в меню «Узлы» — и то же имя: два разных
           // названия у одного действия читались как два разных действия.
@@ -5179,7 +5185,7 @@ export function CanvasPage() {
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, boardAction, nodes, onNodesDelete, createGroup, promptText, groupColorItems]
+    [nodes, onNodesDelete, createGroup, groupColorItems, addSticker, addImage]
   );
 
   const handleDrop = useCallback(
@@ -5566,6 +5572,14 @@ export function CanvasPage() {
    * показывается и на фриформе. Разница между видами доски — только в том,
    * чем наполнять палитру; ради неё копия не нужна.
    */
+  // Центр видимой части доски — туда кладут кнопки панели.
+  const viewCenter = () => {
+    const r = flowElRef.current?.getBoundingClientRect();
+    return flowRef.current && r
+      ? flowRef.current.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
+      : { x: 0, y: 0 };
+  };
+
   const boardSurface = board && (
     <div className="canvas-body">
       <div className="canvas-flow" ref={flowElRef}>
@@ -5605,13 +5619,15 @@ export function CanvasPage() {
           // умолчанию @xyflow отдаёт зажатый пробел под панораму.
           panActivationKeyCode={rehearsalOn ? null : undefined}
           selectionOnDrag
+          // Масштаб в панели — по концу жеста, не по кадру: кадр перерисовал
+          // бы всю страницу доски.
+          onMoveEnd={(_, vp) => setZoomPct(Math.round(vp.zoom * 100))}
           // Выделенная нода не всплывает над рамкой: рамка главы больше её
           // содержимого, и всплывшая рамка закрыла бы собой свои же сцены.
           elevateNodesOnSelect={false}
           elevateEdgesOnSelect={false}
         >
           <Background gap={GRID} size={1.4} color="var(--line)" />
-          <ControlsButtons />
           {/* Вид и цвета — в canvas.css (.react-flow__minimap), там же её
               прячет @container ниже порога узкого экрана. */}
           <MiniMap pannable zoomable />
@@ -5819,6 +5835,11 @@ export function CanvasPage() {
   // доска забирает всё окно, список скроллится вместе с ним. Высоту и лишние
   // строки шапки различаем этим признаком, а не повтором условий по месту.
   const boardMode = freeId > 0 || campaignMapId > 0 || settingMapId > 0 || arcId > 0;
+  const boardTitle = board?.free?.name
+    || board?.arc?.name
+    || (campaignMapId ? board?.campaign_map?.name : null)
+    || (settingMapId ? board?.setting?.name : null)
+    || "Холст";
 
   return (
     <div className={`stack canvas-page ${boardMode ? "canvas-page--board" : "canvas-page--index"}`} style={{ position: "relative" }}>
@@ -5932,57 +5953,33 @@ export function CanvasPage() {
         {!boardMode && <button onClick={() => setShowOpenWizard(true)}>Открыть доску…</button>}
       </div>
 
-      {/* Панель холста. В списке ей нечего показать, и пустая строка съедала
-          два зазора под шапкой — поэтому её там нет вовсе. */}
+      {/* Панель доски по макету Roll-Canvas (гриллинг 2026-10-29, Q1–Q2):
+          название и счёт, кнопки «положить в центр» без режимов, условные
+          действия доски, справа отмена, поиск и масштаб. Редкое — в «⋯».
+          В списке ей нечего показать — её там нет вовсе. */}
       {boardMode && (
-      <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="canvas-tool">
+        <span className="canvas-tool__title">{boardTitle}</span>
+        {boardCounts.length > 0 && <span className="d-mono">{boardCounts.join(" · ")}</span>}
 
         {/* Схема сеттинга получает ту же панель, что и остальные доски: без
             неё на ней нет ни рамок, ни стикеров, а группировка рамками — это
             условие пригодности схемы, а не украшение (решение D0 §5). */}
-        {(arcId > 0 || freeId > 0 || settingMapId > 0 || campaignMapId > 0) && board && (
+        {board && (
           <>
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setCanvasMenuOpen((v) => !v)}>Холст ▾</button>
-              {canvasMenuOpen && (
-                <div className="context-menu" style={{ position: "absolute", top: "100%", left: 0, zIndex: 10 }}>
-                  <button onClick={() => { setCanvasMenuOpen(false); setShowCanvasWizard(true); }}>Мастер создания холста</button>
-                  <button onClick={() => { setCanvasMenuOpen(false); handleQuickCanvas(); }}>Быстрый холст</button>
-                  <button onClick={() => { setCanvasMenuOpen(false); setShowOpenWizard(true); }}>Открыть</button>
-                  {/* Пункта нет, когда гасить нечего: блок, которому нечего
-                      показать, не показывается. */}
-                  {(dismissed.setting.length > 0 || dismissed.scenes.length > 0) && (
-                    <button
-                      onClick={(e) => {
-                        setCanvasMenuOpen(false);
-                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        openDismissed(r.left, r.bottom);
-                      }}
-                    >
-                      Заглушённые подсказки ({dismissed.setting.length + dismissed.scenes.length})
-                    </button>
-                  )}
-                  {/* Экспорта и импорта здесь нет намеренно. Выключенные пункты
-                      «(скоро)» стояли тут с цикла 5 (решение Q6) и спорили с
-                      инвариантом дизайна: пункт, которому нечего показать, не
-                      показывается. Вернутся вместе с самим экспортом. */}
-                </div>
-              )}
-            </div>
+            <span className="canvas-tool__add" role="group" aria-label="Добавить на доску">
+              <button type="button" onClick={() => setPaletteOpen(true)} title="Палитра: сущности, сцены, наборы — тащить на доску">Сущность</button>
+              <button type="button" onClick={() => void addSticker(viewCenter())} title="Стикер в центр экрана">Заметка</button>
+              <button type="button" onClick={() => void createGroup(viewCenter())} title="Рамка вокруг выделенного или пустая в центре экрана">Рамка</button>
+              <button type="button" onClick={() => addImage(viewCenter())} title="Картинка с диска в центр экрана">Картинка</button>
+            </span>
             {/* Счётчик недоделок (блок G1). Один орган управления, а не
-                панель: число и прыжок в одной кнопке, списка нет намеренно —
-                список это панель, а она здесь не нужна.
-
-                Нажатие делает ДВА дела: прыгает к следующей недоделке и
-                перечитывает подсказки. Полный пересчёт только здесь и при
-                открытии доски — 142 мс на каждую правку вернули бы то, от чего
-                уходили в шаге 2.
-
-                Кнопки нет, когда недоделок нет: пункт, которому нечего
-                показать, не показывается. Когда доводка кончится, счётчик
-                уйдёт сам. */}
+                панель: число и прыжок в одной кнопке. Нажатие прыгает к
+                следующей недоделке и перечитывает подсказки — полный пересчёт
+                только здесь и при открытии доски. Недоделок нет — кнопки нет. */}
             {hintTotal > 0 && (
               <button
+                className="d-btn d-btn--sm"
                 title="Перейти к следующей недоделке: сперва развилки без выхода и незаполненные исходы, потом сцены без места и упоминания"
                 onClick={() => {
                   gotoNextHint();
@@ -5992,16 +5989,10 @@ export function CanvasPage() {
                 {`Недоделок: ${hintTotal} →`}
               </button>
             )}
-            {/* Режим репетиции (блок G3) — второй режим холста, а не пункт
-                меню: в меню «Холст ▾» лежит создание и открытие холстов, а
-                «Пройти» про то, что уже открыто, и там его не найдут.
-
-                Одна кнопка в двух состояниях, а не две рядом: множественность
-                показывается сменой состояния элемента. Кнопки нет, когда
-                проходить нечего, — тем же правилом, что и у счётчика выше. */}
+            {/* Режим репетиции (блок G3) — одна кнопка в двух состояниях. */}
             {arcId > 0 && hasScenesOnBoard && (
               <button
-                className={rehearsalOn ? "primary" : undefined}
+                className={`d-btn d-btn--sm${rehearsalOn ? " d-btn--primary" : ""}`}
                 title={
                   rehearsalOn
                     ? "Закончить прогон (Escape)"
@@ -6012,25 +6003,12 @@ export function CanvasPage() {
                 {rehearsalOn ? "Выйти из прогона" : "Пройти"}
               </button>
             )}
-            {arcId > 0 && hasScenesOnBoard && !rehearsalOn && (
-              <button title="Запрос для внешнего чата: добрать улик до правила трёх" onClick={() => setProposeOpen(true)}>
-                Предложить улики
-              </button>
-            )}
-            {/* «+ Приключение», а не «+ Холст» (решение D0 §15): холста
-                приключения отдельно от приключения не существует, и слово
-                «холст» в подписи через месяц никто не свяжет с тем, что
-                удаление сотрёт приключение со сценами. Заводит в сеттинге и
-                ОСТАВЛЯЕТ на схеме: новое приключение нужно куда-то положить,
-                а уход в его пустой холст этому мешает. */}
-            {/* Состав кампании правится прямо с карты (решение владельца от
-                2026-08-27): иначе карта показывает, что играется, а поменять
-                это негде. «Добавить приключение сеттинга» втягивает готовое,
-                «+ Приключение» заводит новое — оно живёт ТОЛЬКО в этой
-                кампании и в заготовку сеттинга не попадает (решение D0 §16). */}
+            {/* Состав кампании правится прямо с карты (2026-08-27): «Добавить
+                приключение сеттинга» втягивает готовое, «+ Приключение» заводит
+                новое (решения D0 §15–16). */}
             {campaignMapId > 0 && <AddSettingArcButton campaignId={campaignMapId} onAdded={loadBoard} />}
             {(settingMapId > 0 || campaignMapId > 0) && (
-              <button className="primary" onClick={() => setNewArcWizardOpen(true)}>
+              <button className="d-btn d-btn--sm" onClick={() => setNewArcWizardOpen(true)}>
                 {campaignMapId ? "+ Приключение кампании" : "+ Приключение"}
               </button>
             )}
@@ -6047,28 +6025,45 @@ export function CanvasPage() {
                 }}
               />
             )}
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setNodeMenuOpen((v) => !v)}>Узлы ▾</button>
-              {nodeMenuOpen && (
-                <div className="context-menu" style={{ position: "absolute", top: "100%", left: 0, zIndex: 10 }}>
-                  <button onClick={() => { setNodeMenuOpen(false); setPaletteOpen(true); }}>{PALETTE_NAME}</button>
-                  <button onClick={() => { setNodeMenuOpen(false); void createGroup(); }}>Создать группу</button>
-                  <button onClick={() => { setNodeMenuOpen(false); autoLayoutUnplaced(); }}>Упорядочить узлы</button>
-                </div>
-              )}
-            </div>
-            <button disabled={!canUndo} onClick={undoLayout} aria-label="Отменить последнюю правку раскладки" title="Отменить (Ctrl+Z)" style={{ padding: "6px 8px" }}>←</button>
-            <button disabled={!canRedo} onClick={redoLayout} aria-label="Повторить отменённую правку раскладки" title="Повторить (Ctrl+Y)" style={{ padding: "6px 8px" }}>→</button>
-            <button onClick={() => setSearchOpen((v) => !v)} title="Поиск по узлам (Ctrl+K)">
-              Поиск
-            </button>
+            <span className="canvas-tool__end">
+              <button className="d-btn d-btn--sm" disabled={!canUndo} onClick={undoLayout} aria-label="Отменить последнюю правку раскладки" title="Отменить (Ctrl+Z)">←</button>
+              <button className="d-btn d-btn--sm" disabled={!canRedo} onClick={redoLayout} aria-label="Повторить отменённую правку раскладки" title="Повторить (Ctrl+Y)">→</button>
+              <button className="d-btn d-btn--sm" onClick={() => setSearchOpen((v) => !v)} title="Поиск по узлам (Ctrl+K)">Поиск</button>
+              <button className="d-btn d-btn--sm" onClick={() => flowRef.current?.fitView({ padding: 0.2, duration: 300 })} title="Вписать доску в экран">Вписать</button>
+              <button className="d-btn d-btn--sm" onClick={() => flowRef.current?.zoomOut()} aria-label="Масштаб −" title="Масштаб −">−</button>
+              <button className="canvas-tool__zoom d-mono" onClick={() => flowRef.current?.zoomTo(1, { duration: 200 })} title="Масштаб 100 %">{zoomPct} %</button>
+              <button className="d-btn d-btn--sm" onClick={() => flowRef.current?.zoomIn()} aria-label="Масштаб +" title="Масштаб +">+</button>
+              <span style={{ position: "relative" }}>
+                <button className="d-btn d-btn--sm" onClick={() => setCanvasMenuOpen((v) => !v)} aria-label="Ещё" aria-expanded={canvasMenuOpen}>⋯</button>
+                {canvasMenuOpen && (
+                  <div className="context-menu canvas-tool__menu">
+                    <button onClick={() => { setCanvasMenuOpen(false); setShowCanvasWizard(true); }}>Мастер создания холста</button>
+                    <button onClick={() => { setCanvasMenuOpen(false); handleQuickCanvas(); }}>Быстрый холст</button>
+                    <button onClick={() => { setCanvasMenuOpen(false); setShowOpenWizard(true); }}>Открыть</button>
+                    {arcId > 0 && hasScenesOnBoard && !rehearsalOn && (
+                      <button title="Запрос для внешнего чата: добрать улик до правила трёх" onClick={() => { setCanvasMenuOpen(false); setProposeOpen(true); }}>
+                        Предложить улики
+                      </button>
+                    )}
+                    <button onClick={() => { setCanvasMenuOpen(false); autoLayoutUnplaced(); }}>Упорядочить узлы</button>
+                    {/* Пункта нет, когда гасить нечего. Экспорта и импорта
+                        здесь нет намеренно (Q6): вернутся вместе с экспортом. */}
+                    {(dismissed.setting.length > 0 || dismissed.scenes.length > 0) && (
+                      <button
+                        onClick={(e) => {
+                          setCanvasMenuOpen(false);
+                          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          openDismissed(r.left, r.bottom);
+                        }}
+                      >
+                        Заглушённые подсказки ({dismissed.setting.length + dismissed.scenes.length})
+                      </button>
+                    )}
+                  </div>
+                )}
+              </span>
+            </span>
           </>
-        )}
-
-        {boardCounts.length > 0 && (
-          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-            {boardCounts.join(" · ")}
-          </span>
         )}
       </div>
       )}
@@ -8841,18 +8836,5 @@ function CheckCard({
         </button>
       </div>
     </details>
-  );
-}
-
-function ControlsButtons() {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
-  return (
-    <div className="react-flow__panel bottom left react-flow__controls">
-      <ControlButton title="Масштаб +" onClick={(e) => { e.preventDefault(); zoomIn(); }} aria-label="Масштаб +">+</ControlButton>
-      <ControlButton title="Масштаб −" onClick={(e) => { e.preventDefault(); zoomOut(); }} aria-label="Масштаб −">−</ControlButton>
-      <ControlButton title="По размеру" onClick={(e) => { e.preventDefault(); fitView(); }} aria-label="По размеру">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 4V2H10V4H6V6H4V10H2V12H4V14H6V18H10V20H12V18H16V20H20V16H22V14H20V12H22V10H20V6H18V4H14V2H12ZM12 16V14H8V12H6V16H12ZM18 8H16V6H12V4H8V6H6V10H8V12H6V16H10V14H12V18H16V16H18V12H20V10H18V8Z" /></svg>
-      </ControlButton>
-    </div>
   );
 }
