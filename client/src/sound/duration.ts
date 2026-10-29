@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 // Длительность трека нигде не хранится: в базе у звука есть только путь, а
 // сотня файлов лежит в хранилище владельца и переезжает вместе с ним. В
-// списке бэкграунда время нужно — по нему выбирают, что ставить на сцену, —
+// аудиотеке время нужно и для выбора звука, и для сортировки, —
 // поэтому оно снимается у самого файла при первом показе и остаётся в
 // памяти вкладки. В базу не пишем: пересчёт стоит одно чтение заголовка, а
 // лишняя колонка в resources потом врёт после замены файла.
@@ -10,8 +10,11 @@ import { useEffect, useState } from "react";
 // Очередь по два файла за раз: браузер честно тянет метаданные, а в
 // библиотеке владельца попадаются файлы на сотни мегабайт.
 
-const cache = new Map<number, number>();
-const pending = new Set<number>();
+// Ключ — URL: после перепривязки того же resource_id старое время неверно.
+// Завершение общего запроса будит все открытые списки, а не только первый.
+const cache = new Map<string, number | null>();
+const pending = new Set<string>();
+const listeners = new Set<() => void>();
 let running = 0;
 const queue: (() => void)[] = [];
 
@@ -49,28 +52,36 @@ export function useDurations(tracks: { id: number; src: string | null }[]): Map<
 
   useEffect(() => {
     let alive = true;
+    const notify = () => { if (alive) bump((n) => n + 1); };
+    listeners.add(notify);
     for (const track of tracks) {
-      if (!track.src || cache.has(track.id) || pending.has(track.id)) continue;
-      pending.add(track.id);
-      const { id, src } = track;
+      if (!track.src || cache.has(track.src) || pending.has(track.src)) continue;
+      pending.add(track.src);
+      const { src } = track;
       queue.push(() => {
         probe(src).then((seconds) => {
-          if (seconds !== null) cache.set(id, seconds);
-          pending.delete(id);
+          cache.set(src, seconds);
+          pending.delete(src);
           running -= 1;
           pump();
-          if (alive) bump((n) => n + 1);
+          listeners.forEach((listener) => listener());
         });
       });
     }
     pump();
     return () => {
       alive = false;
+      listeners.delete(notify);
     };
     // Пересчитываем при смене состава списка, а не при каждом рендере.
-  }, [tracks.map((t) => t.id).join(",")]);
+  }, [tracks]);
 
-  return cache;
+  const result = new Map<number, number>();
+  for (const track of tracks) {
+    const seconds = track.src ? cache.get(track.src) : null;
+    if (seconds != null) result.set(track.id, seconds);
+  }
+  return result;
 }
 
 export function formatDuration(seconds: number): string {

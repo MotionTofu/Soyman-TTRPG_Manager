@@ -4,6 +4,12 @@
 
 export type AudioRole = "background" | "ambient" | "weather" | "stinger";
 
+export interface SoundFolder {
+  id: number;
+  role: AudioRole;
+  name: string;
+}
+
 export interface SoundButton {
   resource_id: number;
   name: string;
@@ -15,6 +21,7 @@ export interface SoundButton {
   missing: boolean;
   is_start?: boolean;
   from_set?: boolean;
+  folder_id?: number | null;
 }
 
 export interface SoundSetSummary {

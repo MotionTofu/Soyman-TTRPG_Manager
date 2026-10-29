@@ -5,9 +5,12 @@ import { db } from "../db/db";
 import { toFileUrl } from "../services/filesystem";
 import { fileSrc, isMissing, rememberFileSize } from "../services/fileHealth";
 import { removeOrArchive } from "../services/vaultDedup";
+import { soundFoldersRouter } from "./soundFolders";
+import { soundFolderIds, soundFoldersReady } from "../db/soundFolders";
 
 export const soundsRouter = Router();
 export const soundSetsRouter = Router();
+soundsRouter.use("/folders", soundFoldersRouter);
 
 export type AudioRole = "background" | "ambient" | "weather" | "stinger";
 const ROLES: AudioRole[] = ["background", "ambient", "weather", "stinger"];
@@ -60,17 +63,19 @@ soundsRouter.get("/", (req, res) => {
           )
           .all()
   ) as SoundRow[];
-  res.json(rows.map(toButton));
+  const folders = soundFolderIds(db);
+  res.json(rows.map((row) => ({ ...toButton(row), folder_id: folders.get(row.id) ?? null })));
 });
 
 // Роль, иконка и «постоянный стингер» правятся здесь же: роль одна на файл и
 // меняется в любой момент, поэтому отдельного мастера перекладывания нет.
 soundsRouter.put("/:id", (req, res) => {
-  const { name, audio_role, audio_icon, audio_pinned } = req.body as {
+  const { name, audio_role, audio_icon, audio_pinned, folder_id } = req.body as {
     name?: string;
     audio_role?: string;
     audio_icon?: string | null;
     audio_pinned?: boolean;
+    folder_id?: number | null;
   };
   if (audio_role !== undefined && !ROLES.includes(audio_role as AudioRole)) {
     return res.status(400).json({ error: "неизвестная роль звука" });
@@ -80,22 +85,55 @@ soundsRouter.put("/:id", (req, res) => {
     .get(req.params.id) as SoundRow | undefined;
   if (!current) return res.status(404).json({ error: "звук не найден" });
 
+  if (folder_id !== undefined) {
+    if (!soundFoldersReady(db)) {
+      return res.status(503).json({ error: "Папки аудиотеки ещё не подключены: требуется обновление базы." });
+    }
+    if (folder_id !== null && (!Number.isSafeInteger(folder_id) || folder_id <= 0)) {
+      return res.status(400).json({ error: "неверная папка звука" });
+    }
+    if (folder_id !== null) {
+      const folder = db.prepare("SELECT role FROM sound_folders WHERE id = ?").get(folder_id) as { role: string } | undefined;
+      if (!folder || folder.role !== (audio_role ?? current.audio_role)) {
+        return res.status(400).json({ error: "папка должна принадлежать разделу звука" });
+      }
+      const resource = db.prepare("SELECT category, archived_at FROM resources WHERE id = ?").get(current.id) as { category: string; archived_at: string | null };
+      if (resource.category !== "audio" || resource.archived_at) {
+        return res.status(400).json({ error: "в папку можно переместить только звук аудиотеки" });
+      }
+    }
+  }
+
   // Переименование меняет имя только в приложении. Файл на диске не трогаем:
   // на него могут быть жёсткие ссылки из других записей (см. vaultDedup), и
   // платить риском потерять привязку за косметику незачем.
-  db.prepare(
-    "UPDATE resources SET name = ?, audio_role = ?, audio_icon = ?, audio_pinned = ? WHERE id = ?"
-  ).run(
-    name !== undefined && name.trim() ? name.trim() : current.name,
-    audio_role !== undefined ? audio_role : current.audio_role,
-    audio_icon !== undefined ? audio_icon : current.audio_icon,
-    audio_pinned !== undefined ? (audio_pinned ? 1 : 0) : current.audio_pinned,
-    req.params.id
-  );
+  db.transaction(() => {
+    db.prepare(
+      "UPDATE resources SET name = ?, audio_role = ?, audio_icon = ?, audio_pinned = ? WHERE id = ?"
+    ).run(
+      name !== undefined && name.trim() ? name.trim() : current.name,
+      audio_role !== undefined ? audio_role : current.audio_role,
+      audio_icon !== undefined ? audio_icon : current.audio_icon,
+      audio_pinned !== undefined ? (audio_pinned ? 1 : 0) : current.audio_pinned,
+      req.params.id
+    );
+    if (soundFoldersReady(db)) {
+      if (audio_role !== undefined && audio_role !== current.audio_role) {
+        db.prepare("DELETE FROM sound_folder_items WHERE resource_id = ?").run(current.id);
+      }
+      if (folder_id === null) {
+        db.prepare("DELETE FROM sound_folder_items WHERE resource_id = ?").run(current.id);
+      } else if (folder_id !== undefined) {
+        db.prepare("INSERT INTO sound_folder_items (resource_id, folder_id) VALUES (?, ?) ON CONFLICT(resource_id) DO UPDATE SET folder_id = excluded.folder_id")
+          .run(current.id, folder_id);
+      }
+    }
+  })();
   if (current.file_path) rememberFileSize(current.id, current.file_path);
 
   res.json(
-    toButton(db.prepare(`SELECT ${SOUND_COLUMNS} FROM resources WHERE id = ?`).get(req.params.id) as SoundRow)
+    { ...toButton(db.prepare(`SELECT ${SOUND_COLUMNS} FROM resources WHERE id = ?`).get(req.params.id) as SoundRow),
+      folder_id: soundFolderIds(db).get(current.id) ?? null }
   );
 });
 
