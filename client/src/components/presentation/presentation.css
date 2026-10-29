@@ -192,11 +192,47 @@ button.pres-title {
   flex-direction: column;
   gap: var(--sp-4);
 }
+/* Колонка кадра — по ширине самого кадра (Q1 2026-10-29): горизонтальный
+   экран берёт около трети, вертикальный — уже, без пустого зазора. */
 .pp-strip {
   display: grid;
-  grid-template-columns: clamp(240px, 34%, 420px) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: fit-content(36%) minmax(0, 1fr);
+  align-items: stretch;
   gap: var(--sp-6);
+}
+.pp-strip__pv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 240px;
+}
+/* Строка монитора не раздвигает колонку: переносится по ширине кадра. */
+.pp-strip__monitor {
+  width: 0;
+  min-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.pp-strip__go {
+  margin-top: auto;
+}
+.pp-strip .d-seg button.is-empty {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.pp-strip .d-seg button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+.pres-turn button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+}
+.pres-turn svg {
+  width: 16px;
+  height: 16px;
 }
 @container (max-width: 560px) {
   .pp-strip {
@@ -242,4 +278,69 @@ button.pres-title {
 .pp-strip .d-btn.is-on {
   background: var(--surface);
   color: var(--on-surface);
+}
+
+/* Окно «добавить материал» сцене из Пульта (Q5 2026-10-29). */
+.add-material__drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+  border: var(--edge-width) dashed var(--line);
+  color: var(--muted);
+}
+.add-material__drop.is-over {
+  border-color: var(--edge);
+  color: var(--ink);
+}
+.add-material__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--sp-4);
+  max-height: 50vh;
+  overflow: auto;
+}
+.add-material__grid button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0;
+  border: var(--edge-width) solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+.add-material__grid button:hover {
+  border-color: var(--edge);
+}
+.add-material__grid img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--paper-2);
+}
+.add-material__grid span {
+  padding: 0 var(--sp-2) var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.add-material__list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow: auto;
+}
+.add-material__list button {
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.add-material__list button:hover {
+  background: var(--paper-2);
 }

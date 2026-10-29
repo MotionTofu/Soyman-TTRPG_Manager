@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ScreenView } from "./ScreenView";
+import { NavIcon } from "../NavIcons";
 import { cameraOf, loadLastScreenId, loadScreenMemory, saveScreenMemory, type ScreenCamera } from "./screens";
 import type { ShowDisplay, ShowState } from "../../types";
 
@@ -127,12 +128,14 @@ export function ScreenPreview({
 
   const tools = (
     <span className="pres-tools">
-      <button type="button" className="d-btn d-btn--sm pres-turn" title="Повернуть против часовой" onClick={() => turn(-90)}>
-        ⟲
-      </button>
-      <button type="button" className="d-btn d-btn--sm pres-turn" title="Повернуть по часовой" onClick={() => turn(90)}>
-        ⟳
-      </button>
+      <span className="d-seg pres-turn" role="group" aria-label="Поворот экрана">
+        <button type="button" title="Повернуть против часовой" aria-label="Повернуть против часовой" onClick={() => turn(-90)}>
+          <NavIcon name="rotateLeft" />
+        </button>
+        <button type="button" title="Повернуть по часовой" aria-label="Повернуть по часовой" onClick={() => turn(90)}>
+          <NavIcon name="rotateRight" />
+        </button>
+      </span>
       <span className="d-seg" role="group" aria-label="Кадр на экране" title={fill ? "Карта вписывается сама" : undefined}>
         <button type="button" disabled={fill} className={camera.fit === "contain" ? "active" : undefined} onClick={() => setMonitor({ fit: "contain" })}>
           Вписать
@@ -156,7 +159,8 @@ export function ScreenPreview({
         title={adjustable ? "Колесо — масштаб, тащить — сдвиг, двойной щелчок — сброс" : undefined}
         style={{
           aspectRatio: `${w} / ${h}`,
-          width: `min(100%, ${(PREVIEW_MAX_H * w) / h}px)`,
+          width: `${Math.round((PREVIEW_MAX_H * w) / h)}px`,
+          maxWidth: "100%",
           cursor: adjustable ? (drag.current ? "grabbing" : "grab") : undefined,
           touchAction: adjustable ? "none" : undefined,
           // Двойной щелчок — сброс, а не выделение кадра (выделенная картинка темнеет).

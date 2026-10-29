@@ -242,6 +242,8 @@
 }
 .d-seg button + button { border-left: var(--edge-width) solid var(--edge); }
 .d-seg button.active { background: var(--surface); color: var(--on-surface); }
+.d-seg button:disabled,
+.d-seg button[aria-disabled="true"] { color: var(--muted); opacity: 0.5; cursor: not-allowed; }
 .d-chip {
   padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--line);

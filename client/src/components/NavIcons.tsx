@@ -96,7 +96,9 @@ export type NavIconName =
   | "unlock"
   | "window"
   | "logout"
-  | "chat";
+  | "chat"
+  | "rotateLeft"
+  | "rotateRight";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -533,6 +535,18 @@ const PATHS: Record<NavIconName, ReactNode> = {
     </>
   ),
   // "Перенести карту" — move a location's map to another location.
+  rotateLeft: (
+    <>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
+      <path d="M3.5 3.5V8h4.5" />
+    </>
+  ),
+  rotateRight: (
+    <>
+      <path d="M20.5 12a8.5 8.5 0 1 1-2.5-6" />
+      <path d="M20.5 3.5V8H16" />
+    </>
+  ),
   swap: (
     <>
       <path d="M4 8h13.5" />

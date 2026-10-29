@@ -170,6 +170,19 @@ describe("presentation API", () => {
     expect(second.body.background_url).toMatch(/^\/files\//);
   });
 
+  it("фон: из ресурса библиотеки, исходник остаётся на месте", async () => {
+    const { db } = await import("../db/db");
+    const vault = process.env.VAULT_ROOT as string;
+    fs.writeFileSync(path.join(vault, "lib-bg.png"), PNG);
+    const resId = Number(db.prepare("INSERT INTO resources (name, category, file_path) VALUES ('Сады', 'image', 'lib-bg.png')").run().lastInsertRowid);
+    const res = await request(app).post(`/api/story/scenes/${sceneId}/presentation/background`).send({ source: { kind: "resource", id: resId } });
+    expect(res.status).toBe(200);
+    expect(res.body.background_url).toMatch(/^\/files\//);
+    expect(fs.existsSync(path.join(vault, "lib-bg.png"))).toBe(true);
+    const missing = await request(app).post(`/api/story/scenes/${sceneId}/presentation/background`).send({ source: { kind: "resource", id: 999999 } });
+    expect(missing.status).toBe(404);
+  });
+
   it("правка из кампании клонирует, оригинал цел", async () => {
     const edit = await request(app)
       .put(`/api/story/scenes/${sceneId}/presentation`)

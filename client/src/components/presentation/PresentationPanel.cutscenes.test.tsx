@@ -17,5 +17,5 @@ const openCutscenes=()=>fireEvent.click(screen.getByRole('button',{name:'Кат�
 describe('катсцены внутри штатной панели показа',()=>{
   // Полоса показа (рестайл «Д», Q13): план катсцен раскрывается сегментом «Катсцена».
   it('не скрывает панель при отсутствии сцен, карт и заглавного',()=>{show();expect(screen.getByText(/На экране игроков/)).toBeTruthy();openCutscenes();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
-  it('сохраняет обычные кнопки заглавного рядом с катсценами',async()=>{mock.cover=true;show();expect(await screen.findByRole('button',{name:'Показать заглавное'})).toBeTruthy();openCutscenes();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
+  it('сохраняет обычные кнопки заглавного рядом с катсценами',async()=>{mock.cover=true;show();expect(await screen.findByRole('button',{name:/^Показать/})).toBeTruthy();openCutscenes();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
 });

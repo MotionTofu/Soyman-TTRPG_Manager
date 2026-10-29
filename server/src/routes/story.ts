@@ -38,6 +38,7 @@ import {
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
+import { cutsceneMediaSource } from "../services/cutsceneMedia";
 import { DONE_SCENES_SQL, sceneStateOf } from "../services/sceneState";
 import { adventureClueGraph, adventureCluesIn, campaignReveals, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
@@ -3295,10 +3296,23 @@ storyRouter.put("/scenes/:id/presentation", (req, res) => {
   res.json(readScenePresentation(target.id));
 });
 
+// Фон — файлом или из библиотеки (JSON { source: {kind:"resource"|"gallery", id} }):
+// Пульт добавляет картинку сцене посреди игры (2026-10-29, Q5а).
 storyRouter.post("/scenes/:id/presentation/background", (req, res) => {
   presentationUpload(req, res, async (err: unknown) => {
     if (err) return res.status(400).json({ error: err instanceof Error ? err.message : "upload failed" });
-    const file = (req as unknown as { file?: Express.Multer.File }).file;
+    const uploaded = (req as unknown as { file?: Express.Multer.File }).file;
+    let file = uploaded;
+    if (!file && req.body?.source) {
+      try {
+        const src = cutsceneMediaSource("image", req.body.source);
+        // Источник читается на месте; cleanupUpload его не трогает — только загрузку.
+        file = { originalname: src.name, path: src.file } as Express.Multer.File;
+      } catch (e) {
+        const status = (e as { status?: number }).status ?? 400;
+        return res.status(status).json({ error: e instanceof Error ? e.message : "bad source" });
+      }
+    }
     if (!file) return res.status(400).json({ error: "file is required" });
     try {
       const body = req.body as Record<string, unknown>;
@@ -3325,7 +3339,7 @@ storyRouter.post("/scenes/:id/presentation/background", (req, res) => {
     } catch (e) {
       return res.status(400).json({ error: e instanceof Error ? e.message : "upload failed" });
     } finally {
-      cleanupUpload(file);
+      cleanupUpload(uploaded);
     }
   });
 });
