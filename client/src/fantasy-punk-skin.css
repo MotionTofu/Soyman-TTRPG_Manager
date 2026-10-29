@@ -95,6 +95,8 @@
   --skin-stroke-pen: url("/ui/fantasy-punk/decorative/strokes/pen-l.webp"), url("/ui/fantasy-punk/decorative/strokes/pen-r.webp"), url("/ui/fantasy-punk/decorative/strokes/pen-m.webp");
   /* Профиль на бумаге (paper.css): скотч на портрете, сургуч секрета. */
   --skin-tape: url("/ui/fantasy-punk/decorative/profile/tape.webp");
+  /* Булавка-череп пина на холсте (вид сверху, макет Roll-Canvas). */
+  --skin-pin-skull: url("/ui/fantasy-punk/decorative/board/pin-skull.webp");
   --skin-seal: url("/ui/fantasy-punk/decorative/profile/seal.webp");
   /* Рабочая тетрадь (workbook.css): обложка разворота, корешок, язычки листов, кружки готовности. */
   --skin-wb-cover: url("/ui/fantasy-punk/decorative/workbook/cover.webp");

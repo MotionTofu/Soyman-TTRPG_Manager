@@ -2155,6 +2155,8 @@ export interface CanvasEntityNode {
     thumbnail_image_url: string | null;
     /** Сколько сцен упоминает её в текстах, не подцепляя. */
     mentioned_in: number;
+    /** Первая фраза описания для карточки (Q12); пустая — нет описания. */
+    blurb?: string;
   };
 }
 
@@ -2421,7 +2423,10 @@ export interface CanvasThread {
   from_pin_id: number;
   to_pin_id: number;
   width: number;
+  /** Пустой — чернила темы (рестайл «Д», Q10). */
   color: string;
+  /** Подпись на середине нити; пустая не рисуется (Q8). */
+  label: string;
 }
 
 /**

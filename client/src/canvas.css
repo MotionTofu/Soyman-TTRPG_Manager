@@ -1941,3 +1941,39 @@
   filter: none;
   outline: 1px solid var(--line);
 }
+
+/* Первая фраза описания сущности (Q12): две строки, дальше обрез. */
+.canvas-node__blurb {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Булавка-череп (Q9): растр из скина, вид сверху; цвет пина на неё не
+   действует, размер S/M/L — действует. */
+.canvas-pin__skull {
+  width: 100%;
+  height: 100%;
+  background: var(--skin-pin-skull) center / contain no-repeat;
+}
+
+/* Подпись нити (Q8) — машинопись в рамке на нижней точке дуги. */
+.canvas-thread-label {
+  position: absolute;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--edge);
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.canvas-thread-label-input { width: 96px; }

@@ -7560,6 +7560,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   migrateCutsceneRuns(database);
   // Editable temporary previews must not mutate or appear in the run history.
   migrateCutscenePreviews(database);
+
+  // Подпись нити на холсте (рестайл «Д», гриллинг 2026-10-29, Q8): «владеет»,
+  // «враги». Пустая не рисуется, поэтому старые нити остаются без подписи.
+  if (!columnExists(database, "canvas_threads", "label")) {
+    database.exec("ALTER TABLE canvas_threads ADD COLUMN label TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 /**

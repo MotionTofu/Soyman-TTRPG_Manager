@@ -1869,7 +1869,7 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
         key: routeIdMap.get(r.id as number), from_key: r.from_key, kind: r.kind, role: r.role,
         outputs: canvasRouteOutputs.filter((o) => o.route_id === r.id).map((o) => ({ to_key: o.to_key, role: o.role })),
       })),
-      threads: canvasThreads.map((t) => ({ from_pin: pinIdMap.get(t.from_pin_id as number), to_pin: pinIdMap.get(t.to_pin_id as number), width: t.width, color: t.color })),
+      threads: canvasThreads.map((t) => ({ from_pin: pinIdMap.get(t.from_pin_id as number), to_pin: pinIdMap.get(t.to_pin_id as number), width: t.width, color: t.color, label: t.label ?? "" })),
     },
   };
 }
@@ -2261,8 +2261,8 @@ export async function importAdventureExport(
         const fromPinId = nodeIdMap.get(t.from_pin as string);
         const toPinId = nodeIdMap.get(t.to_pin as string);
         if (fromPinId && toPinId) {
-          db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?, ?, ?, ?, ?)")
-            .run(boardId, fromPinId, toPinId, t.width ?? 2, t.color ?? "#2C3E50");
+          db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color, label) VALUES (?, ?, ?, ?, ?, ?)")
+            .run(boardId, fromPinId, toPinId, t.width ?? 2, t.color ?? "#2C3E50", typeof t.label === "string" ? t.label : "");
         }
       }
     }

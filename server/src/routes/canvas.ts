@@ -196,14 +196,17 @@ function overrideMap(campaignId: number, settingId: number): Map<number, SceneRo
  * «вид → таблица», а то, чем холст рисует конкретную ноду. Таблица и колонка
  * имени, наоборот, берутся из реестра — их здесь была ещё одна копия.
  */
-const NODE_PREVIEW: Record<string, { thumbCol?: string; kindCol?: string; roleCol?: string }> = {
-  being: { thumbCol: "thumbnail_image_path", kindCol: "category" },
+// descCol — описание, из которого карточка на доске берёт первую фразу (Q12
+// рестайла 2026-10-29). У персонажа его нет намеренно: предыстория — это
+// не опознание, а целая история.
+const NODE_PREVIEW: Record<string, { thumbCol?: string; kindCol?: string; roleCol?: string; descCol?: string }> = {
+  being: { thumbCol: "thumbnail_image_path", kindCol: "category", descCol: "description" },
   // Вес локации едет чипом ноды (план «Зоны», этап 10): точка красится
   // иначе, чем город.
-  location: { thumbCol: "thumbnail_image_path", roleCol: "role" },
-  artifact: { thumbCol: "avatar_image_path" },
-  community: { thumbCol: "thumbnail_image_path" },
-  compendium_entry: { kindCol: "kind" },
+  location: { thumbCol: "thumbnail_image_path", roleCol: "role", descCol: "description" },
+  artifact: { thumbCol: "avatar_image_path", descCol: "description" },
+  community: { thumbCol: "thumbnail_image_path", descCol: "description" },
+  compendium_entry: { kindCol: "kind", descCol: "description" },
   // Персонаж игрока (блок G7). Единственный кампанийный вид на холсте: он и
   // есть то, вокруг чего Мастер тянет нити на доске кампании. Портрет берём
   // уменьшенный — на холсте нода опознаётся, а не рассматривается.
@@ -217,7 +220,7 @@ const NODE_PREVIEW: Record<string, { thumbCol?: string; kindCol?: string; roleCo
   playlist: {},
 };
 
-const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string; roleCol?: string }> =
+const ENTITY_NODES: Record<string, { table: string; nameCol: string; thumbCol?: string; kindCol?: string; roleCol?: string; descCol?: string }> =
   Object.fromEntries(
     Object.entries(NODE_PREVIEW).map(([kind, extra]) => {
       const k = requireKind(kind);
@@ -346,7 +349,7 @@ function boardDecor(boardId: number, saved: PlacedNode[]) {
   });
 
   const threads = db
-    .prepare("SELECT id, from_pin_id, to_pin_id, width, color FROM canvas_threads WHERE board_id=?")
+    .prepare("SELECT id, from_pin_id, to_pin_id, width, color, label FROM canvas_threads WHERE board_id=?")
     .all(boardId) as { id: number; from_pin_id: number; to_pin_id: number; width: number; color: string }[];
 
   return { nodes: [...stickerNodes, ...imageNodes, ...frameNodes, ...pinNodes, ...entities], threads };
@@ -863,9 +866,9 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
         .prepare(
           `SELECT ${spec.nameCol} AS name${spec.kindCol ? `, ${spec.kindCol} AS kind` : ""}${
             spec.thumbCol ? `, ${spec.thumbCol} AS thumb` : ""
-          }${spec.roleCol ? `, ${spec.roleCol} AS role` : ""} FROM ${spec.table} WHERE id = ?`
+          }${spec.roleCol ? `, ${spec.roleCol} AS role` : ""}${spec.descCol ? `, ${spec.descCol} AS descr` : ""} FROM ${spec.table} WHERE id = ?`
         )
-        .get(p.node_id) as { name: string; kind?: string; thumb?: string | null; role?: string | null } | undefined;
+        .get(p.node_id) as { name: string; kind?: string; thumb?: string | null; role?: string | null; descr?: string | null } | undefined;
       if (!row) return null;
       return {
         key: `${p.node_type}:${p.node_id}`,
@@ -888,10 +891,31 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           // утонула бы. Но «упомянут и не подцеплен» — сигнал, который стоит
           // подать: он значит, что в текстах существо есть, а в составе нет.
           mentioned_in: mentionedInScenes(p.node_type, p.node_id),
+          blurb: cardBlurb(row.descr),
         },
       };
     })
     .filter((n): n is NonNullable<typeof n> => n !== null);
+}
+
+/**
+ * Первая фраза описания для карточки сущности на доске (Q12): без разметки и
+ * ссылок, не длиннее 120 знаков. Нет описания — пустая строка, и карточка
+ * ниже.
+ */
+export function cardBlurb(text: string | null | undefined): string {
+  const plain = (text ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    // Упоминание [[being@uid|Мир|Подпись]] показывается последней частью.
+    .replace(/\[\[([^\]]+)\]\]/g, (_m, inner: string) => { const parts = inner.split("|"); return parts.length > 1 ? parts[parts.length - 1] : ""; })
+    .replace(/[*`#>]+/g, "")
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .find(Boolean) ?? "";
+  const sentence = /^.+?[.!?…](?=\s|$)/.exec(plain)?.[0] ?? plain;
+  return sentence.length > 120 ? `${sentence.slice(0, 119).trimEnd()}…` : sentence;
 }
 
 /** Имя сущности любого поддержанного вида — для показа члена набора. */
@@ -2571,7 +2595,7 @@ canvasRouter.get("/pins", (req, res) => {
 });
 // Нити — прямые линии между пинами
 canvasRouter.post("/threads", (req, res) => {
-  const { board_id, from_pin_id, to_pin_id, width, color } = req.body as { board_id?: number; from_pin_id?: number; to_pin_id?: number; width?: number; color?: string };
+  const { board_id, from_pin_id, to_pin_id, width, color, label } = req.body as { board_id?: number; from_pin_id?: number; to_pin_id?: number; width?: number; color?: string; label?: string };
   if (!board_id || !from_pin_id || !to_pin_id) return res.status(400).json({ error: "board_id, from_pin_id, to_pin_id required" });
   const board_id_r = resolveFreeBoardId(board_id);
   if (from_pin_id === to_pin_id) return res.status(400).json({ error: "self link not allowed" });
@@ -2582,7 +2606,7 @@ canvasRouter.post("/threads", (req, res) => {
   const toRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(b) as { board_id: number } | undefined;
   if (!fromRow || !toRow || fromRow.board_id !== board_id_r || toRow.board_id !== board_id_r) return res.status(400).json({ error: "pins not on board" });
   try {
-    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?,?,?,?,?)").run(board_id_r, a, b, Number(width) || 2, color ?? "#2C3E50");
+    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color, label) VALUES (?,?,?,?,?,?)").run(board_id_r, a, b, Number(width) || 2, color ?? "#2C3E50", String(label ?? "").trim());
     res.status(201).json(db.prepare("SELECT * FROM canvas_threads WHERE id=?").get(info.lastInsertRowid));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -2591,11 +2615,12 @@ canvasRouter.post("/threads", (req, res) => {
   }
 });
 canvasRouter.put("/threads/:id", (req, res) => {
-  const { width, color } = req.body as { width?: number; color?: string };
+  const { width, color, label } = req.body as { width?: number; color?: string; label?: string };
   const sets: string[] = [];
   const vals: unknown[] = [];
   if (width !== undefined) { sets.push("width = ?"); vals.push(Number(width)); }
   if (color !== undefined) { sets.push("color = ?"); vals.push(String(color)); }
+  if (label !== undefined) { sets.push("label = ?"); vals.push(String(label).trim()); }
   if (sets.length) {
     vals.push(Number(req.params.id));
     db.prepare(`UPDATE canvas_threads SET ${sets.join(", ")} WHERE id = ?`).run(...vals);

@@ -17,6 +17,9 @@ import {
   type NodeDimensionChange,
   type NodeProps,
   type ReactFlowInstance,
+  BaseEdge,
+  EdgeLabelRenderer,
+  type EdgeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
@@ -402,6 +405,7 @@ interface EntityNodeData extends Record<string, unknown> {
   nodeType: string;
   thumbUrl: string | null;
   mentionedIn: number;
+  blurb: string;
   // Вес локации с сервера (план «Зоны», этап 10): точка красится иначе.
   role?: string | null;
 }
@@ -453,6 +457,7 @@ function EntityNode({ data, selected }: NodeProps<Node<EntityNodeData>>) {
       </div>
       <div className="canvas-node__body">
         <span className="canvas-node__name">{data.name}</span>
+        {data.blurb && <p className="canvas-node__blurb" title={data.blurb}>{data.blurb}</p>}
         {/* Упоминания рёбрами не рисуются — схема утонула бы. Но «упомянут и
             не подцеплен» стоит показать: в текстах существо есть, в составе
             нет. */}
@@ -768,9 +773,11 @@ interface PinNodeData extends Record<string, unknown> {
 }
 
 const PIN_SIZES: Record<string, number> = { S: 16, M: 24, L: 32 };
-const PIN_SHAPES = ["circle", "square", "diamond", "star"] as const;
+const PIN_SHAPES = ["skull", "circle", "square", "diamond", "star"] as const;
 /** Подписи форм. Ключ уходит в базу и остаётся английским, Мастеру он не виден. */
 const PIN_SHAPE_LABEL: Record<string, string> = {
+  // Булавка-череп — форма новых пинов (Q9 рестайла); цвет на ней не действует.
+  skull: "Череп",
   circle: "Круг",
   square: "Квадрат",
   diamond: "Ромб",
@@ -923,7 +930,7 @@ function PinNode({ data, selected }: NodeProps<Node<PinNodeData>>) {
       }}
       title={data.name || "Пин"}
     >
-      <div style={style} />
+      {shape === "skull" ? <div className="canvas-pin__skull" /> : <div style={style} />}
       {/*
         Имя пина видно на холсте, а не только во всплывающей подсказке
         (блок G5). До этого пин был безымянной точкой: имя жило в `title` и в
@@ -1199,6 +1206,33 @@ const preventDragDefault = (e: React.DragEvent) => e.preventDefault();
 
 // Module-level: React Flow сравнивает nodeTypes по ссылке и перестраивает всё
 // дерево нод, если объект новый на каждый рендер.
+/**
+ * Нить пин→пин: провисающая дуга, как натянутая нитка (Q11 рестайла
+ * 2026-10-29). Провис растёт с длиной и упирается в потолок; подпись — на
+ * нижней точке дуги, машинописью в рамке (Q8).
+ */
+function SagEdge({ id, sourceX, sourceY, targetX, targetY, style, label, selected }: EdgeProps) {
+  const len = Math.hypot(targetX - sourceX, targetY - sourceY);
+  const sag = Math.min(len * 0.12, 70);
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2 + sag;
+  // Контрольная точка квадратичной кривой: дуга проходит через (midX, midY).
+  const path = `M ${sourceX} ${sourceY} Q ${midX} ${midY + sag} ${targetX} ${targetY}`;
+  return (
+    <>
+      <BaseEdge id={id} path={path} style={{ ...style, strokeLinecap: "round", strokeWidth: selected ? Number(style?.strokeWidth ?? 3.5) + 1.5 : style?.strokeWidth }} />
+      {label && (
+        <EdgeLabelRenderer>
+          <span className="canvas-thread-label" style={{ transform: `translate(-50%, -50%) translate(${midX}px, ${midY}px)` }}>{label}</span>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+// Module-level по той же причине, что NODE_TYPES ниже.
+const EDGE_TYPES = { sag: SagEdge };
+
 const NODE_TYPES = {
   scene: SceneNode,
   entity: EntityNode,
@@ -1788,6 +1822,7 @@ function toFlowNode(
       kind: n.entity.kind,
       nodeType: n.node_type,
       thumbUrl: n.entity.thumbnail_image_url,
+      blurb: n.entity.blurb ?? "",
       mentionedIn: n.entity.mentioned_in,
     },
   };
@@ -2825,9 +2860,11 @@ export function CanvasPage() {
         target: `pin:${th.to_pin_id}`,
         sourceHandle: "pin",
         targetHandle: "pin",
-        type: "straight",
-        style: { stroke: th.color, strokeWidth: th.width, vectorEffect: "non-scaling-stroke" },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: th.color },
+        // Провисающая дуга с подписью (Q8, Q11). Без стрелки: нить не
+        // направлена, сервер и так хранит пару пинов по возрастанию id.
+        type: "sag",
+        label: th.label || undefined,
+        style: { stroke: th.color || "var(--ink-2)", strokeWidth: th.width, vectorEffect: "non-scaling-stroke" },
         className: "canvas-edge--thread",
         selectable: true,
         deletable: true,
@@ -4685,22 +4722,22 @@ export function CanvasPage() {
               if (targetPins.length === 1) {
                 const src = targetPins[0];
                 const pos = { x: src.position.x + 40, y: src.position.y + 40 };
-                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "skull" });
                 const fromId = Number(src.id.split(":")[1]);
                 const toId = created.id;
                 const a = Math.min(fromId, toId);
                 const b = Math.max(fromId, toId);
-                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" });
               } else if (targetPins.length === 2) {
                 const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
                 const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" });
               } else if (targetPins.length === 3) {
                 const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
                 const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
                 // Нить, которая уже есть, сервер не заводит второй раз — это не отказ.
                 for (const [a,b] of pairs) {
-                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
+                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" }); } catch {}
                 }
               }
             }, { retry: false, failure: "Связь между пинами" });
@@ -4832,22 +4869,22 @@ export function CanvasPage() {
               if (targetPins.length === 1) {
                 const src = targetPins[0];
                 const pos = { x: src.position.x + 40, y: src.position.y + 40 };
-                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "skull" });
                 const fromId = Number(src.id.split(":")[1]);
                 const toId = created.id;
                 const a = Math.min(fromId, toId);
                 const b = Math.max(fromId, toId);
-                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" });
               } else if (targetPins.length === 2) {
                 const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
                 const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" });
               } else if (targetPins.length === 3) {
                 const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
                 const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
                 // Нить, которая уже есть, сервер не заводит второй раз — это не отказ.
                 for (const [a,b] of pairs) {
-                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
+                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 3.5, color: "" }); } catch {}
                 }
               }
             }, { retry: false, failure: "Связь между пинами" });
@@ -5592,6 +5629,7 @@ export function CanvasPage() {
           nodes={nodes}
           edges={edges}
           nodeTypes={NODE_TYPES}
+          edgeTypes={EDGE_TYPES}
           onInit={flowHandlers.onInit}
           snapToGrid
           snapGrid={SNAP_GRID}
@@ -7402,8 +7440,12 @@ function PinProperties({ pinId, board, act, autoEdit = false }: { pinId: number;
           return (
             <div key={th.id} className="row" style={{ gap: 6, alignItems: "center", border: "1.5px solid var(--line)", padding: "4px 6px" }}>
               <span style={{ flex: 1, fontSize: "var(--fs-meta)" }}>— {other}</span>
-              <input type="number" min={1} max={8} value={th.width} onChange={(e) => saveThread(th.id, { width: Number(e.target.value) || 2 })} style={{ width: 48 }} aria-label="Ширина нити" title="Ширина" />
-              <input type="color" value={th.color} onChange={(e) => saveThread(th.id, { color: e.target.value })} style={{ width: 32, height: 24, padding: 0, border: "1.5px solid var(--line)" }} aria-label="Цвет нити" title="Цвет нити" />
+              {/* Подпись — по уходу из поля, а не на каждую букву (Q8). */}
+              <input key={`${th.id}:${th.label}`} className="canvas-thread-label-input" defaultValue={th.label} placeholder="Подпись" maxLength={40}
+                onBlur={(e) => { const v = e.target.value.trim(); if (v !== th.label) saveThread(th.id, { label: v }); }}
+                aria-label="Подпись нити" title="Подпись на нити: «владеет», «враги»" />
+              <input type="number" min={1} max={8} step={0.5} value={th.width} onChange={(e) => saveThread(th.id, { width: Number(e.target.value) || 3.5 })} style={{ width: 48 }} aria-label="Ширина нити" title="Ширина" />
+              <input type="color" value={th.color || "#34322F"} onChange={(e) => saveThread(th.id, { color: e.target.value })} style={{ width: 32, height: 24, padding: 0, border: "1.5px solid var(--line)" }} aria-label="Цвет нити" title="Цвет нити" />
               <button className="danger" onClick={() => void act(() => write.del(`/canvas/threads/${th.id}`), { retry: false, failure: "Удаление нити" })} aria-label={`Удалить нить к «${other}»`} title="Удалить нить">×</button>
             </div>
           );
@@ -8183,13 +8225,13 @@ function CanvasPalette({
               className="canvas-palette__item"
               draggable
               onDragStart={(e) => {
-                e.dataTransfer.setData(PALETTE_DRAG_MIME, JSON.stringify({ kind: "pin", pin: { name: "Пин", size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" } }));
+                e.dataTransfer.setData(PALETTE_DRAG_MIME, JSON.stringify({ kind: "pin", pin: { name: "Пин", size: "M", color: DEFAULT_FRAME_COLOR, shape: "skull" } }));
                 e.dataTransfer.effectAllowed = "copy";
               }}
               onClick={async () => {
                 const pos = freshSpotAtCenter(flowRef?.current ?? null);
                 const created = await act(
-                  () => write.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" }),
+                  () => write.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "skull" }),
                   { retry: false, failure: "Новый пин" }
                 );
                 if (created) onPinCreated(created.id);

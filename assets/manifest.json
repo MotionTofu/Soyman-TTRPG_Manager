@@ -4405,6 +4405,16 @@
       "baselineSha256": "9f77793dcd4da009eef6d09db314fecb4b10e1bb6fd60f94596168954fc616d3"
     },
     {
+      "id": "ui/fantasy-punk/decorative/board/pin-skull.webp",
+      "title": "pin-skull",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/board/pin-skull.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/board/pin-skull.webp"
+      ],
+      "baselineSha256": "05a13fe7a74fbca5f3be9d909209320ccb64d5555cd7edc358f2a0767533cbcb"
+    },
+    {
       "id": "ui/fantasy-punk/decorative/dividers/divider-ink-long.webp",
       "title": "divider-ink-long",
       "category": "ui/fantasy-punk",

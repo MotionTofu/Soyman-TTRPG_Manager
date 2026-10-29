@@ -2090,6 +2090,7 @@ CREATE TABLE IF NOT EXISTS canvas_threads (
   width REAL NOT NULL DEFAULT 2,
   color TEXT NOT NULL DEFAULT '#2C3E50',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  label TEXT NOT NULL DEFAULT '',
   UNIQUE(board_id, from_pin_id, to_pin_id)
 );
  CREATE INDEX IF NOT EXISTS idx_canvas_threads_board ON canvas_threads(board_id);
