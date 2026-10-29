@@ -4,6 +4,8 @@ import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
 import { launchAffects, sessionPaths } from "../data/sessions";
 import type { SessionUnionRow, TreeAdventure } from "../types";
+import { ObstacleDropZone } from "./ObstacleDropZone";
+import { SectionDropZone } from "./SectionDropZone";
 
 // «Сцены на вечер» — заготовка сессии.
 //
@@ -18,11 +20,13 @@ import type { SessionUnionRow, TreeAdventure } from "../types";
 // Галочка стоит у главы и у сцены, но НЕ у приключения: приключение — это
 // десятки сцен, и отметить его целиком значит привести на вечер весь том.
 
-const UNION_PANELS: { panel: string; title: string }[] = [
-  { panel: "plot_characters", title: "Сюжетные персонажи" },
-  { panel: "enemies", title: "Препятствия" },
-  { panel: "loot", title: "Потенциальный лут" },
-];
+// Колонка «Кого они приведут» (макет Roll-Prep, Q6): состав отмеченных сцен
+// и добавленное рукой — одним списком пилюль по группам. Бывшие четыре
+// карточки подготовки слиты сюда; локации — четвёртой группой.
+const PLOT_CHARACTER_TYPES = ["being", "character"];
+const LOCATION_TYPES = ["location"];
+const LOOT_TYPES = ["resource", "artifact", "compendium_entry"];
+const LOOT_COMPENDIUM_KINDS = ["equipment", "magic_item"];
 
 interface PlannedReply {
   ids: number[];
@@ -34,9 +38,12 @@ const NO_UNION: SessionUnionRow[] = [];
 
 export function SessionSceneTree({
   sessionId,
+  ideaNotes,
   onChanged,
 }: {
   sessionId: number;
+  /** Задумка: упомянутые в ней персонажи и локации встают в колонку. */
+  ideaNotes?: string;
   onChanged?: () => void;
 }) {
   const [wide, setWide] = useState(false);
@@ -60,6 +67,9 @@ export function SessionSceneTree({
   const run = useAction();
 
   const pickedSet = useMemo(() => new Set(planned), [planned]);
+  const plotRows = useMemo(() => union.filter((u) => u.panel === "plot_characters"), [union]);
+  const enemyRows = useMemo(() => union.filter((u) => u.panel === "enemies"), [union]);
+  const lootRows = useMemo(() => union.filter((u) => u.panel === "loot"), [union]);
   const carriedSet = useMemo(() => new Set(carried), [carried]);
 
   // Первым открывается то приключение, в котором уже что-то отмечено: чаще
@@ -89,25 +99,26 @@ export function SessionSceneTree({
   const carriedHere = carried.length;
 
   return (
-    <div className="card sp-scenes">
-      <div className="sp-scenes__head">
-        <span className="sp-title">Сцены на вечер</span>
-        <span className="sp-count">{total > 0 ? `отмечено ${total}` : "ничего не отмечено"}</span>
-        <span style={{ flex: 1 }} />
-        {carriedHere > 0 && (
-          <span className="muted sp-note">
-            {carriedHere === 1
-              ? "одна переехала с прошлой сессии — её не сыграли"
-              : `${carriedHere} переехали с прошлой сессии — их не сыграли`}
-          </span>
-        )}
-        <button
-          className={`sp-scope${wide ? " is-on" : ""}`}
-          onClick={() => setWide((v) => !v)}
-          title="Приключения кампании или весь сеттинг"
-        >
-          {wide ? "Только кампания" : "Показать весь сеттинг"}
-        </button>
+    <section className="d-focal sp-scenes">
+      <div className="d-plate-row">
+        <h2 className="d-plate">Сцены на вечер</h2>
+        <span className="d-note">{total > 0 ? `ОТМЕЧЕНО ${total}` : "НИЧЕГО НЕ ОТМЕЧЕНО"}</span>
+        <span className="d-end sp-scenes__end">
+          {carriedHere > 0 && (
+            <span className="d-note">
+              {carriedHere === 1
+                ? "одна переехала с прошлой сессии — её не сыграли"
+                : `${carriedHere} переехали с прошлой сессии — их не сыграли`}
+            </span>
+          )}
+          <button
+            className="sp-scope-link"
+            onClick={() => setWide((v) => !v)}
+            title="Приключения кампании или весь сеттинг"
+          >
+            {wide ? "Только кампания" : "Показать весь сеттинг"}
+          </button>
+        </span>
       </div>
 
       <div className="sp-scenes__body">
@@ -194,33 +205,46 @@ export function SessionSceneTree({
 
         {/* Что приведут отмеченные сцены. Считается по отметкам, а не по
             приключениям: набирать сцены вслепую — значит узнать состав вечера
-            уже за столом. */}
+            уже за столом. Свои добавления — там же, пилюлей с крестиком. */}
         <div className="sp-union">
-          <span className="sp-label">Кого они приведут</span>
-          {UNION_PANELS.map((p) => {
-            const rows = union.filter((u) => u.panel === p.panel);
-            return (
-              <div key={p.panel} className="sp-union__card">
-                <div className="sp-union__head">{p.title}</div>
-                <div className="sp-union__body">
-                  {rows.map((r) => (
-                    <div key={`${r.to_type}:${r.to_id}`} className="sp-union__row">
-                      <span className="sp-dot" aria-hidden />
-                      <span className="sp-union__name">{r.name}</span>
-                      {r.qty && <span className="qty-chip">{r.qty}</span>}
-                    </div>
-                  ))}
-                  {rows.length === 0 && (
-                    <span className="muted">
-                      {total === 0 ? "Сцены не отмечены." : "Пусто — состав сцен не размечен."}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <span className="sp-union__label">Сюжетные персонажи</span>
+          <SectionDropZone
+            entityType="session"
+            entityId={sessionId}
+            section="plot_characters"
+            acceptTypes={PLOT_CHARACTER_TYPES}
+            placeholder="Перетащите из поиска"
+            mentionText={ideaNotes}
+            mentionTypes={PLOT_CHARACTER_TYPES}
+            unionRows={plotRows}
+            pills
+          />
+          <span className="sp-union__label">Препятствия</span>
+          <ObstacleDropZone sessionId={sessionId} unionRows={enemyRows} pills />
+          <span className="sp-union__label">Потенциальный лут</span>
+          <SectionDropZone
+            entityType="session"
+            entityId={sessionId}
+            section="loot"
+            acceptTypes={LOOT_TYPES}
+            acceptCompendiumKinds={LOOT_COMPENDIUM_KINDS}
+            placeholder="Перетащите из поиска"
+            unionRows={lootRows}
+            pills
+          />
+          <span className="sp-union__label">Локации</span>
+          <SectionDropZone
+            entityType="session"
+            entityId={sessionId}
+            section="locations"
+            acceptTypes={LOCATION_TYPES}
+            placeholder="Перетащите из поиска"
+            mentionText={ideaNotes}
+            mentionTypes={LOCATION_TYPES}
+            pills
+          />
         </div>
       </div>
-    </div>
+    </section>
   );
 }

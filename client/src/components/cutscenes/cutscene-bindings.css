@@ -3,6 +3,8 @@
 .cs-bindings h2, .cs-bindings h3, .cs-picker h2 { margin: 0; }
 .cs-bindings h2, .cs-picker h2 { font-size: var(--fs-h2); }
 .cs-bindings h3 { font-size: var(--fs-h3); }
+/* Плашка «Д» в блоке подготовки (brief): кегль плашки, а не заголовка окна. */
+.cs-bindings h2.d-plate { font-size: var(--fs-label); white-space: nowrap; }
 .cs-bindings__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
 .cs-bindings__actions button { white-space: normal; }
 .cs-bindings__list { display: grid; gap: var(--sp-5); list-style: none; margin: 0; padding: 0; }

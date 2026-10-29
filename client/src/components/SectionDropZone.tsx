@@ -74,6 +74,9 @@ interface Props {
   // здесь и как действует. Только на странице сцены, у «Сюжетных
   // персонажей» и «Препятствий».
   participation?: boolean;
+  /** Пилюлями в колонке «Кого они приведут» подготовки (макет Roll-Prep,
+   *  Q6): имя, количество и крестик у своих; без фильтра и подписей сцен. */
+  pills?: boolean;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -94,6 +97,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   unionRows,
   toInitiative,
   participation,
+  pills,
 }: Props) {
   // Связи секции — из кэша слоя данных. Запуск сцены подменяет состав панели на
   // сервере и задевает связи сессии (data/sessions.ts): зона перечитывается
@@ -253,7 +257,7 @@ export const SectionDropZone = memo(function SectionDropZone({
 
   return (
     <div
-      className={`drop-zone${dragOver ? " drag-over" : ""}`}
+      className={`drop-zone${dragOver ? " drag-over" : ""}${pills ? " drop-zone--pills" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -261,7 +265,7 @@ export const SectionDropZone = memo(function SectionDropZone({
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      {entries.length > 5 && (
+      {entries.length > 5 && !pills && (
         <input placeholder="Фильтр…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8, width: "100%" }} />
       )}
       {entries.length === 0 && <span className="muted">{placeholder}</span>}
@@ -271,6 +275,7 @@ export const SectionDropZone = memo(function SectionDropZone({
           <div key={`${entry.type}-${entry.id}`} className={participation ? "cast-row" : undefined}>
           <div
             className="resource-row row"
+            data-type={entry.type}
             style={{
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
@@ -319,9 +324,9 @@ export const SectionDropZone = memo(function SectionDropZone({
               {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
               {/* Кто в запущенной сцене — плашкой: среди двадцати имён глаз
                   иначе не найдёт нужного. */}
-              {entry.inScene && <span className="in-scene-chip">в сцене</span>}
-              {entry.linkId === null && !entry.fromScenes && <span className="muted">из задумки</span>}
-              {entry.fromScenes && !entry.inScene && (
+              {!pills && entry.inScene && <span className="in-scene-chip">в сцене</span>}
+              {!pills && entry.linkId === null && !entry.fromScenes && <span className="muted">из задумки</span>}
+              {!pills && entry.fromScenes && !entry.inScene && (
                 <span className="muted" title={entry.fromScenes.join(", ")}>
                   {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
                 </span>

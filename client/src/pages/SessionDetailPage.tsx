@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
-import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { SessionLiveControls } from "../components/SessionLiveControls";
 import { SessionResults } from "../components/SessionResults";
 import { PrepSheetLink } from "../components/workbooks/WorkbookCampaignViews";
@@ -14,7 +13,6 @@ import { CheatSheetsSection } from "../components/CheatSheetsSection";
 import { Modal } from "../components/Modal";
 import { CutsceneBindings } from "../components/cutscenes/CutsceneBindings";
 import { SessionSceneTree } from "../components/SessionSceneTree";
-import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
 import { dataKeys } from "../data/entities";
 import { useFieldDraft } from "../data/fieldDraft";
@@ -29,6 +27,7 @@ import { loadHideFinance } from "../financePrivacy";
 import type {
   AttendanceRow,
   Campaign,
+  Character,
   CampaignGrouped,
   PaymentType,
   Playlist,
@@ -44,14 +43,12 @@ import { sessionBattlesPath, type BattleSummary } from "../combat/battleLog";
 import { sessionLabel } from "../sessionLabel";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { SessionPassportCard } from "../components/SessionPaperCards";
+import { SESSION_PASSPORT_FIELDS } from "../components/sessionPaperFields";
+import { isAtTable } from "../characterStatus";
 
 // Module-level so SectionDropZone (React.memo'd) sees a stable reference —
 // an inline array literal in the JSX below would be a new object every
 // render, defeating the memo on every unrelated keystroke on this page.
-const PLOT_CHARACTER_TYPES = ["being", "character"];
-const LOCATION_TYPES = ["location"];
-const LOOT_TYPES = ["resource", "artifact", "compendium_entry"];
-const LOOT_COMPENDIUM_KINDS = ["equipment", "magic_item"];
 
 // Пустое — постоянными ссылками: иначе useMemo ниже пересчитывался бы на
 // каждой отрисовке.
@@ -86,6 +83,10 @@ function numberText(value: number | null): string {
 }
 
 const NO_FIGHTS: BattleSummary[] = [];
+// Игроку на подготовке — только эти две группы (Q17).
+const PLOT_CHARACTER_TYPES = ["being", "character"];
+const LOCATION_TYPES = ["location"];
+const NO_CHARACTERS: Character[] = [];
 
 export function SessionDetailPage() {
   const { id } = useParams();
@@ -113,6 +114,10 @@ export function SessionDetailPage() {
   const report = useResource<SessionReport>(sessionPaths.summary(sessionId)).data ?? null;
   // «Бои вечера» (шаг 4): плитка «Боёв» у проведённой, карточка — в «Итогах».
   const fights = useResource<BattleSummary[]>(sessionBattlesPath(sessionId)).data ?? NO_FIGHTS;
+  // «За столом» в полосе у запланированной — партия стола (Q3 рестайла).
+  const tableCharacters =
+    useResource<Character[]>(campaign && campaign.role !== "player" ? sessionPaths.campaignCharacters(campaign.id) : null).data ??
+    NO_CHARACTERS;
 
   // Поля статуса, оплаты и ставки задевают деньги кампании, остальные — только
   // сессию и список сессий кампании (data/sessions.ts).
@@ -187,6 +192,7 @@ export function SessionDetailPage() {
     );
   }
 
+  const [cheatsOpen, setCheatsOpen] = useState(false);
   const [pendingReveal, setPendingReveal] = useState<StorySecret | null>(null);
   const [justRevealed, setJustRevealed] = useState<StorySecret | null>(null);
 
@@ -567,6 +573,17 @@ export function SessionDetailPage() {
         )
       : null;
 
+  // Сводка паспорта на подготовке: заполненные поля первой строкой (Q5).
+  const passportFilled = SESSION_PASSPORT_FIELDS.map((f) => ({
+    key: f.key,
+    label: f.label,
+    text: ((f.key === "idea_notes" ? session.idea_notes : session.passport?.[f.key]) ?? "").trim().split("\n")[0],
+  })).filter((f) => f.text);
+
+  const tableCount = held
+    ? session.attendance.filter((a) => !!a.attended).length
+    : tableCharacters.filter(isAtTable).length;
+
   const allAttended = session.attendance.length > 0 && session.attendance.every((a) => !!a.attended);
 
   const titleEditor = (
@@ -618,14 +635,9 @@ export function SessionDetailPage() {
           >
             →
           </button>
-          <span className={`badge ${session.status}`}>
-            {STATUS_LABELS[session.status] ?? session.status}
-          </span>
-          {!isPlayer && !hideFinance && (
-            <span className="badge held">
-              {session.earned} {campaign.currency}
-            </span>
-          )}
+          {/* Статус — штампом вместо плашки (макет Roll-Prep, Q1); ставка
+              переехала в полосу. */}
+          <span className="d-stamp sp-stamp">{STATUS_LABELS[session.status] ?? session.status}</span>
         </>
       }
       meta={
@@ -647,21 +659,40 @@ export function SessionDetailPage() {
               )}
             </div>
           )}
-          <div className="sp-strip__cell">
-            <span className="sp-label">Номер</span>
-            <span className="sp-value">№{session.session_number ?? "—"}</span>
-          </div>
+          {/* Номер — в названии; вместо него ставка и сколько за столом (Q3). */}
+          {!isPlayer && !hideFinance && isPaidEffective && (
+            <div className="sp-strip__cell">
+              <span className="sp-label">Ставка</span>
+              <span className="sp-value">
+                {session.stake_override ?? campaign.session_rate} {campaign.currency}
+              </span>
+            </div>
+          )}
+          {tableCount > 0 && (
+            <div className="sp-strip__cell">
+              <span className="sp-label">За столом</span>
+              <span className="sp-value">
+                {tableCount} {plural(tableCount, "игрок", "игрока", "игроков")}
+              </span>
+            </div>
+          )}
         </div>
       }
-      // Главное действие — пульт: за ним сюда и приходят во время игры.
+      // Главная кнопка — по состоянию (Q2): запланированную начинают, к идущей
+      // приходят за пультом, у проведённой главной нет.
       primaryAction={
         !isPlayer ? (
-          <>
-            <SessionLiveControls session={session} />
-            <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
-              <NavIcon name="die" /> Пульт сессии
-            </button>
-          </>
+          <SessionLiveControls
+            session={session}
+            pult={
+              <button
+                className={session.live_mode === "live" ? "d-btn d-btn--primary" : "d-btn d-btn--sm"}
+                onClick={() => navigate(`/sessions/${sessionId}/live`)}
+              >
+                <NavIcon name="die" /> Пульт сессии
+              </button>
+            }
+          />
         ) : undefined
       }
       actions={[
@@ -670,6 +701,7 @@ export function SessionDetailPage() {
       ]}
       // Бумага (спека campaign-paper, доски 46–47).
       paper
+      titleAbove
       tabs={SESSION_TABS}
       tab={tab}
       onTab={(t) => selectTab(t as SessionTab)}
@@ -978,92 +1010,118 @@ export function SessionDetailPage() {
       )}
 
       {tab === "Подготовка" && (
-        <div className="stack">
-          {campaignId != null && <PrepSheetLink campaignId={campaignId} />}
-          {/* Задумка вечера переехала в паспорт на «Обзоре» (спека
-              campaign-paper, Q42); боевая тема — по-прежнему здесь, её
-              выбирают на подготовке к конкретному вечеру. */}
-          <div className="card sp-battle">
-            <label className="sp-idea-battle">
-              <span className="sp-idea-battle__label">Боевая тема</span>
-              <select
-                value={session.battle_playlist_id ?? ""}
-                onChange={(e) => setBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">— из набора —</option>
-                {battles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          {!isPlayer && <div className="card stack"><CutsceneBindings context={{ kind: "session", sessionId, campaignId }} /></div>}
-          {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
-
-          <div className="sp-prep-row">
-            <LazyDetails
-              title="Сюжетные персонажи"
-              className="card stack sp-card--plot"
-              style={{ flex: "1 1 280px", minWidth: 260 }}
-              defaultOpen
-            >
-              <SectionDropZone
-                entityType="session"
-                entityId={sessionId}
-                section="plot_characters"
-                acceptTypes={PLOT_CHARACTER_TYPES}
-                placeholder="Перетащите сюда существо или персонажа из поиска"
-                mentionText={session.idea_notes}
-                mentionTypes={PLOT_CHARACTER_TYPES}
-              />
-            </LazyDetails>
-
-            <LazyDetails
-              title="Локации"
-              className="card stack sp-card--location"
-              style={{ flex: "1 1 280px", minWidth: 260 }}
-              defaultOpen
-            >
-              <SectionDropZone
-                entityType="session"
-                entityId={sessionId}
-                section="locations"
-                acceptTypes={LOCATION_TYPES}
-                placeholder="Перетащите сюда локацию из поиска"
-                mentionText={session.idea_notes}
-                mentionTypes={LOCATION_TYPES}
-              />
-            </LazyDetails>
-          </div>
-
-          {!isPlayer && (
-            <div className="sp-prep-row">
-              <LazyDetails title="Препятствия" className="card stack sp-card--enemies" style={{ flex: "1 1 280px", minWidth: 260 }}>
-                <ObstacleDropZone sessionId={sessionId} />
-              </LazyDetails>
-
-              <LazyDetails
-                title="Потенциальный лут"
-                className="card stack sp-card--loot"
-                style={{ flex: "1 1 280px", minWidth: 260 }}
-              >
+        // Макет Roll-Prep (Q4–Q7, Q17): главный блок — сцены на вечер с
+        // колонкой «Кого они приведут», под ним план катсцен и боевая тема;
+        // справа сводки паспорта и тайн (правят их на «Обзоре») и шпаргалки.
+        <div className={isPlayer ? "stack" : "sp-prep"}>
+          <div className="stack sp-prep__main">
+            {campaignId != null && <PrepSheetLink campaignId={campaignId} />}
+            {isPlayer ? (
+              // Игроку — только то, что Мастер положил рукой, без дерева и
+              // состава сцен: иначе подготовка выдала бы, кого ждать (Q17).
+              <section className="d-block sp-union sp-union--player">
+                <span className="sp-union__label">Сюжетные персонажи</span>
                 <SectionDropZone
                   entityType="session"
                   entityId={sessionId}
-                  section="loot"
-                  acceptTypes={LOOT_TYPES}
-                  acceptCompendiumKinds={LOOT_COMPENDIUM_KINDS}
-                  placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
+                  section="plot_characters"
+                  acceptTypes={PLOT_CHARACTER_TYPES}
+                  placeholder="Пока никого"
+                  pills
                 />
-              </LazyDetails>
-            </div>
-          )}
+                <span className="sp-union__label">Локации</span>
+                <SectionDropZone
+                  entityType="session"
+                  entityId={sessionId}
+                  section="locations"
+                  acceptTypes={LOCATION_TYPES}
+                  placeholder="Пока нигде"
+                  pills
+                />
+              </section>
+            ) : (
+              <SessionSceneTree sessionId={sessionId} ideaNotes={session.idea_notes} />
+            )}
+            {!isPlayer && (
+              <div className="sp-prep__pair">
+                <section className="d-block">
+                  <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} brief />
+                </section>
+                <section className="d-block sp-prep__battle">
+                  <h2 className="d-plate">Боевая тема</h2>
+                  <select
+                    aria-label="Боевая тема"
+                    value={session.battle_playlist_id ?? ""}
+                    onChange={(e) => setBattlePlaylist(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">— из набора —</option>
+                    {battles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </section>
+              </div>
+            )}
+          </div>
 
           {!isPlayer && (
-            <LazyDetails title="Шпаргалки" className="card stack">
+            <aside className="stack sp-prep__side">
+              <section className="d-block">
+                <h2 className="d-plate">Паспорт вечера</h2>
+                {passportFilled.length === 0 ? (
+                  <p className="sp-prep__empty">Пусто: что вечер обещает, какие вопросы решаются.</p>
+                ) : (
+                  passportFilled.map((f) => (
+                    <div key={f.key} className="sp-prep__pass">
+                      <span className="d-note">{f.label}</span>
+                      <span className="sp-prep__pass-text">{f.text}</span>
+                    </div>
+                  ))
+                )}
+                <button type="button" className="sp-more" onClick={() => selectTab("Обзор")}>
+                  {passportFilled.length === 0 ? "Заполнить ›" : "Править ›"}
+                </button>
+              </section>
+              <section className="d-block">
+                <div className="d-plate-row">
+                  <h2 className="d-plate">Тайны</h2>
+                  <span className="d-note">
+                    {unrevealedSecrets.length} ИЗ {secretsTotal}
+                  </span>
+                </div>
+                {unrevealedGroups.length === 0 ? (
+                  <p className="sp-prep__empty">Нераскрытых тайн нет.</p>
+                ) : (
+                  unrevealedGroups.map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      className="sp-prep__group"
+                      title="Открыть на «Обзоре»"
+                      onClick={() => {
+                        setOpenSecretGroups((prev) => (prev.includes(g.key) ? prev : [...prev, g.key]));
+                        selectTab("Обзор");
+                      }}
+                    >
+                      <span>{g.title}</span>
+                      <span className="sp-prep__num">{g.items.length}</span>
+                    </button>
+                  ))
+                )}
+                <p className="d-mono sp-prep__foot">Перенесены с прошлых сессий</p>
+              </section>
+              <section className="d-block">
+                <h2 className="d-plate">Шпаргалки</h2>
+                <button type="button" className="sp-more" onClick={() => setCheatsOpen(true)}>
+                  Сессия, персонажи, бой ›
+                </button>
+              </section>
+            </aside>
+          )}
+          {cheatsOpen && (
+            <Modal wide onClose={() => setCheatsOpen(false)} ariaLabel="Шпаргалки">
               <CheatSheetsSection
                 sessionId={sessionId}
                 campaignId={session.campaign_id}
@@ -1071,7 +1129,7 @@ export function SessionDetailPage() {
                 cheatsheetData={session.cheatsheet_data}
                 unrevealedSecrets={unrevealedSecrets}
               />
-            </LazyDetails>
+            </Modal>
           )}
         </div>
       )}

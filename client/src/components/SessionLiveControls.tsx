@@ -4,7 +4,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import type { LiveSession, SessionDetail, SessionLiveMode } from "../types";
 import "./SessionNotesChat.css";
 import { showSaveError } from "../data/notices";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Modal } from "./Modal";
 import { useCombat } from "../combat/useCombat";
 import { setCombatModeOpen } from "../combat/combatModeStore";
@@ -18,9 +18,13 @@ import { useSoundEngineOptional } from "../sound/engine";
 export function SessionLiveControls({
   session,
   onFinished,
+  pult,
 }: {
   session: SessionDetail;
   onFinished?: () => void;
+  /** Кнопка пульта в шапке сессии: встаёт перед «Начать», чтобы главная
+   *  кнопка была последней (макет Roll-Prep, Q2). Кнопки — вида «Д». */
+  pult?: ReactNode;
 }) {
   const run = useAction();
   const [dialog, confirm] = useConfirm();
@@ -92,7 +96,9 @@ export function SessionLiveControls({
 
   // Проведённую или отменённую не начинают: кнопка на странице такой сессии
   // была бы лишним органом управления.
-  if (!session.live_mode && session.status !== "planned") return null;
+  if (!session.live_mode && session.status !== "planned") return pult ? <>{pult}</> : null;
+  // В шапке сессии кнопки «Д»: малые и одна главная; на Пульте — прежние.
+  const sm = pult ? "d-btn d-btn--sm" : undefined;
 
   return (
     <div className="row session-live-controls">
@@ -127,15 +133,32 @@ export function SessionLiveControls({
       {session.live_mode === "rehearsal" ? (
         <>
           <span className="session-live-controls__badge">Прогон</span>
-          <button type="button" onClick={() => void finish()}>
+          <button type="button" className={sm} onClick={() => void finish()}>
             Закончить прогон
           </button>
+          {pult}
         </>
       ) : session.live_mode ? (
         <>
           <span className="session-live-controls__badge">Идёт</span>
-          <button type="button" onClick={() => void finish()}>
+          <button type="button" className={sm} onClick={() => void finish()}>
             Завершить
+          </button>
+          {pult}
+        </>
+      ) : pult ? (
+        <>
+          <button
+            type="button"
+            className={sm}
+            title="Всё как в игре, но игроки ничего не видят, а после «Закончить прогон» вечер возвращается как был"
+            onClick={() => void start("rehearsal")}
+          >
+            Тестовый прогон
+          </button>
+          {pult}
+          <button type="button" className="d-btn d-btn--primary" onClick={() => void start("live")}>
+            Начать
           </button>
         </>
       ) : (

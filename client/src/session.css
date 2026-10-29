@@ -123,6 +123,58 @@
   filter: brightness(1.15);
 }
 
+/* Шапка сессии над ярлыками (макет Roll-Prep, Q1–Q3): название страницы,
+   штамп статуса, полоса на листе с линией — подписи машинописью, значения
+   Label-цифрами. */
+.entity-page--paper[data-entity-type="session"] .entity-page__head h1 {
+  font-size: var(--fs-h1);
+}
+/* Кнопки — справа от названия, а не строкой ниже: имя со штампом уступает
+   место и переносится само. */
+@media (min-width: 900px) {
+  .entity-page--paper[data-entity-type="session"] .entity-page__head {
+    flex-wrap: nowrap;
+  }
+  .entity-page--paper[data-entity-type="session"] .entity-page__ident {
+    flex: 1 1 0;
+  }
+}
+.entity-page__head .sp-stamp {
+  align-self: center;
+  margin-left: var(--sp-4);
+}
+.entity-page__head .sp-strip {
+  width: max-content;
+  max-width: 100%;
+  margin-top: var(--sp-5);
+  background: var(--sheet);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.entity-page__head .sp-strip__cell {
+  padding: var(--sp-3) var(--sp-6);
+  border-right-color: var(--line);
+}
+.entity-page__head .sp-strip .sp-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.entity-page__head .sp-strip .sp-value {
+  font-family: var(--font-ui);
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  color: var(--ink);
+}
+.entity-page__head .sp-strip .sp-value--cta {
+  font-family: var(--font-body);
+  font-size: var(--fs-data);
+  color: var(--ink-2);
+}
+.entity-page__head .session-live-controls {
+  gap: var(--sp-4);
+}
+
 .sp-title {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -474,66 +526,51 @@
 
 /* ------------------------------------------------------- сцены на вечер */
 
-.sp-scenes__head {
+/* Главный блок подготовки (макет Roll-Prep, Q4): тушь-рамка .d-focal,
+   плашка с отметками, справа охват ссылкой. */
+.d-focal.sp-scenes {
+  padding: var(--sp-7);
+  overflow: visible;
+}
+.sp-scenes > .d-plate-row {
+  flex-wrap: wrap;
+}
+.sp-scenes > .d-plate-row > :is(.d-plate, .d-note),
+.sp-scope-link {
+  white-space: nowrap;
+}
+.sp-scenes__end {
   display: flex;
   align-items: center;
   gap: var(--sp-5);
-  flex-wrap: wrap;
-  padding: var(--sp-3) var(--sp-5);
-  background: var(--surface);
-  color: var(--on-surface);
-  border-bottom: var(--card-border-width) solid var(--surface);
 }
-.sp-scenes__head .sp-title {
-  color: var(--on-surface);
-}
-.sp-scenes__head .sp-count {
-  color: var(--on-surface-muted);
-}
-.sp-scenes__head .sp-note {
-  color: var(--on-surface-muted);
-}
-
-/* Переключатель охвата — инверсией во включённом виде: «весь сеттинг» это
-   состояние, а не действие, и рамка потолще о нём бы не сказала. */
-.sp-scope {
-  border: var(--card-border-width) solid var(--ink);
+.sp-scope-link,
+.sp-more {
+  padding: 0;
+  border: 0;
   border-radius: 0;
-  background: var(--paper);
-  color: var(--ink);
-  padding: var(--sp-2) var(--sp-4);
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
-}
-.sp-scope.is-on {
-  background: var(--surface);
-  color: var(--on-surface);
-  border-color: var(--surface);
 }
 
 .sp-scenes__body {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: var(--sp-7);
 }
 .sp-tree {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-4) var(--sp-5);
-  border-right: var(--card-border-width) solid var(--line);
   min-width: 0;
-  gap: var(--sp-1);
 }
 
 .sp-adv {
-  border-bottom: var(--card-border-width) solid var(--line);
-  padding-bottom: var(--sp-2);
-  margin-bottom: var(--sp-3);
-}
-.sp-adv:last-child {
-  border-bottom: none;
+  border-top: var(--card-border-width) solid var(--line);
 }
 .sp-adv__head {
   display: flex;
@@ -691,42 +728,79 @@
   white-space: nowrap;
 }
 
+/* «Кого они приведут» — подписи машинописью, под ними пилюли (Q6). */
 .sp-union {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0;
-  background: var(--paper-2);
+  gap: var(--sp-3);
   min-width: 0;
 }
-.sp-union__card {
-  border: none;
-  border-bottom: var(--card-border-width) solid var(--line);
-  background: var(--paper-2);
-}
-.sp-union__card:last-child {
-  border-bottom: none;
-}
-.sp-union__head {
-  padding: var(--sp-2) var(--sp-4);
-  border-bottom: var(--card-border-width) solid var(--line);
-  font-family: var(--font-ui);
+.sp-union__label {
+  margin-top: var(--sp-4);
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ink);
-  background: var(--paper-2);
+  color: var(--muted);
 }
-.sp-union__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+.sp-union__label:first-child {
+  margin-top: 0;
+}
+
+/* Зона состава пилюлями: без пунктирной рамки, пилюли в строку с переносом,
+   квадрат цвета типа — тот же, что на Полотне (canvasPalette.ts). Инлайн-
+   стили строк зоны (gap, flex) перебиваются здесь, а не в компоненте: на
+   пульте и в сцене зона строчная. */
+.drop-zone.drop-zone--pills {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+.drop-zone--pills > .stack {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--sp-3) !important;
+}
+.drop-zone--pills .resource-row {
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-4);
+  border: var(--card-border-width) solid var(--line);
   font-size: var(--fs-meta);
 }
-.sp-union__body .muted {
-  font-size: var(--fs-micro);
+.drop-zone--pills .resource-row:last-child {
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.drop-zone--pills .resource-row::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: none;
+  background: var(--muted);
+}
+.drop-zone--pills .resource-row[data-type="being"]::before { background: var(--cv-node-being); }
+.drop-zone--pills .resource-row[data-type="character"]::before { background: var(--cv-node-character); }
+.drop-zone--pills .resource-row[data-type="location"]::before { background: var(--cv-node-location); }
+.drop-zone--pills .resource-row[data-type="artifact"]::before { background: var(--cv-node-artifact); }
+.drop-zone--pills .resource-row[data-type="community"]::before { background: var(--cv-node-community); }
+.drop-zone--pills .resource-row[data-type="compendium_entry"]::before { background: var(--cv-node-compendium_entry); }
+.drop-zone--pills .resource-row > .row {
+  flex: 0 1 auto !important;
+  gap: var(--sp-2);
+}
+.drop-zone--pills .resource-row button {
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+}
+.drop-zone--pills .resource-row .comp-mini {
+  min-width: 0;
+  height: auto;
+  padding: 0 var(--sp-1);
+  border: 0;
+  background: none;
+}
+.drop-zone--pills > .muted {
   font-family: var(--font-mono);
+  font-size: var(--fs-micro);
 }
 
 /* Вложенные карточки шпаргалок: внутри LazyDetails уже есть рамка card,
@@ -746,24 +820,6 @@
   background: none;
   padding: 0;
 }
-.sp-union__row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-.sp-union__name {
-  flex: 1;
-  min-width: 0;
-}
-/* Полый квадрат — тот же словарь, что у разъёмов на полотне: квадрат
-   означает сущность. */
-.sp-dot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border: var(--card-border-width) solid var(--ink);
-}
-
 /* Ряд карточек подготовки — грид с переносом. .row без wrap на 390px
    давал горизонтальный скролл (две карточки по 260 + gap10 > 351). */
 .sp-prep-row {
@@ -785,29 +841,77 @@
   text-align: left;
 }
 
-/* Задумка: боевая тема — подпись Label, значение Data, как в sp-deal */
-.sp-idea-battle {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  padding: var(--sp-3) 0 var(--sp-1);
-  border-top: var(--card-border-width) solid var(--line);
-  margin-top: var(--sp-2);
+/* Вкладка «Подготовка» (макет Roll-Prep, Q4): слева главный блок и пара
+   «План катсцен | Боевая тема», справа колонка 250px сводок. */
+.sp-prep {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: var(--sp-7);
+  align-items: start;
 }
-.sp-idea-battle__label {
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+.sp-prep__main,
+.sp-prep__side {
+  min-width: 0;
+}
+.sp-prep__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.sp-prep__battle select {
+  width: 100%;
+}
+.sp-prep__empty {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-data);
   color: var(--muted);
 }
-.sp-idea-battle select {
-  flex: 1;
-  min-width: 160px;
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
+.sp-prep__pass {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) 0;
+  border-top: var(--card-border-width) solid var(--line);
+}
+.sp-prep__pass-text {
+  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-data);
+}
+.sp-prep__group {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) 0;
+  border: 0;
+  border-top: var(--card-border-width) solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.sp-prep__num {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.sp-prep__foot {
+  margin: var(--sp-3) 0 0;
+}
+@media (max-width: 1100px) {
+  .sp-prep {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .sp-prep__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Форма правки внутриигровой даты — таблица подпись|поле, как в статблоке
@@ -878,7 +982,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .sp-tree {
-    border-right: none;
     border-bottom: var(--card-border-width) solid var(--line);
   }
 }

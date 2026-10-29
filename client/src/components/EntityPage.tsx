@@ -138,6 +138,9 @@ export interface EntityPageProps {
   /** Вид «Д» без бумаги: заголовок над ярлыками, тело — лист в тушь-рамке
    *  (d-system.css, .d-tabs/.d-sheet). Макеты Roll-* разделов систем. */
   sheet?: boolean;
+  /** На бумаге имя со значками — над ярлыками на всех вкладках, а не на
+   *  листе первой (сессия, макет Roll-Prep, Q1 2026-10-29). */
+  titleAbove?: boolean;
   children: ReactNode;
 }
 
@@ -166,6 +169,7 @@ export function EntityPage({
   fill,
   paper,
   sheet,
+  titleAbove,
   children,
 }: EntityPageProps) {
   // Меню «…» открывается под своей кнопкой, а не там, где щёлкнули: у кнопки
@@ -311,13 +315,13 @@ export function EntityPage({
 
       <Breadcrumbs items={crumbs} />
 
-      {(!paper || avatar || primaryAction || (more && !moreInTabs)) && (
+      {(!paper || titleAbove || avatar || primaryAction || (more && !moreInTabs)) && (
         <div className="entity-page__head">
           {avatar && <div className="entity-page__avatar">{avatar}</div>}
 
           {/* Вид «лист»: на первой вкладке название стоит на самом листе
               (герой обзора), над ярлыками его нет — макет «Д». */}
-          {!paper && !(sheet && tab === shownTabs[0]?.id) && ident}
+          {(titleAbove || (!paper && !(sheet && tab === shownTabs[0]?.id))) && ident}
 
           {(primaryAction || (more && !moreInTabs)) && (
             <div className="entity-page__actions">
@@ -376,7 +380,7 @@ export function EntityPage({
         <ListSkeleton variant="paragraph" label="Загрузка" />
       ) : paper ? (
         <div className="paper-sheet paper-scope">
-          {(!shownTabs.length || tab === shownTabs[0].id) && ident}
+          {!titleAbove && (!shownTabs.length || tab === shownTabs[0].id) && ident}
           {children}
         </div>
       ) : (

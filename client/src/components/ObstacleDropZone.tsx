@@ -53,6 +53,9 @@ interface Props {
   unionRows?: SessionUnionRow[];
   /** Показывать ли «в трекер инициативы» у существ. */
   toInitiative?: boolean;
+  /** Пилюлями в колонке «Кого они приведут» подготовки (макет Roll-Prep,
+   *  Q6): имя, количество и крестик у своих; без фильтра и подписей сцен. */
+  pills?: boolean;
 }
 
 // Memoized so an unrelated setState elsewhere on the session page (e.g.
@@ -63,6 +66,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
   origin,
   unionRows,
   toInitiative,
+  pills,
 }: Props) {
   // Связи «Препятствий» — из кэша слоя данных: запуск сцены задевает связи
   // сессии (data/sessions.ts), и зона перечитывается сама. Тот же ключ читают
@@ -177,7 +181,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
 
   return (
     <div
-      className={`drop-zone${dragOver ? " drag-over" : ""}`}
+      className={`drop-zone${dragOver ? " drag-over" : ""}${pills ? " drop-zone--pills" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -185,12 +189,12 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
-      {entries.length > 5 && (
+      {entries.length > 5 && !pills && (
         <input placeholder="Фильтр…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ marginBottom: 8, width: "100%" }} />
       )}
       {entries.length === 0 && (
         <span className="muted">
-          Перетащите сюда из поиска — существо, персонажа, локацию, артефакт, сообщество…
+          {pills ? "Перетащите из поиска" : "Перетащите сюда из поиска — существо, персонажа, локацию, артефакт, сообщество…"}
         </span>
       )}
       {entries.length > 0 && filteredEntries.length === 0 && <span className="muted">Ничего не найдено по фильтру.</span>}
@@ -199,6 +203,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
           <div
             key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}
             className="resource-row row"
+            data-type={entry.type}
             style={{
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
@@ -240,8 +245,8 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
                   а не счётчик: «1к6» Мастер кинет настоящим кубиком за столом,
                   и приложение за него этого не делает. */}
               {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
-              {entry.inScene && <span className="in-scene-chip">в сцене</span>}
-              {entry.fromScenes && !entry.inScene && (
+              {!pills && entry.inScene && <span className="in-scene-chip">в сцене</span>}
+              {!pills && entry.fromScenes && !entry.inScene && (
                 <span className="muted" style={{ opacity: 0.5, fontSize: "var(--fs-micro)" }} title={entry.fromScenes.join(", ")}>
                   {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
                 </span>

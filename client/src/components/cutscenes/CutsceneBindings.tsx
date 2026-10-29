@@ -13,7 +13,8 @@ import { CutscenePicker } from "./CutscenePicker";
 import "../../pages/cutscenes.css";
 import "./cutscene-bindings.css";
 
-function Bindings({context,mode='edit'}:{context:CutsceneBindingContext;mode?:'edit'|'launch'}){
+// brief — блок подготовки сессии «Д» (макет Roll-Prep): плашка и «+ В план», без пояснения и ссылки на мастерскую.
+function Bindings({context,mode='edit',brief}:{context:CutsceneBindingContext;mode?:'edit'|'launch';brief?:boolean}){
   const mobile=useIsMobile(),run=useCutsceneAction(),list=useResource<CutsceneSummary[]>(cutsceneBindingsPath(context));
   const [picker,setPicker]=useState(false),[busy,setBusy]=useState(false),[drag,setDrag]=useState<number|null>(null);
   const rows=list.data??[],session=context.kind==='session',editable=mode==='edit'&&!mobile;
@@ -24,10 +25,12 @@ function Bindings({context,mode='edit'}:{context:CutsceneBindingContext;mode?:'e
   async function action(label:string,apply:()=>Promise<unknown>){setBusy(true);try{return await run(label,async()=>{await apply();return true;})===true;}finally{setBusy(false);}}
   const move=(id:number,target:number)=>action('Переставить катсцену',()=>cutsceneBindings.move(context,id,target));
   return <section className={`cs-bindings stack${mode==='launch'?' cs-bindings--pult':''}`} aria-label={title}>
-    <header className="cs-bindings__header">{mode==='launch'?<h3>{title}</h3>:<h2>{title}</h2>}
+    {brief?<header className="d-plate-row"><h2 className="d-plate">{title}</h2>
+      {!mobile&&<button type="button" className="d-btn d-btn--sm d-end" disabled={busy||list.loading} onClick={()=>setPicker(true)}>+ В план</button>}</header>
+    :<header className="cs-bindings__header">{mode==='launch'?<h3>{title}</h3>:<h2>{title}</h2>}
       <div className="cs-bindings__actions">{!mobile&&<button type="button" disabled={busy||list.loading} onClick={()=>setPicker(true)}>{mode==='launch'?'Другая катсцена':session?'Добавить в план':'Добавить катсцену'}</button>}
-      <Link to={CUTSCENE_CATALOG_ROUTE}>Мастерская катсцен</Link></div></header>
-    {mode==='edit'&&<p className="reading-text">{session?'Необязательный план быстрого запуска. Порядок задаётся вручную; следующая катсцена сама не начнётся.':'Общие оригиналы этой кампании. Их правки используются при следующем запуске.'}</p>}
+      <Link to={CUTSCENE_CATALOG_ROUTE}>Мастерская катсцен</Link></div></header>}
+    {mode==='edit'&&!brief&&<p className="reading-text">{session?'Необязательный план быстрого запуска. Порядок задаётся вручную; следующая катсцена сама не начнётся.':'Общие оригиналы этой кампании. Их правки используются при следующем запуске.'}</p>}
     {list.error&&<LoadErrorCard message={`Не удалось загрузить ${session?'план катсцен':'подборку'}: ${list.error}`} onRetry={list.reload}/>}
     {list.loading?<ListSkeleton variant="rows"/>:<ol className="cs-bindings__list">{rows.map((item,index)=><li key={item.id} draggable={editable&&session&&!busy}
       onDragStart={()=>setDrag(item.id)} onDragEnd={()=>setDrag(null)} onDragOver={event=>{if(editable&&session&&!busy)event.preventDefault();}}
@@ -51,6 +54,6 @@ function Bindings({context,mode='edit'}:{context:CutsceneBindingContext;mode?:'e
 }
 
 /** No private collection reads for a player account, even if embedded outside the normal GM route. */
-export function CutsceneBindings(props:{context:CutsceneBindingContext;mode?:'edit'|'launch'}){
+export function CutsceneBindings(props:{context:CutsceneBindingContext;mode?:'edit'|'launch';brief?:boolean}){
   const {user}=useCurrentUser();if(user?.role!=='gm')return null;return <Bindings key={cutsceneBindingsPath(props.context)} {...props}/>;
 }
