@@ -3334,7 +3334,7 @@ span.dnd-card-corner {
   min-width: 0;
 }
 .dnd-pool-recharge {
-  font-size: 13px;
+  font-size: var(--fs-label);
   color: var(--skin-ink-soft, var(--text-muted));
 }
 .dnd-pool-center {
@@ -3358,7 +3358,7 @@ span.dnd-card-corner {
   font-family: var(--font-ui);
 }
 .dnd-pool-center .dnd-pool-meter-left {
-  font-size: 26px;
+  font-size: var(--fs-h2);
 }
 .dnd-pool-center .dnd-pool-meter-max {
   font-size: 18px;
@@ -3417,7 +3417,7 @@ span.dnd-card-corner {
     font-size: 22px;
   }
   .dnd-pool-meter .dnd-pool-meter-max {
-    font-size: 16px;
+    font-size: var(--fs-body);
   }
 }
 .dnd-tofu-pips {

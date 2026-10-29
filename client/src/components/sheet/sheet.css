@@ -40,7 +40,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: .06em;
-  font-size: 11px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   margin-bottom: 4px;
 }
@@ -49,7 +49,7 @@
   all: unset;
   cursor: pointer;
   padding: 3px 0;
-  font-size: 14px;
+  font-size: var(--fs-data);
   line-height: 1.3;
   color: var(--ink);
 }
@@ -69,7 +69,7 @@
   font-family: var(--font-ui);
   text-transform: uppercase;
   letter-spacing: .08em;
-  font-size: 11px;
+  font-size: var(--fs-micro);
 }
 .sheet-toc-spine__pop {
   position: absolute;
@@ -145,7 +145,7 @@
   background: var(--level-ink, #D2C49E);
 }
 @media (pointer: coarse) {
-  .sheet-btn { width: 36px; height: 36px; font-size: 13px; }
+  .sheet-btn { width: 36px; height: 36px; font-size: var(--fs-label); }
 }
 
 /* Всплывающее меню кнопки плашки. */
@@ -169,7 +169,7 @@
   all: unset;
   padding: 6px 14px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs-data);
   color: var(--ink);
 }
 .sheet-pop > button:not(.sheet-btn):hover { background: var(--accent-soft); }
@@ -290,7 +290,7 @@
   box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
   display: flex;
   flex-direction: column;
-  font-size: 14px;
+  font-size: var(--fs-data);
 }
 .sheet-menu > button {
   all: unset;
@@ -313,15 +313,15 @@
   justify-content: center;
   border: 1px solid var(--line);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-label);
 }
 .sheet-menu__row > button:hover { background: var(--accent-soft); }
 .sheet-menu__row--fields { align-items: center; gap: 6px; }
-.sheet-menu__row--fields label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.sheet-menu__row--fields label { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-label); }
 .sheet-menu__row--fields input[type="color"] { width: 26px; height: 22px; padding: 0; border: 0; background: none; }
-.sheet-menu__row--fields select { font-size: 13px; max-width: 90px; }
+.sheet-menu__row--fields select { font-size: var(--fs-label); max-width: 90px; }
 .sheet-menu__link { display: grid; gap: 4px; padding: 4px 14px 8px; }
-.sheet-menu__note { padding: 4px 14px; font-size: 12px; color: var(--muted); }
+.sheet-menu__note { padding: 4px 14px; font-size: var(--fs-meta); color: var(--muted); }
 @media (pointer: coarse) {
   .sheet-menu > button { padding: 10px 14px; }
   .sheet-menu__row > button { width: 38px; height: 36px; }
@@ -360,5 +360,5 @@
   background: var(--paper);
   background-image: var(--page-texture, none);
 }
-.sheet-caption { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.sheet-caption { margin: 0 0 6px; font-size: var(--fs-label); color: var(--muted); }
 .sheet-caption:first-child { font: 500 12px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }

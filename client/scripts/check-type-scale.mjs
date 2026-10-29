@@ -2,9 +2,10 @@
 /**
  * Барьер шкалы кегля.
  *
- * Шкала объявлена в index.css (`--fs-micro` 10 / `--fs-meta` 12 /
- * `--fs-data` 14 / `--fs-body` 16 / `--fs-h3` 16 / `--fs-h2` 26
- * плюс clamp-ступени для героя и чисел) — но объявить мало.
+ * Шкала v2 объявлена в index.css (docs/design-system.md §3.2): девять
+ * ступеней 11/12/13/14/15/16/26/40/64 — `--fs-micro` / `--fs-meta` /
+ * `--fs-label` / `--fs-data` / `--fs-lead` / `--fs-body` (`--fs-h3`) /
+ * `--fs-h2` (`--fs-stat`) / `--fs-h1` / `--fs-hero`. Но объявить мало.
  * До этой проверки в коде жило 570 мест с сырым кеглем, включая 14 разных
  * значений и половинные 9.5/10.5/12.5/14.5. Шкала была документом, а не
  * правилом: удержать §1.6 при таком разбросе нельзя даже теоретически.
@@ -17,7 +18,13 @@
  * верстаются в миллиметрах под бумагу, с захардкоженными бумажными цветами;
  * экранная шкала им не указ. Список намеренно короткий и перечислен здесь.
  *
- * ИСКЛЮЧЕНИЕ ВТОРОЕ — отступление с названной причиной. Барьер не только
+ * ИСКЛЮЧЕНИЕ ВТОРОЕ — лист и визард персонажа: `fantasy-punk-skin.css`,
+ * `dnd-sheet.css`, `components/dnd/*.css`. Это облик OneShot, который
+ * встраивает тот же лист; до перевода OneShot на светлую тему v2 он не
+ * трогается (§13), а «предметы листа» и вовсе свои (§6.10). Исключение —
+ * по файлам, чтобы не вешать на лист сотню одинаковых меток.
+ *
+ * ИСКЛЮЧЕНИЕ ТРЕТЬЕ — отступление с названной причиной. Барьер не только
  * запрещает, но и ПРИНИМАЕТ ОТСТУПЛЕНИЕ, если рядом написано зачем:
  *
  *     // кегль мимо шкалы намеренно — <причина>
@@ -49,6 +56,9 @@ const ROOT = new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)
  */
 const ALLOW_SELECTOR = /cheatsheet|\.combat-(row|field)|\.fill-box/i;
 
+/** Файлы листа и визарда — облик OneShot (см. ИСКЛЮЧЕНИЕ ВТОРОЕ). */
+const ALLOW_FILE = /^(fantasy-punk-skin\.css|dnd-sheet\.css|components\/dnd\/[^/]+\.css)$/;
+
 /** Метка отступления: «намеренно — <причина>», причина обязательна. */
 const EXCUSE = /кегль мимо шкалы намеренно\s*[—-]\s*(\S[^\r\n*]*)/;
 
@@ -72,6 +82,7 @@ function walk(dir) {
 function check(path) {
   const text = readFileSync(path, "utf8");
   const rel = relative(ROOT, path).replace(/\\/g, "/");
+  if (ALLOW_FILE.test(rel)) return;
 
   if (path.endsWith(".css")) {
     // Разбираем по правилам, чтобы знать селектор и простить шпаргалке.
@@ -118,8 +129,8 @@ if (offenders.length) {
   console.error("Кегль мимо шкалы — " + offenders.length + " мест:\n");
   for (const o of offenders) console.error("  " + o);
   console.error(
-    "\nШкала: var(--fs-micro) 10 · var(--fs-meta) 12 · var(--fs-data) 14 · var(--fs-body) 16 · var(--fs-h3) 16 · var(--fs-h2) 26" +
-      "\nПлюс var(--fs-h1) / var(--fs-hero) / var(--fs-stat) для крупного и чисел." +
+    "\nШкала: var(--fs-micro) 11 · var(--fs-meta) 12 · var(--fs-label) 13 · var(--fs-data) 14 · var(--fs-lead) 15 · var(--fs-body) 16" +
+      "\nПлюс var(--fs-h2) 26 · var(--fs-h1) 40 · var(--fs-hero) 64 для крупного и чисел." +
       "\nСм. комментарий к шкале в client/src/index.css."
   );
   process.exit(1);

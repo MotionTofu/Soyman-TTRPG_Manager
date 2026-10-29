@@ -8,7 +8,7 @@
 .app-shell.app-shell-maps .workspace-editor-header a.workspace-back { flex-shrink: 0; padding: 6px 10px; border: 2px solid rgba(241, 238, 223, .35); color: #f1eedf; font-size: var(--fs-data); font-weight: 600; text-decoration: none; white-space: nowrap; }
 .app-shell.app-shell-maps .workspace-editor-header a.workspace-back:hover { border-color: var(--accent); }
 .workspace-title { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.workspace-title h1 { margin: 0; overflow: hidden; color: #f1eedf; font-family: var(--font-ui); font-size: 20px; font-weight: 700; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-title h1 { margin: 0; overflow: hidden; color: #f1eedf; font-family: var(--font-ui); font-size: var(--fs-body); font-weight: 700; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-title span { overflow: hidden; color: rgba(241, 238, 223, .72); font-size: var(--fs-meta); text-overflow: ellipsis; white-space: nowrap; }
 .workspace-seg { display: flex; flex-shrink: 0; border: 2px solid #f1eedf; }
 .workspace-seg button { height: 34px; padding: 0 14px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1eedf; font-size: var(--fs-data); font-weight: 700; }
@@ -40,10 +40,10 @@
 
 /* Тело */
 .workspace-editor-body { display: flex; min-height: 0; }
-.workspace-panel-title { margin: 0; font-family: var(--font-display); font-size: 28px; font-weight: 400; line-height: 1; }
+.workspace-panel-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 400; line-height: 1; }
 .workspace-panel-title::after { --stroke-h: 10px; width: 140px; margin-top: var(--sp-1); }
 .workspace-panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.workspace-panel-heading > strong { font-size: 18px; font-weight: 800; }
+.workspace-panel-heading > strong { font-size: var(--fs-body); font-weight: 800; }
 .workspace-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; }
 .workspace-icon-button svg { width: 18px; height: 18px; }
 
@@ -70,15 +70,17 @@
 .workspace-catalog-depth input { width: 100%; }
 .workspace-catalog-depth small { font-weight: 400; color: #625f54; line-height: 1.3; }
 .workspace-catalog-variants strong { flex: 1; min-width: 0; font-size: var(--fs-data); overflow-wrap: anywhere; }
+/* кегль мимо шкалы намеренно — размер значка, а не текста: глиф в квадратной кнопке */
 .workspace-catalog-variants button { display: grid; place-items: center; width: 48px; height: 48px; padding: 2px; border: 2px solid #171717; border-radius: 0; background: #f6f1e2; box-shadow: none; font-size: 22px; font-weight: 700; }
 .workspace-catalog-variants button[aria-pressed="true"] { background: var(--accent); box-shadow: 2px 2px 0 #171717; }
 .workspace-catalog-variants img { width: 100%; height: 100%; object-fit: contain; }
 .workspace-catalog-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 10px; min-height: 0; padding: 2px 4px 4px 2px; overflow: auto; }
 .workspace-catalog-tiles > button { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 0; padding: 6px; border: 2px solid #171717; border-radius: 0; background: #eee5ce; box-shadow: none; text-align: left; white-space: normal; }
 .workspace-catalog-tiles > button[aria-pressed="true"] { background: var(--accent) var(--skin-acid-wash) center / cover; box-shadow: 3px 3px 0 #171717; }
+/* кегль мимо шкалы намеренно — размер значка, а не текста: глиф в квадратной кнопке */
 .workspace-catalog-tiles img, .workspace-catalog-glyph { box-sizing: border-box; display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 2; border: 1px solid rgba(23, 23, 23, .25); background: #f6f1e2; font-size: 28px; object-fit: contain; }
 .workspace-catalog-tiles > button > span:last-child { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
-.workspace-catalog-tiles strong { min-width: 0; font-size: 15px; line-height: 1.15; overflow-wrap: anywhere; }
+.workspace-catalog-tiles strong { min-width: 0; font-size: var(--fs-lead); line-height: 1.15; overflow-wrap: anywhere; }
 .workspace-catalog-tiles small { flex-shrink: 0; color: var(--muted); font-size: var(--fs-meta); font-weight: 700; }
 .workspace-catalog-tiles > p { grid-column: 1 / -1; margin: 0; font-size: var(--fs-data); }
 .workspace-catalog-pack { margin: 0; padding-top: 8px; border-top: 2px solid #171717; color: var(--muted); font-size: var(--fs-meta); font-weight: 600; }
@@ -96,6 +98,7 @@
 .workspace-liquid-slots > button[aria-pressed="true"] { border-color: #171717; background: var(--accent); }
 .workspace-liquid-slots > button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-liquid-slots img, .workspace-liquid-slots i { width: 36px; height: 36px; border: 2px solid #171717; border-radius: 50%; object-fit: cover; }
+/* кегль мимо шкалы намеренно — размер значка, а не текста: глиф в квадратной кнопке */
 .workspace-liquid-slots > .workspace-liquid-slot-empty { align-content: center; border: 2px dashed #8a8778; color: #8a8778; font-size: 20px; }
 .workspace-liquid-menu { position: absolute; bottom: calc(100% + 6px); left: 0; display: grid; min-width: 180px; border: 2px solid #171717; background: var(--paper); box-shadow: 3px 3px 0 #171717; }
 .workspace-liquid-menu button { display: flex; align-items: center; gap: var(--sp-2); padding: 4px 8px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; }
@@ -141,7 +144,7 @@
 .workspace-field { display: grid; gap: 6px; font-size: var(--fs-data); font-weight: 600; }
 .workspace-hint { margin: 0; color: var(--muted); font-size: var(--fs-data); line-height: 1.35; }
 .workspace-editor-properties > button:first-child { align-self: flex-end; margin-bottom: -40px; }
-.workspace-editor-properties > strong { font-family: var(--font-display); font-size: 26px; font-weight: 400; line-height: 1; }
+.workspace-editor-properties > strong { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 400; line-height: 1; }
 .workspace-editor-properties > label { display: grid; gap: var(--sp-2); }
 .workspace-editor-properties p { margin: 0; font-size: var(--fs-data); line-height: 1.35; }
 .workspace-editor-panel-heading { display: flex; align-items: center; justify-content: space-between; }
@@ -150,14 +153,15 @@
 /* Слои */
 .workspace-layers { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .workspace-layers > .workspace-panel-heading { align-items: center; padding: 14px 16px 8px; }
+/* кегль мимо шкалы намеренно — размер значка, а не текста: глиф в квадратной кнопке */
 .workspace-layers-add > summary { display: grid; place-items: center; width: 32px; height: 32px; border: 2px solid #171717; font-size: 20px; font-weight: 700; }
 .workspace-layer-list { min-height: 0; padding-bottom: 8px; overflow: auto; }
 .workspace-layer-list > p { margin: 0; padding: 8px 16px; font-size: var(--fs-data); }
-.workspace-layer-group { padding: 8px 16px 4px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.workspace-layer-group { padding: 8px 16px 4px; color: var(--muted); font-size: var(--fs-micro); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .workspace-layer { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px 0 12px; border-bottom: 1px solid rgba(23, 23, 23, .18); }
 .workspace-layer[aria-current="true"] { background: var(--accent) var(--skin-acid-wash) center / cover; }
 .workspace-layer > .map-tool-icon { flex-shrink: 0; width: 18px; height: 18px; }
-.workspace-layer-name { flex: 1; min-width: 0; height: 100%; padding: 0 6px; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 15px; font-weight: 600; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-layer-name { flex: 1; min-width: 0; height: 100%; padding: 0 6px; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: var(--fs-lead); font-weight: 600; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-layer[data-hidden] .workspace-layer-name { opacity: .5; text-decoration: line-through; }
 .workspace-layer > input { flex: 1; min-width: 0; height: 28px; }
 .workspace-layer-count { min-width: 24px; font-size: var(--fs-data); font-variant-numeric: tabular-nums; text-align: right; }
@@ -212,8 +216,8 @@
 .modal-backdrop:has(.workspace-editor-label-dialog) { left: 72px; right: 0; top: 56px; bottom: 32px; }
 /* Окно новой подписи: одно поле и две кнопки, без лишнего воздуха и без слипшихся краёв. */
 .modal.workspace-label-form { width: 360px; padding: 20px; border: 2px solid var(--ink); }
-.workspace-label-form h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.1; }
-.workspace-label-form label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.workspace-label-form h2 { margin: 0 0 14px; font-size: var(--fs-h2); line-height: 1.1; }
+.workspace-label-form label { display: grid; gap: 6px; font-size: var(--fs-label); color: var(--muted); }
 .workspace-label-form input { width: 100%; min-width: 0; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 500 var(--fs-body, 16px) var(--font-ui); }
 .workspace-label-form input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
 .workspace-label-form .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }

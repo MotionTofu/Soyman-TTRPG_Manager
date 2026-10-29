@@ -194,7 +194,7 @@
   background: var(--accent);
   color: var(--paper);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 16px;
   text-align: center;
 }
@@ -229,6 +229,7 @@
   height: 100%;
   object-fit: cover;
 }
+/* кегль мимо шкалы намеренно — размер значка, а не текста: буква-аватар закреплённой страницы */
 .side-rail__pin-letter {
   font-family: var(--font-display);
   font-size: 20px;

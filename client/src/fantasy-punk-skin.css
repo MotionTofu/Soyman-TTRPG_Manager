@@ -764,7 +764,7 @@ body.sheet-fullscreen {
   background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-data);
   font-weight: 700;
   box-shadow: 2px 2px 0 var(--skin-ink);
 }
@@ -807,7 +807,7 @@ body.sheet-fullscreen {
 .dnd-death-label {
   width: 74px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #bdb8ad;
@@ -868,7 +868,7 @@ body.sheet-fullscreen {
   display: block;
   margin: 8px 0 0;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -876,12 +876,12 @@ body.sheet-fullscreen {
 }
 .dnd-back-plate-title {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: var(--fs-label);
 }
 .dnd-back-plate-note {
   margin-top: 6px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-label);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -906,7 +906,7 @@ body.sheet-fullscreen {
   background-clip: padding-box;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -918,7 +918,7 @@ body.sheet-fullscreen {
 }
 .dnd-back-btn > span {
   font-family: var(--font-body, inherit);
-  font-size: 13px;
+  font-size: var(--fs-label);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -929,12 +929,12 @@ body.sheet-fullscreen {
 }
 .dnd-face-edit-head {
   min-height: 52px;
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 600;
 }
 .dnd-face-edit-hint {
   font-family: var(--font-body, inherit);
-  font-size: 14px;
+  font-size: var(--fs-data);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -977,7 +977,7 @@ body.sheet-fullscreen {
     border-bottom-color: var(--skin-ink);
   }
   .dnd-desktop-back .dnd-card-back .dnd-oracle-slip blockquote {
-    font-size: 26px;
+    font-size: var(--fs-h2);
   }
   .dnd-desktop-back .dnd-card-back > .dnd-card-frame-art,
   .dnd-desktop-back .dnd-card-back > .dnd-card-back-corner {
@@ -1040,13 +1040,13 @@ body.sheet-fullscreen {
   min-width: 0;
 }
 .dnd-card-face > .dnd-companions .dnd-companion-name {
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 700;
   line-height: 1.1;
 }
 .dnd-companion-meta {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #bdb8ad;
@@ -1087,7 +1087,7 @@ body.sheet-fullscreen {
 }
 .dnd-companions-label {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #bdb8ad;
@@ -1171,7 +1171,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
   white-space: nowrap;
 }
 .dnd-row-menu-btn {
-  font-size: 26px;
+  font-size: var(--fs-h2);
 }
 
 /* ---- §12. Лицевая и каркас листа по макету (2026-09-25). ----
@@ -1231,7 +1231,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 400;
   letter-spacing: 0.06em;
   box-shadow: none;
@@ -1252,7 +1252,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
 @media (max-width: 700px) {
   .dnd-deck-strip button {
     padding: 0 14px;
-    font-size: 14px;
+    font-size: var(--fs-data);
   }
 }
 
@@ -1309,7 +1309,7 @@ button.dnd-card-level {
   font-weight: 700;
 }
 .dnd-card-cartouche-classline {
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1318,7 +1318,7 @@ button.dnd-card-level {
 .dnd-card-cartouche-origin {
   margin-top: 0;
   font-family: var(--font-body, inherit);
-  font-size: 14px;
+  font-size: var(--fs-data);
   letter-spacing: 0;
   text-transform: none;
   color: var(--skin-ink-soft);
@@ -1403,7 +1403,7 @@ button.dnd-card-level {
   gap: 6px;
   margin-right: 14px;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -1412,7 +1412,7 @@ button.dnd-card-level {
   padding: 18px 0 6px;
 }
 .dnd-action-head > span:not(.dnd-action-head-extra) {
-  font-size: 16px;
+  font-size: var(--fs-body);
   letter-spacing: 0.08em;
   padding-bottom: 0;
   border-bottom: 0;
@@ -1445,7 +1445,7 @@ button.dnd-card-level {
 }
 .dnd-action-meta {
   font-family: var(--font-body, inherit);
-  font-size: 13px;
+  font-size: var(--fs-label);
   opacity: 1;
 }
 @media (min-width: 701px) {
@@ -1468,7 +1468,7 @@ button.dnd-card-level {
     margin: 0;
     text-align: left;
     font-family: var(--font-ui);
-    font-size: 14px;
+    font-size: var(--fs-data);
     color: var(--skin-ink);
   }
 }
@@ -1490,11 +1490,11 @@ button.dnd-card-level {
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") 10px center no-repeat,
     #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
-  font-size: 15px;
+  font-size: var(--fs-lead);
 }
 .dnd-card-face .dnd-bookmark-meta {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .dnd-pool-slots {
   flex-wrap: wrap;
@@ -1518,7 +1518,7 @@ button.dnd-card-level {
   font-family: var(--font-ui);
 }
 .dnd-magic-num > span {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -1568,7 +1568,7 @@ button.dnd-card-level {
 }
 .dnd-magic-cells > .muted {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1583,7 +1583,7 @@ button.dnd-card-level {
 }
 .dnd-magic-ability {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -1613,7 +1613,7 @@ button.dnd-card-level {
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1625,7 +1625,7 @@ button.dnd-card-level {
 .dnd-spell-level-summary {
   border-top: 0;
   margin-top: 16px;
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   color: var(--skin-ink-soft);
 }
@@ -1657,7 +1657,7 @@ button.dnd-card-level {
 }
 .dnd-spell-name {
   font-family: var(--font-body, inherit);
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 700;
 }
 .dnd-spell-row:not(.is-prepared):not(.is-prepared-once) .dnd-spell-name {
@@ -1668,7 +1668,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   padding: 0;
   background: none;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0;
   text-transform: none;
   font-weight: 400;
@@ -1766,7 +1766,7 @@ button.dnd-prep-diamond::after {
   border-radius: 0;
   background: rgba(23, 23, 23, 0.06);
   box-shadow: none;
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 .dnd-spell-add input:focus {
   outline: none;
@@ -1781,7 +1781,7 @@ button.dnd-prep-diamond::after {
   border-radius: 0;
   background: none;
   color: var(--skin-ink);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -1832,7 +1832,7 @@ button.dnd-prep-diamond::after {
 }
 .dnd-load-head > span {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -1925,7 +1925,7 @@ button.dnd-attune-pip {
   background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--skin-ink);
   font-family: var(--font-ui, inherit);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -1955,7 +1955,7 @@ button.dnd-attune-pip {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  font-size: 13px;
+  font-size: var(--fs-label);
   color: var(--skin-ink-soft);
 }
 .dnd-skills-legend > span {
@@ -1985,14 +1985,14 @@ button.dnd-attune-pip {
   align-items: baseline;
   gap: 10px;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink);
 }
 .dnd-skills-group-head > span {
-  font-size: 14px;
+  font-size: var(--fs-data);
   font-weight: 400;
   color: var(--skin-ink-soft);
 }
@@ -2083,7 +2083,7 @@ button.dnd-attune-pip {
   display: block;
   margin: 6px 0 8px;
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2097,7 +2097,7 @@ button.dnd-attune-pip {
 .dnd-prof-group-title {
   display: block;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -2118,7 +2118,7 @@ button.dnd-attune-pip {
   background-clip: padding-box;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2156,7 +2156,7 @@ button.dnd-proficiency-chip {
   flex: 1 1 auto;
   max-width: none;
   white-space: normal;
-  font-size: 15px;
+  font-size: var(--fs-lead);
 }
 .dnd-prof-picker-custom {
   margin-top: 6px;
@@ -2275,7 +2275,7 @@ button.dnd-proficiency-chip {
   line-height: 1.1;
 }
 .dnd-item-sub {
-  font-size: 13px;
+  font-size: var(--fs-label);
 }
 .dnd-row-menu-btn {
   border: 0;
@@ -2314,7 +2314,7 @@ button.dnd-proficiency-chip {
   padding: 0 0 6px;
   border: 0;
   background: none;
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--skin-ink);
@@ -2323,12 +2323,12 @@ button.dnd-proficiency-chip {
   display: none;
 }
 .dnd-feat-section-title {
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 600;
 }
 .dnd-feat-section-count {
   margin-left: 0;
-  font-size: 14px;
+  font-size: var(--fs-data);
   color: var(--skin-ink-soft);
 }
 .dnd-feat-section-head .chevron-icon {
@@ -2360,7 +2360,7 @@ button.dnd-proficiency-chip {
   border: 0;
   background: none;
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -2374,7 +2374,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-feat-description {
   padding: 0 14px 14px;
-  font-size: 16px;
+  font-size: var(--fs-body);
   line-height: 1.4;
 }
 .dnd-feat-prop {
@@ -2385,14 +2385,14 @@ button.dnd-proficiency-chip {
 }
 .dnd-feat-prop-label {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
   padding-top: 3px;
 }
 .dnd-feat-prop-value {
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 @media (max-width: 700px) {
   .dnd-feat-prop {
@@ -2411,7 +2411,7 @@ button.dnd-proficiency-chip {
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-data);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--skin-ink);
@@ -2452,7 +2452,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-hitdice-row .sb-label {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -2485,7 +2485,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-pool-bonus {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.04em;
 }
 .dnd-pool-bonus input {
@@ -2509,7 +2509,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-level-stats .sb-prop-label {
   font-family: var(--font-body, inherit);
-  font-size: 16px;
+  font-size: var(--fs-body);
   letter-spacing: 0;
   text-transform: none;
   color: var(--skin-ink);
@@ -2532,7 +2532,7 @@ button.dnd-proficiency-chip {
 .dnd-deck-fan-title {
   font-family: "Rubik Dirt", var(--font-ui), sans-serif;
   font-weight: 400;
-  font-size: 40px;
+  font-size: var(--fs-h1);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2660,7 +2660,7 @@ button.dnd-proficiency-chip {
   background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   font-weight: 700;
   line-height: 1;
 }
@@ -2709,7 +2709,7 @@ button.dnd-proficiency-chip {
   max-width: none;
   padding: 0;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2753,7 +2753,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-card-face .dnd-death-strip .sb-label {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-data);
   letter-spacing: 0.08em;
   color: #e8e4da;
 }
@@ -2815,7 +2815,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-conditions-hint {
   margin: -8px 0 0;
-  font-size: 14px;
+  font-size: var(--fs-data);
   color: #4a4743;
 }
 /* Сетка — без рамок и кучно (владелец 2026-09-25); minmax(0, 1fr): длинное
@@ -2832,7 +2832,7 @@ button.dnd-proficiency-chip {
   padding: 0 6px;
   border: 0;
   background: rgba(255, 255, 255, 0.4);
-  font-size: 14px;
+  font-size: var(--fs-data);
   line-height: 1.1;
 }
 .dnd-condition-option > span {
@@ -2926,7 +2926,7 @@ button.dnd-proficiency-chip {
 .dnd-frame-hint {
   margin: 4px 0 12px;
   max-width: 440px;
-  font-size: 14px;
+  font-size: var(--fs-data);
   color: #4a4743;
 }
 .dnd-frame-stage {
@@ -2971,7 +2971,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-frame-caption .dnd-card-cartouche-classline {
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2982,7 +2982,7 @@ button.dnd-proficiency-chip {
   gap: 12px;
   margin-top: 12px;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -3004,7 +3004,7 @@ button.dnd-proficiency-chip {
   background: none;
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3056,7 +3056,7 @@ button.dnd-proficiency-chip {
 /* База и начисленное в правке характеристик (Q13). */
 .dnd-ability-bonus {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.04em;
   color: var(--skin-ink-soft);
   white-space: nowrap;
@@ -3080,7 +3080,7 @@ button.dnd-proficiency-chip {
   background: var(--skin-ink);
   color: var(--skin-acid, #f3ff3a);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-data);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
@@ -3173,7 +3173,7 @@ button.dnd-card-back-corner::after {
   outline: none;
   box-shadow: none;
   background: transparent;
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 .dnd-spell-picker-search:focus-within {
   box-shadow: inset 0 -2px 0 var(--skin-ink);
@@ -3194,7 +3194,7 @@ button.dnd-card-back-corner::after {
   box-shadow: 1px 0 0 rgba(23, 23, 23, 0.25);
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: var(--fs-data);
   font-weight: 400;
   letter-spacing: 0.06em;
 }
@@ -3214,7 +3214,7 @@ button.dnd-card-back-corner::after {
   color: var(--skin-ink);
 }
 .dnd-spell-picker-group > span {
-  font-size: 13px;
+  font-size: var(--fs-label);
   color: var(--skin-ink-soft);
 }
 .dnd-spell-picker-group::after {
@@ -3257,7 +3257,7 @@ button.dnd-card-back-corner::after {
   margin-left: auto;
   flex: none;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--skin-ink-soft);
@@ -3275,7 +3275,7 @@ button.dnd-card-back-corner::after {
   background: none;
   color: var(--skin-ink-soft);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: left;
@@ -3293,7 +3293,7 @@ button.dnd-card-back-corner::after {
   gap: 8px;
   align-items: flex-start;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-data);
   line-height: 1.3;
   color: var(--skin-ink);
 }
@@ -3314,7 +3314,7 @@ button.dnd-card-back-corner::after {
   border-radius: 0;
   background: none;
   color: var(--skin-ink);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -3337,7 +3337,7 @@ button.dnd-card-back-corner::after {
   background: none;
   border: 2px dashed rgba(23, 23, 23, 0.45);
   color: var(--skin-ink-soft);
-  font-size: 14px;
+  font-size: var(--fs-data);
   cursor: default;
 }
 
@@ -3363,7 +3363,7 @@ button.dnd-card-back-corner::after {
 }
 .dnd-arcanum-tab b {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3371,7 +3371,7 @@ button.dnd-card-back-corner::after {
 .dnd-arcanum-tab span {
   max-width: 100%;
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--fs-lead);
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.1;
@@ -3387,7 +3387,7 @@ button.dnd-card-back-corner::after {
   cursor: default;
 }
 .dnd-arcanum-tab:disabled span {
-  font-size: 14px;
+  font-size: var(--fs-data);
   font-weight: 400;
 }
 .dnd-arcanum-taken {
@@ -3400,7 +3400,7 @@ button.dnd-card-back-corner::after {
   border: 2px solid var(--skin-ink);
   color: var(--skin-ink);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -3408,7 +3408,7 @@ button.dnd-card-back-corner::after {
   padding: 2px var(--sp-6) 14px 88px;
   border-bottom: 1px solid rgba(23, 23, 23, 0.14);
   background: rgba(243, 255, 58, 0.14);
-  font-size: 15px;
+  font-size: var(--fs-lead);
   line-height: 1.35;
 }
 .dnd-arcanum-picker .dnd-spell-picker-add s {
@@ -3432,7 +3432,7 @@ button.dnd-card-back-corner::after {
   }
   .dnd-arcanum-picker .dnd-spell-picker-add {
     padding: 6px 10px;
-    font-size: 15px;
+    font-size: var(--fs-lead);
     letter-spacing: 0.04em;
     line-height: 1.2;
   }
@@ -3452,7 +3452,7 @@ button.dnd-card-back-corner::after {
   box-shadow: none;
   color: var(--skin-ink, #171717);
   font: inherit;
-  font-size: 16px;
+  font-size: var(--fs-body);
   line-height: 1.4;
   resize: vertical;
 }

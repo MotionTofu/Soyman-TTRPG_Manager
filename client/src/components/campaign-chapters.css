@@ -172,7 +172,7 @@
   display: grid;
   place-items: center;
   color: var(--paper, #fff);
-  font-size: 13px;
+  font-size: var(--fs-label);
   font-weight: 700;
 }
 .campaign-scene.is-skipped .campaign-scene__mark {

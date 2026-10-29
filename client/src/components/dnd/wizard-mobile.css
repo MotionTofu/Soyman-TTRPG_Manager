@@ -148,7 +148,7 @@
 }
 .wz-foot-hint {
   grid-column: 1 / -1;
-  font-size: 15px;
+  font-size: var(--fs-lead);
   line-height: 1.25;
   text-align: center;
 }
@@ -795,7 +795,7 @@ button.wz-abil {
 }
 @media (max-width: 700px) {
   .wz :is(input, select, textarea) {
-    font-size: 16px;
+    font-size: var(--fs-body);
   }
 }
 
@@ -863,7 +863,7 @@ button.wz-abil {
     background: #141414;
     color: #e8e4da;
     font-family: var(--font-ui);
-    font-size: 11px;
+    font-size: var(--fs-micro);
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }

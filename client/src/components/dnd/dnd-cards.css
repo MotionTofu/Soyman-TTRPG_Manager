@@ -324,7 +324,7 @@
   background: #f3ff3a url("/ui/fantasy-punk/textures/acid-yellow.webp") center / 360px;
   color: #171717;
   font-family: Oswald, var(--font-ui, sans-serif);
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -482,7 +482,7 @@
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: #2a2018;
   font-family: var(--font-body, Georgia, serif);
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 /* Телефон: таблица развития на весь экран — списком уровней. */
 .dc-prog-full-frame {
@@ -501,7 +501,7 @@
   margin: 4px 0 2px;
   text-align: center;
   font-family: Oswald, var(--font-ui, sans-serif);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #4a4743;
@@ -536,12 +536,12 @@
   font-family: Oswald, var(--font-ui, sans-serif);
 }
 .dc-plist-lvl > :first-child {
-  font-size: 26px;
+  font-size: var(--fs-h2);
   font-weight: 700;
   line-height: 1;
 }
 .dc-plist-lvl small {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: #4a4743;
 }
 .dc-plist-main {
@@ -551,7 +551,7 @@
   min-width: 0;
 }
 .dc-plist-feats {
-  font-size: 15px;
+  font-size: var(--fs-lead);
   line-height: 1.25;
 }
 .dc-plist-row {
@@ -573,7 +573,7 @@
   gap: 5px;
   align-items: baseline;
   padding: 2px 7px;
-  font-size: 13px;
+  font-size: var(--fs-label);
   white-space: nowrap;
   background: rgba(23, 23, 23, 0.07);
 }
@@ -591,17 +591,17 @@
 .dc-plist-slot i {
   padding: 4px 5px 3px;
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--fs-micro);
   background: #171717;
   color: #efebe1;
 }
 .dc-plist-slot b {
   padding: 3px 7px;
-  font-size: 14px;
+  font-size: var(--fs-data);
   background: rgba(23, 23, 23, 0.07);
 }
 .dc-prog-modal .dc-prog {
-  font-size: 15px;
+  font-size: var(--fs-lead);
 }
 .dc-prog-modal .dc-prog-wrap {
   margin: 0;

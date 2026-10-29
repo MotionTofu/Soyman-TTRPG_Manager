@@ -20,14 +20,14 @@
 .sheet-gestures-sub {
   margin-top: -10px;
   color: #bdb8ad;
-  font-size: 15px;
+  font-size: var(--fs-lead);
 }
 .sheet-gestures-row {
   display: grid;
   grid-template-columns: 58px 1fr;
   gap: 12px;
   align-items: center;
-  font-size: 15px;
+  font-size: var(--fs-lead);
   line-height: 1.25;
   color: #d6d1c6;
 }
@@ -206,7 +206,7 @@
   min-height: 44px;
   padding: 6px 9px;
   color: #171717;
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 700;
 }
 @media (max-width: 700px) {
@@ -268,7 +268,7 @@
 .modal.random-hero button.lib-random-x { width: 44px; height: 44px; flex: none; }
 .modal.random-hero .lib-random-field { display: flex; flex-direction: column; gap: 8px; }
 .modal.random-hero .lib-random-field p,
-.modal.random-hero .lib-random-name { margin: 0; font-size: 15px; line-height: 1.35; }
+.modal.random-hero .lib-random-name { margin: 0; font-size: var(--fs-lead); line-height: 1.35; }
 .modal.random-hero .lib-random-name { color: #4a4743; }
 .modal.random-hero .lib-random-name b { color: #171717; }
 .modal.random-hero .lib-random-label { font: 500 12px/1 Oswald, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #4a4743; }
@@ -276,7 +276,7 @@
 .modal.random-hero .lib-random-level button { width: 48px; height: 48px; font: 400 26px/1 Oswald, sans-serif; }
 .modal.random-hero .lib-random-level button:disabled { opacity: .3; cursor: default; }
 .modal.random-hero .lib-random-level output { min-width: 64px; text-align: center; font: 600 40px/1 Oswald, sans-serif; font-variant-numeric: tabular-nums; }
-.modal.random-hero .lib-random-level span { font-size: 14px; color: #4a4743; }
+.modal.random-hero .lib-random-level span { font-size: var(--fs-data); color: #4a4743; }
 .modal.random-hero .lib-seg { display: flex; }
 .modal.random-hero .lib-seg button {
   flex: 1;
@@ -342,7 +342,7 @@
   color: #4a4743;
 }
 .no-sheet-body h1 { margin: 0; font: 400 46px/.95 "Rubik Dirt", Oswald, sans-serif; color: #171717; }
-.no-sheet-body > p { margin: 0 0 22px; font-size: 16px; line-height: 1.4; color: #4a4743; }
+.no-sheet-body > p { margin: 0 0 22px; font-size: var(--fs-body); line-height: 1.4; color: #4a4743; }
 .no-sheet-choices { display: flex; flex-direction: column; gap: 14px; }
 .no-sheet-choice {
   width: 100%;
@@ -412,9 +412,9 @@
   text-transform: uppercase;
 }
 .dossier-section > summary::-webkit-details-marker { display: none; }
-.dossier-section > summary::after { content: "▼"; margin-left: auto; font-size: 14px; transform: rotate(-90deg); }
+.dossier-section > summary::after { content: "▼"; margin-left: auto; font-size: var(--fs-data); transform: rotate(-90deg); }
 .dossier-section[open] > summary::after { transform: none; }
-.dossier-count { font-size: 14px; color: #4a4743; }
+.dossier-count { font-size: var(--fs-data); color: #4a4743; }
 .dossier-note {
   font: 400 14px/1.2 var(--font-body, "Sofia Sans Semi Condensed", sans-serif);
   letter-spacing: 0;

@@ -166,7 +166,7 @@
   min-width: 0;
 }
 .wz .wz-steps-btn small {
-  font-size: 11px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.14em;
   color: #bdb8ad;
   opacity: 1;
@@ -390,7 +390,7 @@
   align-items: center;
   width: 38px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1;
   text-transform: uppercase;
 }
@@ -437,7 +437,7 @@
   padding: 3px 9px 4px;
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--wz-ink);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
@@ -445,12 +445,12 @@
 }
 .wz .wz-ribbon-caption strong {
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: var(--fs-h2);
   font-weight: 400;
   line-height: 1;
 }
 .wz .wz-ribbon-caption .muted {
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 /* «Выбрать» в ленте — действие, не состояние: чёрная с жёлтым именем. */
 .wz .wz-ribbon .wz-wide-btn,
@@ -529,7 +529,7 @@
 }
 .wz-abil-mod {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 1.1;
   color: var(--wz-muted);
 }
@@ -539,7 +539,7 @@
   right: -10px;
   padding: 2px 6px 3px;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   font-weight: 700;
   line-height: 1.1;
   transform: rotate(6deg);
@@ -548,7 +548,7 @@
   mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 .wz .wz-abil-label {
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.1em;
 }
 .wz .wz-abil.is-key .wz-abil-label::after {
@@ -556,7 +556,7 @@
 }
 .wz-abil-was {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: var(--fs-micro);
   color: var(--wz-muted);
 }
 .wz-abil-armed {
@@ -565,7 +565,7 @@
   align-items: center;
   padding: 4px 10px 7px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   line-height: 0.9;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -813,7 +813,7 @@
   overflow-y: auto;
   padding-bottom: var(--sp-4);
   color: #2a2018;
-  font-size: 16px;
+  font-size: var(--fs-body);
   line-height: 1.5;
   scrollbar-width: thin;
   /* MentionText делит абзацы переводами строк — без этого они слипаются. */
@@ -830,7 +830,7 @@
 .wz-plate-meta {
   margin: 0 0 var(--sp-3);
   text-align: center;
-  font-size: 14px;
+  font-size: var(--fs-data);
   opacity: 0.8;
 }
 .wz-plate-hint {
@@ -846,7 +846,7 @@
 .wz-plate .dc-scroll .dc-scroll-body {
   min-height: 0;
   padding: 0;
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 .wz-plate .dc-title {
   font-family: var(--font-body);
@@ -913,13 +913,13 @@
   }
   .wz-rail-head span {
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: var(--fs-meta);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--wz-acid);
   }
   .wz-rail-head small {
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: #bdb8ad;
   }
   .wz-rail-steps {
@@ -948,7 +948,7 @@
     background: none;
     color: #bdb8ad;
     font-family: var(--font-ui);
-    font-size: 16px;
+    font-size: var(--fs-body);
     letter-spacing: 0.03em;
     text-align: left;
     text-transform: uppercase;
@@ -972,14 +972,14 @@
   .wz-rail-num {
     flex: none;
     width: 26px;
-    font-size: 14px;
+    font-size: var(--fs-data);
     color: #8a867e;
   }
   .wz-rail-steps .is-done .wz-rail-num {
     color: var(--wz-acid);
   }
   .wz-rail-steps [aria-current="step"] .wz-rail-num {
-    font-size: 15px;
+    font-size: var(--fs-lead);
     color: inherit;
   }
   .wz-rail-foot {
@@ -989,7 +989,7 @@
     gap: 10px;
   }
   .wz-rail-foot small {
-    font-size: 12px;
+    font-size: var(--fs-meta);
     color: #a8a398;
   }
   .wz .wz-rail-foot button {
@@ -1131,7 +1131,7 @@
     background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px;
     color: var(--wz-paper);
     font-family: var(--font-ui);
-    font-size: 11px;
+    font-size: var(--fs-micro);
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
@@ -1144,7 +1144,7 @@
   .wz-mini-sub {
     margin-top: 4px;
     font-family: var(--font-ui);
-    font-size: 15px;
+    font-size: var(--fs-lead);
     color: var(--wz-muted);
   }
 
@@ -1206,7 +1206,7 @@
   }
   /* Досье: шрифт в полях крупнее, сами поля — прежнего размера. */
   .wz .wz-step:has(.wizard-dossier-grid) :is(.wz-field input, .wz-field select, textarea) {
-    font-size: 16px;
+    font-size: var(--fs-body);
     box-sizing: border-box;
   }
   .wz .wz-step:has(.wizard-dossier-grid) :is(.wz-field input, .wz-field select) {
@@ -1243,7 +1243,7 @@
     line-height: 1;
   }
   .wz-stage-name .muted {
-    font-size: 13px;
+    font-size: var(--fs-label);
   }
   /* Все имена в одной ячейке — ширина по самому длинному, видно текущее. */
   .wz-stage-name strong > span {
@@ -1269,12 +1269,12 @@
     gap: 8px;
     width: auto;
     padding: 0 12px;
-    font-size: 15px;
+    font-size: var(--fs-lead);
     letter-spacing: 0.1em;
   }
   .wz .wz-stage-aside .wz-level-num input {
     width: 40px;
-    font-size: 26px;
+    font-size: var(--fs-h2);
   }
   .wz .wz-stage-aside .wz-level button {
     width: 44px;
@@ -1311,7 +1311,7 @@
   .wz-strip-label {
     align-self: flex-start;
     font-family: var(--font-ui);
-    font-size: 13px;
+    font-size: var(--fs-label);
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1326,7 +1326,7 @@
     mask-border: var(--wz-torn) 48 fill / 5px round;
   }
   .wz-strip-head .muted {
-    font-size: 12px;
+    font-size: var(--fs-meta);
     line-height: 1.2;
   }
   .wz-strip-row {
@@ -1357,7 +1357,7 @@
   }
   .wz-thumb-name {
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: var(--fs-meta);
     font-weight: 600;
     line-height: 1.15;
     text-align: center;
@@ -1438,11 +1438,11 @@
     place-items: center;
     background: var(--wz-panel);
     font-family: var(--font-ui);
-    font-size: 40px;
+    font-size: var(--fs-h1);
   }
   .wz-tile-name {
     font-family: var(--font-ui);
-    font-size: 15px;
+    font-size: var(--fs-lead);
     font-weight: 600;
     line-height: 1.15;
     text-transform: uppercase;
@@ -1484,7 +1484,7 @@
     gap: 14px;
   }
   .wz-plate-actions .muted {
-    font-size: 13px;
+    font-size: var(--fs-label);
   }
   .wz-plate-actions .wz-shadow {
     margin-left: auto;
@@ -1560,10 +1560,10 @@
     font-size: 38px;
   }
   .wz .wz-abil-mod {
-    font-size: 14px;
+    font-size: var(--fs-data);
   }
   .wz .wz-abil-label {
-    font-size: 15px;
+    font-size: var(--fs-lead);
   }
 }
 
@@ -1598,12 +1598,12 @@
 }
 .wz-lvl .campaign-player-header > :first-child {
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: var(--fs-h2);
   text-transform: none;
 }
 .wz-lvl .campaign-player-header > :last-child {
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #bdb8ad;
@@ -1681,7 +1681,7 @@
     padding: 0;
   }
   .wz .wz-set-items {
-    font-size: 15px;
+    font-size: var(--fs-lead);
     line-height: 1.4;
   }
   .wz .wz-set-gold {
@@ -1695,7 +1695,7 @@
   }
   .wz .wz-set-note {
     display: block;
-    font-size: 14px;
+    font-size: var(--fs-data);
     color: var(--wz-muted);
   }
   /* Под золотом, в колонке текста: внизу набора его закрывала строка
@@ -1713,7 +1713,7 @@
     background: var(--wz-paper);
     background-clip: padding-box;
     font-family: var(--font-ui);
-    font-size: 14px;
+    font-size: var(--fs-data);
     font-style: normal;
     font-weight: 500;
     letter-spacing: 0.06em;
@@ -1795,7 +1795,7 @@
 :is(.wz, .wz-sheet, .wz-lvl) .wz-row-group {
   padding: 12px 0 4px;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: var(--fs-label);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--wz-mag, #ff3e91);

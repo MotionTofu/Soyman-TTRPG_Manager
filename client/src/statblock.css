@@ -1132,7 +1132,7 @@ summary.sb-section {
 .dnd-replica-heading {
   margin: 0;
   font-family: var(--font-ui, inherit);
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1173,12 +1173,12 @@ summary.sb-section {
 }
 .dnd-replica-count {
   font-family: var(--font-ui, inherit);
-  font-size: 26px;
+  font-size: var(--fs-h2);
   line-height: 1;
   white-space: nowrap;
 }
 .dnd-replica-count > span {
-  font-size: 18px;
+  font-size: var(--fs-body);
   font-weight: 400;
   opacity: 0.7;
 }
@@ -1212,17 +1212,17 @@ summary.sb-section {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  font-size: 17px;
+  font-size: var(--fs-body);
   overflow-wrap: anywhere;
 }
 .dnd-replica-sub {
-  font-size: 13px;
+  font-size: var(--fs-label);
   opacity: 0.7;
 }
 .dnd-replica-made {
   flex: none;
   padding: 1px 8px;
-  font-size: 13px;
+  font-size: var(--fs-label);
   background: rgba(23, 23, 23, 0.1);
 }
 .dnd-replica-add {
@@ -1234,7 +1234,7 @@ summary.sb-section {
   background: none;
   color: inherit;
   font-family: var(--font-ui, inherit);
-  font-size: 14px;
+  font-size: var(--fs-data);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-align: left;
@@ -1255,7 +1255,7 @@ summary.sb-section {
 }
 .dnd-replica-base > .dnd-replica-name {
   flex: 1;
-  font-size: 16px;
+  font-size: var(--fs-body);
 }
 /* «Назад / Создать» под длинным списком основ — всегда на виду. */
 .dnd-replica-foot {
