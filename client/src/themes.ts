@@ -402,7 +402,7 @@ const DARK_THEME = skinTheme("dark", "Тёмная", "dark", {
     "--mark": "#FF5FA2", "--on-mark": "#092328",
     "--danger-bg": "#FF5FA2", "--danger-bg-hover": "#FF7DB4", "--danger-text": "#092328",
     "--nav": "#051619", "--nav-ink": "#DCE6DF", "--nav-muted": "#7FA592",
-    "--nav-edge": "#12544F", "--nav-blend": "multiply",
+    "--nav-edge": "#12544F", "--nav-blend": "luminosity",
     "--tab": "#0A262B", "--field": "#0A262B", "--ph": "#0A262B",
   },
 });
