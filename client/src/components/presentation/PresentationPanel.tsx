@@ -7,7 +7,7 @@ import { readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
 import { sessionPaths } from "../../data/sessions";
 import { CutsceneBindings } from "../cutscenes/CutsceneBindings";
-import { LazyDetails } from "../LazyDetails";
+import { ContextMenu } from "../ContextMenu";
 import { PresentationStage } from "./PresentationStage";
 import { PlayerMapStage } from "./PlayerMapStage";
 import { ScreenPreview } from "./ScreenPreview";
@@ -190,6 +190,11 @@ export function PresentationPanel({
   // return — после всех хуков выше.
   // The shared panel also launches cutscenes, including when this session has no scene/cover images.
 
+  const [mapPick, setMapPick] = useState(false);
+  const [cutscenesOpen, setCutscenesOpen] = useState(false);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+
   const buttonLayers = (screenPres?.layers ?? [])
     .filter((l) => l.has_button === 1)
     .sort((a, b) => a.position - b.position || a.id - b.id);
@@ -198,42 +203,44 @@ export function PresentationPanel({
   const defaultsOf = (p: ScenePresentation | CampaignCover | null) =>
     (p?.layers ?? []).filter((l) => l.has_button === 0 || l.visible_on_enter === 1).map((l) => l.id);
 
+  const showScene = () =>
+    void putShow({ mode: "scene", scene_id: currentPresentationSceneId, visible_layer_ids: defaultsOf(currentPres), shown: 1 });
+  const showCover = () => void putShow({ mode: "cover", scene_id: null, visible_layer_ids: defaultsOf(cover), shown: 1 });
+  const showMap = (id: number) =>
+    void putShow({ mode: "map", scene_id: currentMapSceneId, map_id: id, visible_layer_ids: [], shown: 1 });
+
+  // Что сейчас на экране — одной строкой (макет Roll-Pult, Q13).
+  const onScreen = showing
+    ? show?.mode === "cover"
+      ? "Заглавное кампании"
+      : show?.mode === "map"
+        ? show.scene_id !== currentMapSceneId
+          ? `Карта «${shownMap?.name ?? "…"}» из: ${shownMapSceneName || "…"}`
+          : `${stage?.current?.name ?? "Сцена"} · карта «${shownMap?.name ?? "…"}»`
+        : hanging
+          ? `Кадр из: ${shownName || "…"}`
+          : `${stage?.current?.name ?? "…"} · картинка`
+    : "Экран чёрный";
+  const picture = showing && show?.mode !== "map";
+  const onMap = showing && show?.mode === "map";
+
   return (
-    <LazyDetails
-      title="Представление"
-      className="card stack"
-      defaultOpen
-      actions={
-        <span className="row" style={{ gap: 4 }}>
-          <button type="button" className="comp-mini" title="Окно для второго монитора" onClick={() => void openWindow()}>
-            ⇱
-          </button>
-          <button
-            type="button"
-            className="comp-mini"
-            title="Выбрать монитор"
-            onClick={() => void getScreens().then((list) => setScreens(list))}
-          >
-            ▾
-          </button>
-        </span>
-      }
-    >
+    <section className="pp-strip" aria-label="На экране игроков">
       {screens && (
-        <div className="card" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Экран:</span>
+        <div className="pp-strip__screens">
+          <span className="d-note">ЭКРАН:</span>
           {screens.map((s) => (
-            <button key={s.id} type="button" onClick={() => void openWindow(s)}>
+            <button key={s.id} type="button" className="d-btn d-btn--sm" onClick={() => void openWindow(s)}>
               {s.label}
             </button>
           ))}
-          <button type="button" className="comp-mini" onClick={() => setScreens(null)}>
+          <button type="button" className="d-btn d-btn--sm" onClick={() => setScreens(null)}>
             ✕
           </button>
         </div>
       )}
-      <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 220px", minWidth: 200, maxWidth: 360 }}>
+      <div className="pp-strip__row">
+        <div className="pp-strip__pv">
           <ScreenPreview
             show={show}
             adjustable={showing && show?.mode !== "map"}
@@ -275,111 +282,117 @@ export function PresentationPanel({
             )}
           </ScreenPreview>
         </div>
-        <div className="stack" style={{ flex: "2 1 240px", minWidth: 220, gap: 8 }}>
-          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" className="comp-mini" onClick={() => void openWindow()}>
-              ⇱ Окно игрокам
+        <div className="pp-strip__tx">
+          <small>На экране игроков</small>
+          <b>{onScreen}</b>
+        </div>
+        <div className="pp-strip__acts">
+          {/* Что показать: картинка сцены (или заглавное), карта, катсцена. */}
+          <span className="d-seg" role="group" aria-label="Что показать">
+            <button
+              type="button"
+              className={picture ? "active" : undefined}
+              disabled={!currentHas && !coverHas}
+              onClick={() => (currentHas ? showScene() : showCover())}
+            >
+              Картинка
             </button>
-            {showing ? (
-              <button type="button" onClick={() => void putShow({ shown: 0 })}>
-                Скрыть
-              </button>
-            ) : show?.mode === "map" && show.map_id != null && shownMap ? (
-              <button type="button" className="primary" onClick={() => void putShow({ shown: 1 })}>
-                Показать
-              </button>
-            ) : show?.mode === "scene" && show.scene_id != null ? (
-              <button type="button" className="primary" onClick={() => void putShow({ shown: 1 })}>
-                Показать
-              </button>
-            ) : currentHas ? (
-              <button
-                type="button"
-                className="primary"
-                onClick={() =>
-                  void putShow({
-                    mode: "scene",
-                    scene_id: currentPresentationSceneId,
-                    visible_layer_ids: defaultsOf(currentPres),
-                    shown: 1,
-                  })
-                }
-              >
-                Показать сцену
-              </button>
-            ) : coverHas ? (
-              <button
-                type="button"
-                className="primary"
-                onClick={() =>
-                  void putShow({ mode: "cover", scene_id: null, visible_layer_ids: defaultsOf(cover), shown: 1 })
-                }
-              >
-                Показать заглавное
-              </button>
-            ) : null}
-            {coverHas && !(show?.mode === "cover" && showing) ? (
-              <button
-                type="button"
-                onClick={() => void putShow({ mode: "cover", scene_id: null, visible_layer_ids: defaultsOf(cover), shown: 1 })}
-              >
-                Заглавное
-              </button>
-            ) : null}
-            {currentHas && showing && !(show?.mode === "scene" && show.scene_id === currentPresentationSceneId) && (
-              <button type="button" onClick={() => void putShow({
-                mode: "scene", scene_id: currentPresentationSceneId, visible_layer_ids: defaultsOf(currentPres), shown: 1,
-              })}>Сцена</button>
-            )}
-            {currentId != null && currentMaps.map((map) => (
-              <button key={map.id} type="button"
-                className={showing && show?.mode === "map" && show.map_id === map.id ? "primary" : undefined}
-                onClick={() => void putShow({ mode: "map", scene_id: currentMapSceneId, map_id: map.id, visible_layer_ids: [], shown: 1 })}>
-                Карта: {map.name}
-              </button>
-            ))}
-          </div>
-          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-            {showing
-              ? show?.mode === "cover"
-                ? "На экране: заглавное кампании"
-                : show?.mode === "map"
-                  ? show.scene_id !== currentMapSceneId
-                    ? `На экране — карта «${shownMap?.name ?? "…"}» из: ${shownMapSceneName || "…"}`
-                    : `На экране: карта «${shownMap?.name ?? "…"}»`
-                : hanging
-                  ? `На экране — кадр из: ${shownName || "…"}`
-                  : `На экране: ${stage?.current?.name ?? "…"}`
-              : "Экран чёрный"}
+            <button
+              type="button"
+              className={onMap || mapPick ? "active" : undefined}
+              disabled={currentMaps.length === 0}
+              onClick={() => (currentMaps.length === 1 ? showMap(currentMaps[0].id) : setMapPick((v) => !v))}
+            >
+              Карта
+            </button>
+            <button type="button" className={cutscenesOpen ? "active" : undefined} onClick={() => setCutscenesOpen((v) => !v)}>
+              Катсцена
+            </button>
           </span>
-          {showing && buttonLayers.length > 0 && (
-            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              {buttonLayers.map((l, i) => {
-                const on = visibleSet.has(l.id);
-                return (
-                  <button
-                    key={l.id}
-                    type="button"
-                    className={on ? "primary" : undefined}
-                    title={i < 9 ? `Горячая клавиша ${i + 1}` : undefined}
-                    onClick={() => void toggleLayer(l.id)}
-                  >
-                    {i < 9 ? `${i + 1} · ` : ""}
-                    {on ? "◉ " : "◎ "}
-                    {l.name || "Слой"}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {showing && show?.mode !== "map" && buttonLayers.length === 0 && (
-            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-              Кнопочных слоёв нет — всё видимое уже на экране.
-            </span>
-          )}
+          {showing ? (
+            <button type="button" className="d-btn d-btn--sm" onClick={() => void putShow({ shown: 0 })}>
+              Погасить
+            </button>
+          ) : (show?.mode === "map" && show.map_id != null && shownMap) || (show?.mode === "scene" && show.scene_id != null) ? (
+            <button type="button" className="d-btn d-btn--sm" onClick={() => void putShow({ shown: 1 })}>
+              Показать
+            </button>
+          ) : currentHas ? (
+            <button type="button" className="d-btn d-btn--sm" onClick={showScene}>
+              Показать сцену
+            </button>
+          ) : coverHas ? (
+            <button type="button" className="d-btn d-btn--sm" onClick={showCover}>
+              Показать заглавное
+            </button>
+          ) : null}
+          <button
+            ref={moreRef}
+            type="button"
+            className="d-btn d-btn--sm"
+            aria-label="Ещё о показе"
+            aria-haspopup="menu"
+            onClick={() => {
+              const r = moreRef.current?.getBoundingClientRect();
+              if (r) setMenuAt({ x: r.right, y: r.bottom });
+            }}
+          >
+            …
+          </button>
         </div>
       </div>
-      <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} mode="launch" />
-    </LazyDetails>
+      {menuAt && (
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          items={[
+            { label: "Окно игрокам", onClick: () => void openWindow() },
+            { label: "Выбрать монитор", onClick: () => void getScreens().then((list) => setScreens(list)) },
+            ...(coverHas && !(show?.mode === "cover" && showing) ? [{ label: "Заглавное", onClick: showCover }] : []),
+          ]}
+          onClose={() => setMenuAt(null)}
+        />
+      )}
+      {mapPick && currentMaps.length > 1 && (
+        <div className="pp-strip__line">
+          {currentMaps.map((map) => (
+            <button
+              key={map.id}
+              type="button"
+              className={`d-btn d-btn--sm${onMap && show?.map_id === map.id ? " is-on" : ""}`}
+              onClick={() => {
+                showMap(map.id);
+                setMapPick(false);
+              }}
+            >
+              {map.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Слои — второй строкой, только когда есть: их жмут посреди сцены
+          (клавиши 1–9). */}
+      {showing && buttonLayers.length > 0 && (
+        <div className="pp-strip__line">
+          {buttonLayers.map((l, i) => {
+            const on = visibleSet.has(l.id);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                className={`d-btn d-btn--sm${on ? " is-on" : ""}`}
+                title={i < 9 ? `Горячая клавиша ${i + 1}` : undefined}
+                onClick={() => void toggleLayer(l.id)}
+              >
+                {i < 9 ? `${i + 1} · ` : ""}
+                {on ? "◉ " : "◎ "}
+                {l.name || "Слой"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {cutscenesOpen && <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} mode="launch" />}
+    </section>
   );
 }

@@ -7,6 +7,7 @@ import { launchAffects, sessionPaths } from "../data/sessions";
 import { useSoundEngineOptional } from "../sound/engine";
 import { FloatWindow } from "./FloatWindow";
 import { NavIcon } from "./NavIcons";
+import { MentionText } from "./mentions/MentionText";
 import { setWidgetFloatMode, useWidgetFloatMode } from "../widgetFloatStore";
 import type {
   LaunchResult,
@@ -326,7 +327,7 @@ function PreviewBody({ preview }: { preview: ScenePreview }) {
       {preview.entryCondition && (
         <div className="sw-entry">
           <span className="sw-label">Вход</span>
-          {preview.entryCondition}
+          <MentionText text={preview.entryCondition} />
         </div>
       )}
 
@@ -336,14 +337,19 @@ function PreviewBody({ preview }: { preview: ScenePreview }) {
       {preview.readAloud && (
         <div className="sw-read">
           <span className="sw-label">Зачитать</span>
-          <p>{preview.readAloud}</p>
+          {/* Упоминания — подписью, а не сырым токеном [[тип@uid|…]]. */}
+          <p>
+            <MentionText text={preview.readAloud} />
+          </p>
         </div>
       )}
 
       {!preview.readAloud && preview.summary && (
         <div className="sw-read is-summary">
           <span className="sw-label">В двух словах</span>
-          <p>{preview.summary}</p>
+          <p>
+            <MentionText text={preview.summary} />
+          </p>
         </div>
       )}
 

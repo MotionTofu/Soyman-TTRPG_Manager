@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 const mock=vi.hoisted(()=>({cover:false}));
@@ -12,7 +12,9 @@ import { queryClient } from "../../data/queryClient";
 import { PresentationPanel } from "./PresentationPanel";
 beforeEach(()=>{mock.cover=false;queryClient.clear();});afterEach(cleanup);
 const show=()=>render(<QueryClientProvider client={queryClient}><PresentationPanel sessionId={8} campaignId={3}/></QueryClientProvider>);
+const openCutscenes=()=>fireEvent.click(screen.getByRole('button',{name:'Катсцена'}));
 describe('катсцены внутри штатной панели показа',()=>{
-  it('не скрывает панель при отсутствии сцен, карт и заглавного',()=>{show();expect(screen.getByText('Представление')).toBeTruthy();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
-  it('сохраняет обычные кнопки заглавного рядом с катсценами',()=>{mock.cover=true;show();expect(screen.getByRole('button',{name:'Показать заглавное'})).toBeTruthy();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
+  // Полоса показа (рестайл «Д», Q13): план катсцен раскрывается сегментом «Катсцена».
+  it('не скрывает панель при отсутствии сцен, карт и заглавного',()=>{show();expect(screen.getByText('На экране игроков')).toBeTruthy();openCutscenes();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
+  it('сохраняет обычные кнопки заглавного рядом с катсценами',()=>{mock.cover=true;show();expect(screen.getByRole('button',{name:'Показать заглавное'})).toBeTruthy();openCutscenes();expect(screen.getByText('Катсцены сессии 8 · launch')).toBeTruthy();});
 });

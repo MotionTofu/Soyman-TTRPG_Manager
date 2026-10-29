@@ -181,3 +181,58 @@ button.pres-title {
 @supports (font-size: 1cqw) {
   .pres-frame > .pres-title { --pres-title-size: 4.5cqw; }
 }
+
+/* Полоса показа на Пульте (рестайл «Д», макет Roll-Pult, Q13): превью 150px,
+   что на экране, сегмент «Картинка / Карта / Катсцена», «Погасить» и «…».
+   Слои, выбор карты и план катсцен — строками под ней, только когда нужны. */
+.pp-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line);
+  background: var(--sheet);
+}
+.pp-strip__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+}
+.pp-strip__pv {
+  flex: 0 0 150px;
+  border: var(--edge-width) solid var(--edge);
+}
+.pp-strip__tx {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.pp-strip__tx small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pp-strip__tx b {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.pp-strip__acts,
+.pp-strip__line,
+.pp-strip__screens {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.pp-strip__acts {
+  margin-left: auto;
+}
+.pp-strip .d-btn.is-on {
+  background: var(--surface);
+  color: var(--on-surface);
+}
