@@ -2,11 +2,11 @@
 
 <!-- impeccable:design-schema 1 -->
 
-**Source of truth:** [`docs/design-system-punk-zine.md`](docs/design-system-punk-zine.md) —
-the full "PUNK ZINE" design system (palette modes, typography voices, texture
-layer, grid/spacing, dice-as-numbers, mobile tab bar, component norms). Read
-that document for direction and rules. This file only covers what it doesn't:
-where each piece actually lives in this codebase.
+**Source of truth:** [`docs/design-system.md`](docs/design-system.md) —
+design system v2 «Д» (2026-10-29): two themes, tokens, type scale, decor
+dose per screen, components. PUNK ZINE (`docs/design-system-punk-zine.md`)
+is archived. This file only covers where each piece lives in code; the code
+map below still describes the pre-v2 state until the token step lands.
 
 ## OneShot visual scope
 

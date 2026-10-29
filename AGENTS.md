@@ -2,7 +2,7 @@
 
 Личный менеджер настольных ролевых кампаний. React + TypeScript клиент (`client/`),
 Express + better-sqlite3 сервер (`server/`), упаковка в десктоп через `electron/`.
-Продуктовый контекст — `PRODUCT.md`, визуальная система — `DESIGN.md`.
+Продуктовый контекст — `PRODUCT.md`, визуальная система — `docs/design-system.md` (v2 «Д»), где что лежит в коде — `DESIGN.md`.
 
 ## Ассеты приложения
 
