@@ -601,9 +601,9 @@
   flex: 1;
 }
 .population__create {
-  background: var(--paper-ink);
+  background: var(--surface);
   color: var(--paper-acid);
-  border-color: var(--paper-ink);
+  border-color: var(--surface);
   font-weight: 700;
 }
 /* «Мир кампании» (ADR-0006): фильтры — чипы «Населения», кнопка — его же. */

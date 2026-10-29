@@ -241,7 +241,9 @@
   white-space: nowrap;
 }
 .d-seg button + button { border-left: var(--edge-width) solid var(--edge); }
-.d-seg button.active { background: var(--surface); color: var(--on-surface); }
+/* Выбранное — заливка цветом текста: в тёмной теме плашки почти чёрные, и
+   выбор на них потерялся бы. В светлой это тот же цвет, что у плашки. */
+.d-seg button.active { background: var(--ink); color: var(--sheet); }
 .d-seg button:disabled,
 .d-seg button[aria-disabled="true"] { color: var(--muted); opacity: 0.5; cursor: not-allowed; }
 .d-chip {
@@ -253,7 +255,7 @@
   font-size: var(--fs-meta);
 }
 .d-chip:hover { border-color: var(--edge); }
-.d-chip.active { background: var(--surface); color: var(--on-surface); border-color: var(--surface); }
+.d-chip.active { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
 .d-mark {
   padding: var(--sp-1) var(--sp-3);
   border: var(--edge-width) solid var(--mark);

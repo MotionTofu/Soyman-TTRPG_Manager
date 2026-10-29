@@ -237,12 +237,14 @@ const DARK_THEME = skinTheme("dark", "Тёмная", "dark", {
   paper: "#092328", paper2: mixHex("#092328", "#ffffff", 0.04), elevated: mixHex("#092328", "#ffffff", 0.08),
   ink: "#DCE6DF", ink2: "#BFD0C4", muted: "#93BC9C",
   accent: "#CEDAD0", accent2: "#8BBB92",
-  surface: "#CEDAD0", onSurface: "#092328",
+  // Плашки и главные кнопки — почти чёрные со светлым текстом: светлые
+  // слишком ярко били с тёмной страницы (владелец, 2026-10-29).
+  surface: "#041215", onSurface: "#DCE6DF",
   line: "rgba(206,218,208,.16)",
   fontDisplay: "'Oswald', 'Sofia Sans Semi Condensed', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  bandBg: "#CEDAD0",
+  bandBg: "#041215",
   pageTexture: "radial-gradient(rgba(139,187,146,.06) 1px, transparent 1px) 0 0/3px 3px",
-  playerBarText: "#092328",
+  playerBarText: "#DCE6DF",
   semantic: { gm: "#DCE6DF", player: "#FF5FA2", paid: "#DCE6DF", free: "#93BC9C", active: "#DCE6DF", hold: "#93BC9C", danger: "#FF5FA2" },
   v2: {
     "--sheet": "#0D2C31", "--edge": "#CEDAD0",
