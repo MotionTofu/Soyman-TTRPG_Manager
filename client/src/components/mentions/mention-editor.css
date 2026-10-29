@@ -2,12 +2,12 @@
    правом верхнем углу поля, пока поле в фокусе; место под них поле держит
    всегда, чтобы текст не перескакивал при фокусе. */
 .rt-editor { position: relative; min-width: 0; }
-.rt-editor-tools { position: absolute; top: var(--sp-1); right: var(--sp-1); z-index: 2; display: flex; gap: 2px; }
+.rt-editor-tools { position: absolute; top: var(--sp-1); right: var(--sp-1); z-index: 2; display: flex; gap: var(--sp-1); }
 .rt-editor-tools .rt-btn, .rt-editor-strip .rt-btn { min-width: 26px; height: 26px; padding: 0 var(--sp-2); border-color: transparent; background: transparent; color: var(--muted); }
 .rt-editor-tools .rt-btn:hover, .rt-editor-strip .rt-btn:hover { background: var(--accent-soft); color: var(--ink); }
-.rt-editor .rt-prose-input:first-child { padding-right: 64px; }
+.rt-editor .rt-prose-input:first-child { padding-right: var(--sp-10); }
 /* Телефон: полоса над полем, пока выделен текст. */
-.rt-editor-strip { position: absolute; bottom: 100%; left: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; background: var(--bg-elevated); border: 1px solid var(--line); }
+.rt-editor-strip { position: absolute; bottom: 100%; left: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: var(--sp-1); padding: var(--sp-1); background: var(--bg-elevated); border: 1px solid var(--line); }
 .rt-editor-content { min-width: 0; }
 .rt-editor--scroll .rt-editor-content { max-height: 60vh; overflow-y: auto; }
 .rt-editor--scroll .rt-prose-input { field-sizing: fixed; overflow-y: auto; resize: vertical; }

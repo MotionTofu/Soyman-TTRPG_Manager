@@ -233,6 +233,7 @@ export function SystemDetailPage() {
           <section className="sys-hero2">
             <div className="sys-hero2__text">
               <div className="d-mono">Система{system.code ? ` · ${system.code}` : ""}</div>
+              {/* каркас в обход намеренно — на «Обзоре» название стоит на листе (макет Roll-OS-Overview), над ярлыками его нет */}
               <h1 className="sys-hero2__title">{system.name}</h1>
               <dl className="sys-hero2__facts">
                 <dt>Кампании</dt>

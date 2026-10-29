@@ -85,7 +85,7 @@ import { equippedWeaponSummaries, type AttackRow, weaponAttackRows, combatSpellR
 import { DndOriginEditForm, NARRATIVE_FIELDS, useDndOrigin } from "./SheetOrigin";
 import { resolveSpell, resolveFeature, recomputeGrantedSpells, spellSnapshotFromEntry } from "./grantedSpells";
 import { hitDicePools, DndRestModal, DndResourcesView } from "./SheetRest";
-import { DeathSaveOverlay, AcQuickBox, HpQuickBox, InitiativeQuickBox, ActiveConditionIcons, ConditionsBox, LiveChip, InitiativePlate } from "./SheetVitals";
+import { DeathSaveOverlay, AcQuickBox, HpApplyBar, HpQuickBox, InitiativeQuickBox, ActiveConditionIcons, ConditionsBox, LiveChip, InitiativePlate } from "./SheetVitals";
 import { CompanionBody, CompanionToken } from "./SheetCompanions";
 import { DndSkillsView, FightingStyleCounter, EntryChoiceCounter, WeaponMasteryEdit } from "./SheetProficiencies";
 import { EquipmentLoadPlate, DndEquipmentEdit, DndEquipmentQuickView } from "./SheetEquipment";
@@ -841,6 +841,8 @@ export function DndCharacterView({
   dossierExtra,
   onRelations,
   sideColumn,
+  appShell,
+  hostCommand,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -906,6 +908,13 @@ export function DndCharacterView({
   // 2026-09-28, Q20). Её ширину берёт то, что вкладки ужаты до таббара.
   sideColumn?: ReactNode;
   onRelations?: () => void;
+  // Оболочка «Д» основного SoyMan (гриллинг листа 2026-10-29, Q1–Q3): блок
+  // хитов над вкладками, числа на ярлыках, отдых — в шапке страницы, а не на
+  // обороте. OneShot не передаёт — у него всё как было.
+  appShell?: boolean;
+  // Команда из шапки страницы: «Отдых ▾» и «Уровень +». Каждый новый seq —
+  // новое нажатие.
+  hostCommand?: { kind: "rest-short" | "rest-long" | "level-up"; seq: number };
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -977,6 +986,10 @@ export function DndCharacterView({
   useEffect(() => {
     if (fanSignal) setFanOpen(true);
   }, [fanSignal]);
+  const tabCounts: Partial<Record<DndViewTab, number>> = {
+    Снаряжение: value.equipmentSections.reduce((n, s) => n + s.items.length, 0),
+    Особенности: value.classFeatures.length + value.speciesFeatures.length + value.feats.length + value.specialAbilities.length,
+  };
   // Модалка передачи из Снаряжения: то же меню, что оборот карты.
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   // Предмет, выбранный из меню строки: диалог передачи открывается уже
@@ -1391,7 +1404,7 @@ export function DndCharacterView({
             ему только что отказали. */}
         {/* ОТДЫХ — на обороте (макет 2026-09-25): его нажимают раз за
             сцену, а на лицевой жетон спорил с рамкой карты. */}
-        {onQuickUpdate && (
+        {onQuickUpdate && !appShell && (
           <section className="dnd-back-plate" aria-label="Отдых">
             <h4 className="dnd-back-plate-title">Отдых</h4>
             <div className="dnd-back-plate-row">
@@ -1717,6 +1730,13 @@ export function DndCharacterView({
   // выбором круга нельзя).
   const [summonSpell, setSummonSpell] = useState<number | null>(null);
   const [restOpen, setRestOpen] = useState<false | "short" | "long">(false);
+  useEffect(() => {
+    if (!hostCommand?.seq || !onQuickUpdate) return;
+    if (hostCommand.kind === "level-up") {
+      if (!detached) setShowLevelUp(true);
+    } else setRestOpen(hostCommand.kind === "rest-short" ? "short" : "long");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только новое нажатие
+  }, [hostCommand?.seq]);
   // Происхождение правится адресом ?edit=1 (карандаш на плашке чарника в
   // профиле): кнопки-карандаша в шапке больше нет (решение владельца
   // 2026-09-06). На самой карте органов правки нет — за столом лист читают.
@@ -3409,8 +3429,9 @@ export function DndCharacterView({
 
           {!cardOnly && (
           <div className="dnd-desktop-tab">
+          {appShell && showDesktopFace && <HpApplyBar value={value} onQuickUpdate={onQuickUpdate} />}
           {showDesktopFace && (
-          <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа">
+          <div className={`dnd-deck-strip${appShell ? " d-tabs" : ""}`} role="tablist" aria-label="Карты листа">
             {DND_VIEW_TABS.map((t) => (
               <button
                 key={t}
@@ -3418,10 +3439,12 @@ export function DndCharacterView({
                 role="tab"
                 aria-selected={tab === t}
                 className={tab === t ? "active" : ""}
-                style={tab === t ? { borderBottomColor: cardColor } : undefined}
+                style={tab === t && !appShell ? { borderBottomColor: cardColor } : undefined}
                 onClick={() => setTab(t)}
               >
                 {t}
+                {/* Числа на ярлыках — как в макете Roll-Sheet (Q2). */}
+                {appShell && tabCounts[t] ? <b>{tabCounts[t]}</b> : null}
                 {t === "Снаряжение" && pendingItems > 0 && <span className="dnd-tab-dot" aria-label="есть непринятое" />}
               </button>
             ))}

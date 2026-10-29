@@ -352,6 +352,180 @@ function effectiveMaxHp(value: DndCharacterData): { stored: number; temp: number
   return { stored, temp, effective: stored + temp };
 }
 
+/** Урон: сначала съедает временные хиты, текущие не уходят ниже нуля.
+ *  concentrationDc — СЛ спасброска Телосложения, если персонаж держит
+ *  концентрацию (кроме Метки охотника у Неустанного охотника). */
+function hpDamage(value: DndCharacterData, n: number) {
+  const cur = Number(value.hitPointsCurrent) || 0;
+  const temp = Number(value.hitPointsTemp) || 0;
+  const fromTemp = Math.min(n, Math.max(0, temp));
+  // Хиты не уходят в минус: по правилам они останавливаются на нуле, а
+  // «-7 хитов» на листе — это ещё и потерянный признак того, что персонаж
+  // при смерти. Мгновенная смерть от превышения максимума за одно
+  // попадание — решение стола, лист её не объявляет.
+  const patch = {
+    hitPointsTemp: String(temp - fromTemp),
+    hitPointsCurrent: String(Math.max(0, cur - (n - fromTemp))),
+  };
+  // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
+  // половина урона — что больше. Лист считает СЛ, но не решает за игрока:
+  // спасбросок чаще проходит, чем нет, и снимать концентрацию самому было
+  // бы враньём. Исключение — Неустанный охотник следопыта (13 ур.): урон не
+  // прерывает концентрацию на Метке охотника, и СЛ тогда не показываем.
+  const relentlessHunter = [...value.classFeatures, ...value.speciesFeatures, ...value.feats, ...value.specialAbilities].some(
+    (f) => f.name === "Неустанный охотник"
+  );
+  const huntersMarkConc = /метка охотника/i.test(value.concentration ?? "");
+  const concentrationDc = value.concentration && !(relentlessHunter && huntersMarkConc) ? Math.max(10, Math.floor(n / 2)) : null;
+  return { patch, concentrationDc, text: `−${n} · ${cur} → ${patch.hitPointsCurrent}` };
+}
+
+/** Лечение до эффективного максимума; с нуля — сбрасывает спасброски от смерти. */
+function hpHeal(value: DndCharacterData, n: number) {
+  const cur = Number(value.hitPointsCurrent) || 0;
+  // Потолок лечения — эффективный максимум: временный минус его снижает.
+  const cap = effectiveMaxHp(value).effective;
+  const healed = cap > 0 ? Math.min(cur + n, cap) : cur + n;
+  // Любое лечение с нуля поднимает на ноги: накопленные спасброски от
+  // смерти сбрасываются, иначе они переживут исцеление и убьют персонажа
+  // в следующем бою.
+  const revived = cur <= 0 && healed > 0;
+  const patch: Partial<DndCharacterData> = {
+    hitPointsCurrent: String(healed),
+    ...(revived ? { deathSaveSuccesses: 0, deathSaveFailures: 0 } : {}),
+  };
+  return { patch, text: `+${n} · ${cur} → ${healed}` };
+}
+
+/**
+ * Блок хитов над вкладками листа основного SoyMan (гриллинг листа «Д»
+ * 2026-10-29, Q1): урон и лечение — самое частое действие за столом, и
+ * окно ради него больше не открывают. Число хитов — вход в то же окно
+ * (временные, максимум, ручная правка). OneShot блока не получает.
+ */
+export function HpApplyBar({
+  value,
+  onQuickUpdate,
+}: {
+  value: DndCharacterData;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [last, setLast] = useState<{ current: string; temp: string; text: string } | null>(null);
+  const [concentrationDc, setConcentrationDc] = useState<number | null>(null);
+  const cur = Number(value.hitPointsCurrent) || 0;
+  const temp = Number(value.hitPointsTemp) || 0;
+  const { effective: effMax } = effectiveMaxHp(value);
+  const barTotal = Math.max(1, effMax + temp);
+  const curPct = Math.max(0, Math.min(100, (cur / barTotal) * 100));
+  const tempPct = Math.max(0, Math.min(100 - curPct, (temp / barTotal) * 100));
+  const n = Number(amount) || 0;
+
+  function apply(kind: "damage" | "heal") {
+    if (!onQuickUpdate || n <= 0) return;
+    const r = kind === "damage" ? hpDamage(value, n) : hpHeal(value, n);
+    onQuickUpdate(r.patch);
+    setLast({ current: value.hitPointsCurrent, temp: value.hitPointsTemp, text: r.text });
+    setConcentrationDc("concentrationDc" in r ? r.concentrationDc : null);
+    setAmount("");
+  }
+
+  return (
+    <section className="hp-apply" aria-label="Хиты">
+      <div className="d-plate-row">
+        <span className="d-plate">Хиты</span>
+        <span className="d-note">
+          {temp > 0 ? `временные ${temp}` : "временных нет"}
+          {Number(value.hitPointMaxTemp) ? ` · макс ${formatModifier(Number(value.hitPointMaxTemp))}` : ""}
+        </span>
+      </div>
+      <div className="hp-apply__body">
+        <button
+          type="button"
+          className={`hp-apply__readout${value.hitPointMax && cur <= 0 ? " is-down" : ""}`}
+          disabled={!onQuickUpdate}
+          title="Временные хиты, максимум, ручная правка"
+          onClick={() => setModalOpen(true)}
+        >
+          <b>{value.hitPointsCurrent || "—"}</b>
+          <span>/ {value.hitPointMax ? effMax : "—"}</span>
+        </button>
+        <div className="hp-apply__main">
+          <div className="hp-apply__bar" aria-hidden="true">
+            <i style={{ width: `${curPct}%` }} />
+            <i className="is-temp" style={{ width: `${tempPct}%` }} />
+          </div>
+          {onQuickUpdate && (
+            <form
+              className="hp-apply__row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                apply("damage");
+              }}
+            >
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                aria-label="Урон или лечение"
+                placeholder="Урон / лечение"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <button type="submit" className="d-btn d-btn--primary" disabled={n <= 0}>
+                Урон
+              </button>
+              <button type="button" className="d-btn" disabled={n <= 0} onClick={() => apply("heal")}>
+                Лечение
+              </button>
+              {last && (
+                <span className="hp-apply__last">
+                  <span className="d-mono">{last.text}</span>
+                  <button
+                    type="button"
+                    className="d-btn d-btn--sm"
+                    onClick={() => {
+                      onQuickUpdate({ hitPointsCurrent: last.current, hitPointsTemp: last.temp });
+                      setLast(null);
+                      setConcentrationDc(null);
+                    }}
+                  >
+                    Отменить
+                  </button>
+                </span>
+              )}
+            </form>
+          )}
+          {concentrationDc !== null && value.concentration && onQuickUpdate && (
+            <div className="hp-apply__conc">
+              <span>
+                Концентрация «{value.concentration}» — спасбросок Телосложения, СЛ <b>{concentrationDc}</b>
+              </span>
+              <button
+                type="button"
+                className="d-btn d-btn--sm"
+                onClick={() => {
+                  onQuickUpdate({ concentration: "" });
+                  setConcentrationDc(null);
+                }}
+              >
+                Сорвалась
+              </button>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setConcentrationDc(null)}>
+                Устояла
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {modalOpen && onQuickUpdate && (
+        <HpEditModal value={value} onQuickUpdate={onQuickUpdate} onClose={() => setModalOpen(false)} />
+      )}
+    </section>
+  );
+}
+
 export function HpQuickBox({
   value,
   onQuickUpdate,
@@ -485,57 +659,20 @@ function HpEditModal({
   function applyDamage() {
     const n = Number(amount) || 0;
     if (n <= 0) return;
-    const fromTemp = Math.min(n, Math.max(0, tempNum));
-    const rest = n - fromTemp;
-    // Хиты не уходят в минус: по правилам они останавливаются на нуле, а
-    // «-7 хитов» на листе — это ещё и потерянный признак того, что персонаж
-    // при смерти. Мгновенная смерть от превышения максимума за одно
-    // попадание — решение стола, лист её не объявляет.
-    const patch = {
-      hitPointsTemp: String(tempNum - fromTemp),
-      hitPointsCurrent: String(Math.max(0, curNum - rest)),
-    };
-    onQuickUpdate(patch);
-    setDraft((d) => ({ ...d, ...patch }));
-    setLast({
-      current: value.hitPointsCurrent,
-      temp: value.hitPointsTemp,
-      text: `−${n} · ${curNum} → ${patch.hitPointsCurrent}`,
-    });
-    // Урон по концентрирующемуся требует спасброска Телосложения, СЛ 10 или
-    // половина урона — что больше. Лист считает СЛ, но не решает за игрока:
-    // спасбросок чаще проходит, чем нет, и снимать концентрацию самому было
-    // бы враньём. Исключение — Неустанный охотник следопыта (13 ур.): урон не
-    // прерывает концентрацию на Метке охотника, и СЛ тогда не показываем.
-    const relentlessHunter = [...value.classFeatures, ...value.speciesFeatures, ...value.feats, ...value.specialAbilities].some(
-      (f) => f.name === "Неустанный охотник"
-    );
-    const huntersMarkConc = /метка охотника/i.test(value.concentration ?? "");
-    if (value.concentration && !(relentlessHunter && huntersMarkConc)) {
-      setConcentrationDc(Math.max(10, Math.floor(n / 2)));
-    }
+    const r = hpDamage(value, n);
+    onQuickUpdate(r.patch);
+    setDraft((d) => ({ ...d, ...r.patch }));
+    setLast({ current: value.hitPointsCurrent, temp: value.hitPointsTemp, text: r.text });
+    if (r.concentrationDc !== null) setConcentrationDc(r.concentrationDc);
     setAmount("");
   }
   function applyHeal() {
     const n = Number(amount) || 0;
     if (n <= 0) return;
-    // Потолок лечения — эффективный максимум: временный минус его снижает.
-    const cap = effMax;
-    const healed = cap > 0 ? Math.min(curNum + n, cap) : curNum + n;
-    // Любое лечение с нуля поднимает на ноги: накопленные спасброски от
-    // смерти сбрасываются, иначе они переживут исцеление и убьют персонажа
-    // в следующем бою.
-    const revived = curNum <= 0 && healed > 0;
-    onQuickUpdate({
-      hitPointsCurrent: String(healed),
-      ...(revived ? { deathSaveSuccesses: 0, deathSaveFailures: 0 } : {}),
-    });
-    setDraft((d) => ({ ...d, hitPointsCurrent: String(healed) }));
-    setLast({
-      current: value.hitPointsCurrent,
-      temp: value.hitPointsTemp,
-      text: `+${n} · ${curNum} → ${healed}`,
-    });
+    const r = hpHeal(value, n);
+    onQuickUpdate(r.patch);
+    setDraft((d) => ({ ...d, hitPointsCurrent: r.patch.hitPointsCurrent as string }));
+    setLast({ current: value.hitPointsCurrent, temp: value.hitPointsTemp, text: r.text });
     setConcentrationDc(null);
     setAmount("");
   }

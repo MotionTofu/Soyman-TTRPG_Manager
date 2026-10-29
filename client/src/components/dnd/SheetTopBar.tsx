@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { saveDndPrefs } from "../../dndPrefs";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import type { SaveStatus } from "../../data/queuedSave";
+import { ContextMenu } from "../ContextMenu";
 import "./sheet-chrome.css";
 
 /**
@@ -39,8 +40,16 @@ export function SheetTopBar({
   largeCards,
   onLargeCards,
   busy,
+  subtitle,
+  onRest,
+  onLevelUp,
 }: {
   title: string;
+  /** «Воин 5 · Дварф · Вотердип» под именем (макет Roll-Sheet, Q3). */
+  subtitle?: string;
+  /** «Отдых ▾» в полосе — вместо кнопок на обороте карты (Q3). */
+  onRest?: (kind: "short" | "long") => void;
+  onLevelUp?: () => void;
   status: SaveStatus;
   onBack: () => void;
   sheets: { id: number; title: string }[];
@@ -59,6 +68,7 @@ export function SheetTopBar({
 }) {
   const prefs = useDndPrefs();
   const [open, setOpen] = useState(false);
+  const [restAt, setRestAt] = useState<{ x: number; y: number } | null>(null);
   const barRef = useRef<HTMLElement>(null);
 
   // Полоса — от края до края экрана, где бы ни стояла страница листа.
@@ -107,6 +117,7 @@ export function SheetTopBar({
       </button>
       <span className="sheet-bar-title">
         <span className="sheet-bar-name">{title}</span>
+        {subtitle && <span className="sheet-bar-sub">{subtitle}</span>}
         {sheets.length > 1 && (
           <label className="sheet-bar-switch">
             <span>
@@ -125,6 +136,36 @@ export function SheetTopBar({
       <span role="status" className="sheet-bar-status">
         {busy ? "Собираю файл…" : status === "saving" ? "Сохраняю…" : status === "error" ? "Не сохранено" : "Сохранено"}
       </span>
+      {onRest && (
+        <button
+          type="button"
+          className="sheet-bar-btn"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setRestAt({ x: r.left, y: r.bottom + 4 });
+          }}
+        >
+          Отдых ▾
+        </button>
+      )}
+      {onLevelUp && (
+        <button type="button" className="sheet-bar-btn" onClick={onLevelUp}>
+          Уровень +
+        </button>
+      )}
+      {restAt && onRest && (
+        <ContextMenu
+          x={restAt.x}
+          y={restAt.y}
+          ariaLabel="Отдых"
+          items={[
+            { label: "Короткий", hint: "кости хитов", onClick: () => onRest("short") },
+            { label: "Долгий", hint: "всё заново", onClick: () => onRest("long") },
+          ]}
+          onClose={() => setRestAt(null)}
+        />
+      )}
       <button
         type="button"
         className="sheet-bar-toggle"

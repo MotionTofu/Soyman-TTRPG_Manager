@@ -11,7 +11,7 @@ import { CharacterDossier, CharacterDossierModal, CharacterRelationsModal } from
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useCurrentUser } from "../api/currentUser";
 import type { Character } from "../types";
-import { SHEET_THEME } from "../themes";
+import "./sheet-shell.css";
 import { SheetNotesColumn } from "../components/dnd/SheetNotesColumn";
 
 /**
@@ -49,19 +49,12 @@ export function CharacterDetailPage() {
   }, [characterId]);
 
   // Панели приложения прячутся: лист занимает весь экран (тот же приём, что
-  // у пульта, body.live-hide-dock).
-  // Лист и визард вышли самостоятельным модулем в облике OneShot: тема
-  // приложения их не красит (решение владельца 2026-09-27) — поверх неё на
-  // body кладётся тема OneShot («noir»), на уходе снимается.
+  // у пульта, body.live-hide-dock). Тема — приложения (гриллинг листа «Д»
+  // 2026-10-29, Q4): «нуар» OneShot поверх неё больше не кладётся, карта-таро
+  // и кости держат свою бумагу сами (fantasy-punk-skin.css).
   useEffect(() => {
-    const body = document.body;
-    const vars = Object.entries(SHEET_THEME.vars);
-    body.classList.add("sheet-fullscreen");
-    for (const [k, v] of vars) body.style.setProperty(k, v);
-    return () => {
-      body.classList.remove("sheet-fullscreen");
-      for (const [k] of vars) body.style.removeProperty(k);
-    };
+    document.body.classList.add("sheet-fullscreen");
+    return () => document.body.classList.remove("sheet-fullscreen");
   }, []);
 
   if (notFound) {
@@ -149,7 +142,6 @@ export function CharacterDetailPage() {
 
   return (
     <div className="sheet-page">
-      <div className="fp-page-backdrop" aria-hidden="true" />
       <StatblockList
         ownerType="character"
         ownerId={character.id}

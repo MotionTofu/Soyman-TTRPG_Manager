@@ -91,7 +91,7 @@
   flex: none;
   width: 28px;
   height: 28px;
-  border: 1.5px solid var(--edge);
+  border: var(--edge-width) solid var(--edge);
   background: linear-gradient(135deg, var(--type-dot, var(--muted)) 0 7px, transparent 7px);
   font-family: var(--font-ui);
   font-size: var(--fs-label);

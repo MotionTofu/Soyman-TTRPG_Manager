@@ -118,6 +118,9 @@
   --skin-edit-pencil: url("/ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp");
   --skin-cross: url("/ui/fantasy-punk/semantic/ui-icons/cross.webp");
 
+  /* Бумажная подложка блоков листа. В основном SoyMan её заменяет поверхность
+     темы (ниже, у body.sheet-fullscreen) — кроме карты-таро и её оборота. */
+  --sheet-panel: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   --skin-paper-base: #e8e4da;
   /* Вуаль над фоновой бумагой: текстура на 30 % тише (владелец, 2026-09-25). */
   --skin-page-veil: linear-gradient(rgb(232 228 218 / .3), rgb(232 228 218 / .3));
@@ -138,9 +141,30 @@
  * confirmation / focus states — they are deliberately not pinned here.
  * Previously --card-radius lived in :root and leaked onto every app page;
  * it now lives here, restoring the other pages to their own token. */
+/* В основном SoyMan лист следует теме приложения (гриллинг листа «Д»
+   2026-10-29, Q4): бумагу держат только предметы — карта-таро и её оборот. */
+body.sheet-fullscreen {
+  --sheet-panel: var(--sheet);
+  /* Тушь и бумага скина — по теме: в тёмной чернильные плашки светлеют, как
+     плашки «Д». */
+  --skin-ink: var(--ink);
+  --skin-ink-soft: var(--muted);
+  --skin-paper-base: var(--sheet);
+}
+/* Текст и подписи карты-таро — тоже предмет, не тема. */
+body.sheet-fullscreen :is(.dnd-card-face, .dnd-card-back) {
+  --skin-ink: #171717;
+  --skin-ink-soft: #56534f;
+  --skin-paper-base: #e8e4da;
+  --text: #171717;
+  --text-bright: #171717;
+  --text-muted: #56534f;
+  --label: #56534f;
+}
 .oneshot-sheet,
-body.sheet-fullscreen,
+body.sheet-fullscreen :is(.dnd-card-face, .dnd-card-back),
 .wz .wz-overview-card {
+  --sheet-panel: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   --paper: #e8e4da;
   --paper-2: #d9d3c2;
   --ink: #171717;
@@ -158,7 +182,7 @@ body.sheet-fullscreen,
  * (владелец 2026-09-27). На тёмной рубашке телефона чёрная стрелка не видна —
  * там остаётся системная; бумажная рубашка ПК получает свою ниже, в §desktop.
  * Модалки листа порталятся в body, отсюда body:has(.oneshot-sheet). */
-:is(.oneshot-sheet, body.sheet-fullscreen, body:has(.oneshot-sheet)) select:not([multiple], [size], :where(.dnd-card-back *)) {
+:is(.oneshot-sheet, body:has(.oneshot-sheet)) select:not([multiple], [size], :where(.dnd-card-back *)) {
   appearance: none;
   padding-right: 26px;
   background-image: var(--skin-chevron-down);
@@ -190,8 +214,7 @@ body.sheet-fullscreen,
  * The dedicated backdrop element keeps text out of every texture concern:
  * fixed, out of flow, pointer-transparent, behind all content. Scoped to
  * sheet hosts; 1shot home is untouched. */
-.oneshot-sheet,
-body.sheet-fullscreen {
+.oneshot-sheet {
   background-color: var(--skin-paper-base);
 }
 .fp-page-backdrop {
@@ -852,7 +875,7 @@ body.sheet-fullscreen {
   padding: 12px 14px;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   color: var(--skin-ink);
   transform: none;
@@ -906,7 +929,7 @@ body.sheet-fullscreen {
   border: 4px solid transparent;
   border-image: none;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   color: var(--skin-ink);
   font-family: var(--font-ui);
@@ -918,7 +941,7 @@ body.sheet-fullscreen {
 .dnd-back-btn.is-ink {
   border: 0;
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
 }
 .dnd-back-btn > span {
   font-family: var(--font-body, inherit);
@@ -991,7 +1014,7 @@ body.sheet-fullscreen {
     max-width: 760px;
     border: 4px solid transparent;
     border-image: none;
-    background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+    background: var(--sheet-panel);
     background-clip: padding-box;
   }
 }
@@ -1232,7 +1255,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
   padding: 0 16px;
   border: 0;
   border-right: 1px solid rgba(23, 23, 23, 0.2);
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   color: var(--skin-ink);
   font-family: var(--font-ui);
   font-size: var(--fs-lead);
@@ -1245,7 +1268,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
 }
 .dnd-deck-strip button.active {
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
   font-weight: 400;
   border-bottom-color: transparent !important;
 }
@@ -1263,7 +1286,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
 /* Карта: бумага paper-panel, портрет гаснет в неё ровно — без рваной
  * полосы R3.2 (на макете её нет). */
 .dnd-card-face {
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
 }
 .dnd-card-portrait-grain {
   background-image: none;
@@ -1346,7 +1369,7 @@ button.dnd-card-level {
   align-items: center;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-live-chip.is-on {
@@ -1370,7 +1393,7 @@ button.dnd-card-level {
 }
 /* Закладки — бумажные полосы с кромкой. */
 .dnd-card-face .dnd-bookmark {
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   border-left-width: 5px;
 }
 /* Бумага страницы с фактурой видна и под листом, а не только ниже него. */
@@ -1389,7 +1412,7 @@ button.dnd-card-level {
 .dnd-pool-band {
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   color: var(--skin-ink);
   padding: 10px 14px;
@@ -1424,7 +1447,7 @@ button.dnd-card-level {
 .dnd-action-cards {
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-action-card {
@@ -1492,7 +1515,7 @@ button.dnd-card-level {
   border-radius: 0;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") 10px center no-repeat,
-    #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+    var(--sheet-panel);
   background-clip: padding-box;
   font-size: var(--fs-lead);
 }
@@ -1518,7 +1541,7 @@ button.dnd-card-level {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   font-family: var(--font-ui);
 }
 .dnd-magic-num > span {
@@ -1614,7 +1637,7 @@ button.dnd-card-level {
   padding: 0 14px;
   border: 0;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   color: var(--skin-ink);
   font-family: var(--font-ui);
   font-size: var(--fs-label);
@@ -1623,7 +1646,7 @@ button.dnd-card-level {
 }
 .dnd-seg > button[aria-pressed="true"] {
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
 }
 /* Круги: заголовок — число и слово капсом, строки — лист в неровном контуре. */
 .dnd-spell-level-summary {
@@ -1645,7 +1668,7 @@ button.dnd-card-level {
 .dnd-spell-level-card[open] > .dnd-spell-list {
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-spell-list > div + div > .dnd-spell-row {
@@ -1826,7 +1849,7 @@ button.dnd-prep-diamond::after {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
 }
 .dnd-load-head {
   display: flex;
@@ -2004,7 +2027,7 @@ button.dnd-attune-pip {
   display: block;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   columns: auto !important;
 }
@@ -2118,7 +2141,7 @@ button.dnd-attune-pip {
   border: 3px solid transparent;
   border-image: none;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   color: var(--skin-ink);
   font-family: var(--font-ui);
@@ -2216,7 +2239,7 @@ button.dnd-proficiency-chip {
   padding: 12px 14px;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-weight-bar {
@@ -2238,7 +2261,7 @@ button.dnd-proficiency-chip {
   gap: 0;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-equipment-view-list > li {
@@ -2291,7 +2314,7 @@ button.dnd-proficiency-chip {
   border: 4px solid transparent;
   border-image: none;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-equipment-search .dnd-chip {
@@ -2341,7 +2364,7 @@ button.dnd-proficiency-chip {
 .dnd-feat-list {
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-feat-item,
@@ -2412,7 +2435,7 @@ button.dnd-proficiency-chip {
   border: 4px solid transparent;
   border-image: none;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
   font-family: var(--font-ui);
   font-size: var(--fs-data);
@@ -2452,7 +2475,7 @@ button.dnd-proficiency-chip {
   padding: 0 16px;
   gap: 14px;
   justify-content: flex-start;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
 }
 .dnd-hitdice-row .sb-label {
   font-family: var(--font-ui);
@@ -2476,7 +2499,7 @@ button.dnd-proficiency-chip {
   padding: 14px 16px;
   border: 4px solid transparent;
   border-image: none;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-clip: padding-box;
 }
 .dnd-pool-row .dnd-pool-title > .sb-prop-label {
@@ -2551,7 +2574,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-deck-fan-card {
   border: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   color: var(--skin-ink);
   text-align: left;
 }
@@ -2572,7 +2595,7 @@ button.dnd-proficiency-chip {
   margin-left: auto;
   padding: 2px 6px;
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
   font-size: 10px;
   letter-spacing: 0.08em;
 }
@@ -2765,7 +2788,7 @@ button.dnd-proficiency-chip {
   min-height: 34px;
   padding: 0 12px;
   border: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   color: var(--skin-ink);
 }
 .dnd-card-portrait-zone.is-empty.has-death {
@@ -2787,7 +2810,7 @@ button.dnd-proficiency-chip {
   padding: 18px 16px 20px;
   border: 0;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   box-shadow: 6px 6px 0 rgba(23, 23, 23, 0.55);
   color: var(--skin-ink);
 }
@@ -2867,7 +2890,7 @@ button.dnd-proficiency-chip {
   border: 0;
   border-radius: 0;
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
   font-family: var(--font-ui);
   font-size: 17px;
   font-weight: 600;
@@ -2884,7 +2907,7 @@ button.dnd-proficiency-chip {
   position: absolute;
   inset: 8px 4px 4px;
   z-index: -2;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   pointer-events: none;
 }
 .dnd-card-face .dnd-card-portrait-ghost {
@@ -2910,7 +2933,7 @@ button.dnd-proficiency-chip {
   padding: 16px;
   border: 0;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   box-shadow: 6px 6px 0 rgba(23, 23, 23, 0.55);
   color: var(--skin-ink);
 }
@@ -3015,7 +3038,7 @@ button.dnd-proficiency-chip {
 }
 .dnd-frame-actions button.primary {
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
 }
 /* «Редактировать»: миниатюра в кадре карты и две кнопки. */
 .dnd-face-portrait {
@@ -3031,7 +3054,7 @@ button.dnd-proficiency-chip {
   display: grid;
   place-items: center;
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
 }
 .dnd-face-portrait .dnd-face-avatar img {
   width: 100%;
@@ -3137,7 +3160,7 @@ button.dnd-card-back-corner::after {
 .dnd-spell-picker,
 .dnd-spell-picker-head,
 .dnd-spell-picker-foot {
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   color: var(--skin-ink);
 }
 .dnd-spell-picker-head {
@@ -3193,7 +3216,7 @@ button.dnd-card-back-corner::after {
   padding: 0 14px;
   border: 0;
   border-radius: 0;
-  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background: var(--sheet-panel);
   background-color: #e4dfd2;
   box-shadow: 1px 0 0 rgba(23, 23, 23, 0.25);
   color: var(--skin-ink);
@@ -3204,7 +3227,7 @@ button.dnd-card-back-corner::after {
 }
 .dnd-spell-picker-chips .dnd-pick-chip.is-on {
   background: var(--skin-ink);
-  color: #e8e4da;
+  color: var(--skin-paper-base);
 }
 .dnd-spell-picker-group {
   align-items: baseline;

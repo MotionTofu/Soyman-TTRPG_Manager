@@ -42,6 +42,7 @@ import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader } from "./CreatureCard";
 import { emptyDndCharacter, normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm";
 import { classAndLevelSummary } from "./dnd/dndSummary";
+import { stripLatin } from "./dnd/sheetShared";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard, clearWizardDraftFor, hasWizardDraftFor, type WizardRandom } from "./dnd/DndCharacterWizard";
@@ -65,7 +66,8 @@ const NO_STATBLOCKS: Statblock[] = [];
 
 // Имя статблока для модалки удаления и тоста отмены: «ЭТО» из прежнего
 // confirm() не называло, что именно сносится.
-type SheetInfo = { name: string; status: SaveStatus; isDnd: boolean };
+type SheetInfo = { name: string; status: SaveStatus; isDnd: boolean; subtitle?: string };
+type HostCommand = { kind: "rest-short" | "rest-long" | "level-up"; seq: number };
 
 function statblockTitle(sb: Statblock): string {
   let parsed: Record<string, unknown> = {};
@@ -359,6 +361,8 @@ export function StatblockList({
   // открытой карты, колода веером — сигналом в неё.
   const [sheetInfo, setSheetInfo] = useState<SheetInfo | null>(null);
   const [fanSignal, setFanSignal] = useState(0);
+  const [hostCommand, setHostCommand] = useState<HostCommand | undefined>(undefined);
+  const command = (kind: HostCommand["kind"]) => setHostCommand((c) => ({ kind, seq: (c?.seq ?? 0) + 1 }));
   const [gesturesOpen, setGesturesOpen] = useState(false);
   const [largeCards, setLargeCards] = useState(loadLargeCards);
   // Скачивание идёт секунды (картинки, справочник) — статус в полосе.
@@ -756,6 +760,7 @@ export function StatblockList({
       onPortraitRefresh={onPortraitRefresh}
       onSheetInfo={sheetOnly ? setSheetInfo : undefined}
       fanSignal={sheetOnly ? fanSignal : undefined}
+      hostCommand={sheetOnly ? hostCommand : undefined}
       dossierExtra={dossierExtra}
         sideColumn={sideColumn}
       onRelations={onRelations}
@@ -892,6 +897,9 @@ export function StatblockList({
             остаётся только у старых персонажей с несколькими листами. */}
         <SheetTopBar
           title={sheetInfo?.name || ownerName || "Персонаж"}
+          subtitle={dndSheet ? [sheetInfo?.subtitle, campaignName].filter(Boolean).join(" · ") : undefined}
+          onRest={dndSheet ? (kind) => command(kind === "short" ? "rest-short" : "rest-long") : undefined}
+          onLevelUp={dndSheet ? () => command("level-up") : undefined}
           status={sheetInfo?.status ?? "idle"}
           onBack={() => onSheetBack?.()}
           sheets={statblocks.map((sb) => ({ id: sb.id, title: statblockTitle(sb) }))}
@@ -1520,6 +1528,7 @@ function StatblockCard({
   onPortraitRefresh,
   onSheetInfo,
   fanSignal,
+  hostCommand,
   dossierExtra,
   sideColumn,
   onRelations,
@@ -1543,6 +1552,8 @@ function StatblockCard({
   onSheetInfo?: (info: SheetInfo) => void;
   /** Колода веером по команде полосы («⋯» → «Колода карт»). */
   fanSignal?: number;
+  /** «Отдых ▾» и «Уровень +» из полосы. */
+  hostCommand?: HostCommand;
   dossierExtra?: ReactNode;
   // Колонка заметок справа от вкладок листа D&D (SheetNotesColumn).
   sideColumn?: ReactNode;
@@ -1800,9 +1811,19 @@ function StatblockCard({
       : null;
 
   const sheetIsDnd = statblock.format === "dnd_character";
+  // Строка под именем в полосе: «Воин 5 · Дварф» (кампанию добавит полоса).
+  const dndChar = sheetIsDnd ? (dndValue as DndCharacterData | null) : null;
+  const sheetSubtitle = dndChar
+    ? [
+        dndChar.classes.filter((c) => c.className).map((c) => `${stripLatin(c.className)} ${c.level}`).join(" / "),
+        stripLatin(dndChar.raceName ?? ""),
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : undefined;
   useEffect(() => {
-    onSheetInfo?.({ name: summaryTitle ?? "", status: queue.status, isDnd: sheetIsDnd });
-  }, [onSheetInfo, summaryTitle, queue.status, sheetIsDnd]);
+    onSheetInfo?.({ name: summaryTitle ?? "", status: queue.status, isDnd: sheetIsDnd, subtitle: sheetSubtitle });
+  }, [onSheetInfo, summaryTitle, queue.status, sheetIsDnd, sheetSubtitle]);
 
   // Статблок существа сам рисует плашку-шапку (§1.4), поэтому обёртка
   // <details className="card"> ниже дала бы вторую, более плоскую шапку
@@ -1946,6 +1967,8 @@ function StatblockCard({
         }}
         levelUpDraft={localLevelUpDraftHost("statblock", { characterId: statblock.id, characterUid: null, catalogKey: null })}
         fanSignal={fanSignal}
+        appShell={!!onSheetInfo}
+        hostCommand={hostCommand}
         syncTabToUrl={soleOnPage}
         campaignId={campaignId}
         ownerCharacterId={statblock.owner_type === "character" ? statblock.owner_id : null}

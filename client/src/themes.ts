@@ -70,10 +70,6 @@ interface SemanticSet {
   hold: string;
   danger: string;
 }
-const SEMANTIC_BY_MODE: Record<ThemeMode, SemanticSet> = {
-  dark: { gm: "#a78bfa", player: "#7dd3fc", paid: "#fbbf24", free: "#4ade80", active: "#4ade80", hold: "#94a3b8", danger: "#f87171" },
-  light: { gm: "#7c3aed", player: "#0369a1", paid: "#b45309", free: "#15803d", active: "#15803d", hold: "#64748b", danger: "#dc2626" },
-};
 function fixSemanticSet(sem: SemanticSet, mode: ThemeMode): SemanticSet {
   const out = {} as SemanticSet;
   (Object.keys(sem) as (keyof SemanticSet)[]).forEach((k) => {
@@ -116,154 +112,6 @@ function skillSourceVars(_mode: ThemeMode, _paper: string, _ink: string): Record
     "--skill-source-ink": "#ece7df",
     "--skill-source-ink-muted": "#a8a29a",
   };
-}
-
-interface ThemeCfg {
-  bg: string;
-  text: string;
-  accent: string;
-  border: string;
-  fontDisplay: string;
-  fontBody: string;
-  accent2?: string; // secondary accent (external links etc); defaults to accent
-  surfaceMix?: number;
-  surfaceAltMix?: number;
-  textMutedOverride?: string;
-  // `--level-ink`: подпись уровня на листе D&D (бейдж «ур. N», ромб секции).
-  // Тёплое золото только там, где оно из палитры темы; иначе вторые чернила —
-  // уровень служебная подпись, акцент темы на неё не тратится (разбор 2026-09-11).
-  levelInk?: string;
-  cardBorderWidth?: number; // px
-  cardRadius?: number; // px
-  cardClip?: string; // clip-path value
-  bandBg?: string; // decorative campaign-card header background (color or gradient)
-  bandImage?: string; // decorative campaign-card header background-image/texture
-  playerBarText?: string; // text color for the bottom audio player bar
-  pageTexture?: string; // whole-app background-image (very subtle, e.g. paper grain)
-  cardBodyTexture?: string; // subtle texture on card bodies (not just the band)
-  nameTransform?: string; // text-transform for titles
-  nameStroke?: string; // -webkit-text-stroke for titles
-  // Design-doc §3.1 `--glow`: an opt-in box-shadow-ish glow value. "none"
-  // everywhere except themes that deliberately want the neon treatment.
-  glow?: string;
-  // Hand-marked accent under a calendar weekday header / the selected day —
-  // an SVG squiggle background-image, e.g. a "pencil underline". Absent by
-  // default; only themes that want that annotated-page feel set it.
-  calendarMarkImage?: string;
-  semanticOverrides?: Partial<SemanticSet>;
-  // Per-status capsule (calendar dot / badge) bg+text overrides, bypassing
-  // the default pastelBg/pastelFg derivation — used by themes that want a
-  // moodier, darker capsule than the generic pastel treatment (e.g. aberrant).
-  statusCapsuleOverrides?: Partial<Record<"planned" | "held" | "cancelled" | "rescheduled", { bg: string; fg: string }>>;
-}
-
-function buildTheme(id: string, name: string, mode: ThemeMode, cfg: ThemeCfg): Theme {
-  const towards = mode === "dark" ? "#ffffff" : "#000000";
-  const surfaceMix = cfg.surfaceMix ?? (mode === "dark" ? 0.06 : 0.035);
-  const surfaceAltMix = cfg.surfaceAltMix ?? (mode === "dark" ? 0.1 : 0.06);
-  // По умолчанию — `--card-border-width: 1px` и `--card-radius: 0` (откат 2026-08-29 по просьбе).
-  const borderWidth = cfg.cardBorderWidth ?? 1;
-  const sem = fixSemanticSet({ ...SEMANTIC_BY_MODE[mode], ...(cfg.semanticOverrides || {}) }, mode);
-  const primaryBg = cfg.bandBg || cfg.accent;
-  const primaryText = pickTextOn(primaryBg.startsWith("#") ? primaryBg : cfg.accent);
-
-  // ---- design-doc vocabulary (§3.1) ----------------------------------
-  // Computed once here and emitted under BOTH the new names and the legacy
-  // ones, so the old vars are exact aliases and nothing shifts visually.
-  const paper = cfg.bg;
-  const paper2 = mixHex(cfg.bg, towards, surfaceMix);
-  const paperElevated = mixHex(cfg.bg, towards, surfaceAltMix);
-  const ink = cfg.text;
-  const inkBright = mode === "dark" ? mixHex(cfg.text, "#ffffff", 0.15) : cfg.text;
-  // Подмес чернил в фон для `--muted`. В светлом режиме 0.35 даёт ≈4.8:1 по
-  // WCAG на бумаге нуара (#e8e4da), с запасом above 4.5:1. Тёмный не
-  // напрягаем: фон там близок к чернилам, и 0.45 тянет к белому (П1.7).
-  const muted = cfg.textMutedOverride || mixHex(cfg.text, cfg.bg, mode === "dark" ? 0.45 : 0.35);
-  // §3.1's `--ink-2` sits between the main ink and the muted ink.
-  const ink2 = mixHex(ink, muted, 0.5);
-  const line = cfg.border;
-  // The inverted card pair: a dark card on a light page and vice versa.
-  // In every reference palette that resolves to ink-on-paper flipped.
-  const surface = ink;
-  const onSurface = paper;
-  // Muted text ON an inverted plate. `--muted` is derived against the PAGE,
-  // so it is unreadable on the plate (zine: #6E675C on #12100E ≈ 1.9:1) —
-  // every eyebrow/meta line inside an ink header band needs its own token.
-  // Коэффициент подобран так, чтобы в зине выйти ровно на #A39A88 из
-  // артбордов референса: (0xA3-0x12)/(0xED-0x12) = 0.66 бумаги, то есть
-  // 0.34 подмеса чернил.
-  const onSurfaceMuted = mixHex(onSurface, surface, 0.34);
-
-  // Источник навыка на листе D&D — заливка строки (класс / предыстория /
-  // оба). Сознательное отступление от §1.7 «цветом не кодируем»: в списке из
-  // восемнадцати навыков откуда взялось владение — вопрос, который мастер
-  // задаёт взглядом, а не чтением, и подпись у каждой строки заняла бы
-  // столько же места, сколько сама строка. Отступление ограничено:
-  // на печати заливки гаснут и источник подписывается словом (см. dnd-sheet.css).
-  //
-  const vars: Record<string, string> = {
-    ...skillSourceVars(mode, paper, ink),
-    "--paper": paper,
-    "--paper-2": paper2,
-    "--ink": ink,
-    "--ink-2": ink2,
-    "--level-ink": cfg.levelInk || ink2,
-    "--muted": muted,
-    "--surface": surface,
-    "--on-surface": onSurface,
-    "--on-surface-muted": onSurfaceMuted,
-    "--line": line,
-    "--glow": cfg.glow || "none",
-    // --bg-elevated and --text-bright have no exact §3.1 equivalent (an
-    // elevated-surface mix and a dark-mode-brightened ink respectively —
-    // see the comments on `paperElevated`/`inkBright` above), so they stay
-    // as their own tokens instead of being folded into --paper-2/--ink-2.
-    "--bg-elevated": paperElevated,
-    "--text-bright": inkBright,
-    "--accent": cfg.accent,
-    "--accent-text": pickTextOn(cfg.accent),
-    "--accent-soft": cfg.accent + "2a",
-    "--accent-2": cfg.accent2 || cfg.accent,
-    "--primary-bg": primaryBg,
-    "--primary-text": primaryText,
-    "--player-bar-text": cfg.playerBarText || primaryText,
-    "--font-display": cfg.fontDisplay,
-    "--font-body": cfg.fontBody,
-    "--font-ui": "'Oswald', var(--font-body)",
-    "--font-mono": "'JetBrains Mono', ui-monospace, 'PT Mono', monospace",
-    "--card-radius": `${cfg.cardRadius ?? 0}px`,
-    "--card-border-width": `${borderWidth}px`,
-    "--card-clip": cfg.cardClip || "none",
-    "--card-band-bg": cfg.bandBg || "var(--paper-2)",
-    "--card-band-image": cfg.bandImage || "none",
-    "--page-texture": cfg.pageTexture || "none",
-    "--card-body-texture": cfg.cardBodyTexture || "none",
-    "--name-transform": cfg.nameTransform || "none",
-    "--name-stroke": cfg.nameStroke || "none",
-    "--calendar-mark-image": cfg.calendarMarkImage || "none",
-    "--status-planned": cfg.statusCapsuleOverrides?.planned?.bg ?? pastelBg(sem.hold),
-    "--status-planned-fg": cfg.statusCapsuleOverrides?.planned?.fg ?? pastelFg(sem.hold),
-    "--status-held": cfg.statusCapsuleOverrides?.held?.bg ?? pastelBg(sem.active),
-    "--status-held-fg": cfg.statusCapsuleOverrides?.held?.fg ?? pastelFg(sem.active),
-    "--status-cancelled": cfg.statusCapsuleOverrides?.cancelled?.bg ?? pastelBg(sem.danger),
-    "--status-cancelled-fg": cfg.statusCapsuleOverrides?.cancelled?.fg ?? pastelFg(sem.danger),
-    "--status-rescheduled": cfg.statusCapsuleOverrides?.rescheduled?.bg ?? pastelBg(sem.paid),
-    "--status-rescheduled-fg": cfg.statusCapsuleOverrides?.rescheduled?.fg ?? pastelFg(sem.paid),
-    "--role-gm": sem.gm,
-    "--role-gm-soft": sem.gm + "22",
-    "--role-player": sem.player,
-    "--role-player-soft": sem.player + "22",
-    "--pay-paid": sem.paid,
-    "--pay-paid-soft": sem.paid + "22",
-    "--pay-free": sem.free,
-    "--pay-free-soft": sem.free + "22",
-    // Scrim color for image-tile gradients: dark themes fade to paper (bg),
-    // light themes fade to ink (text). Used by .campaign-tile-scrim,
-    // .home-hero-scrim, .setting-card-bg::before.
-    "--scrim": mode === "dark" ? paper : ink,
-  };
-
-  return { id, name, mode, vars };
 }
 
 // Дизайн-система v2 «Д» (docs/design-system.md §2): ровно две встроенные
@@ -405,19 +253,6 @@ const DARK_THEME = skinTheme("dark", "Тёмная", "dark", {
     "--nav-edge": "#12544F", "--nav-blend": "luminosity",
     "--tab": "#0A262B", "--field": "#0A262B", "--ph": "#0A262B",
   },
-});
-
-// Облик листа и визарда — «Соевый нуар» OneShot (решение владельца
-// 2026-09-27). В выборе тем его нет: лист кладёт эти переменные на body сам
-// (CharacterDetailPage), пока оболочка листа не переведена на «Д» (§6.10).
-export const SHEET_THEME = buildTheme("noir", "Соевый нуар", "light", {
-  bg: "#e8e4da", text: "#1c1c1c", accent: "#1c1c1c", border: "#2a2a2a",
-  fontDisplay: "'Cormorant SC', serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
-  bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
-  pageTexture: "radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px",
-  cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
-  playerBarText: "#1c1c1c",
-  cardBorderWidth: 1,
 });
 
 export const BUILTIN_THEMES: Theme[] = [LIGHT_THEME, DARK_THEME];

@@ -771,7 +771,7 @@ export function StoragesSettingsPage() {
                 Скрывать коммерческую составляющую
               </label>
               <span className="muted" style={{ maxWidth: "62ch" }}>Прячет суммы заработка и ставки — удобно при демонстрации экрана.</span>
-              <label className="row" style={{ gap: 6, marginTop: 8 }}>
+              <label className="row">
                 Искать выделенный текст в
                 <select
                   value={searchEngine}
@@ -788,7 +788,7 @@ export function StoragesSettingsPage() {
                   ))}
                 </select>
               </label>
-              <span className="muted" style={{ maxWidth: "62ch" }}>Пункт «Найти в …» в меню правой кнопки текстового поля. Запрос уходит выбранному поисковику.</span>
+              <span className="muted">Пункт «Найти в …» в меню правой кнопки текстового поля. Запрос уходит выбранному поисковику.</span>
             </div>
           </details>
 

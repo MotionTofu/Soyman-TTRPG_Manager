@@ -1,0 +1,193 @@
+/* Оболочка «Д» листа основного SoyMan (гриллинг листа 2026-10-29, Q1–Q4,
+   макет Roll-Sheet холста v30). Только страница персонажа: OneShot этот файл
+   не грузит. Предметы листа — карта-таро, кости, портрет — свои (Q18–Q24
+   дизайн-системы); здесь шапка, блок хитов, ярлыки и рабочий лист. Лист
+   следует теме приложения (Q4). */
+
+/* ---- Шапка: имя заголовочным шрифтом, строка-досье машинописью. ---- */
+body.sheet-fullscreen .sheet-bar {
+  gap: var(--sp-4) var(--sp-6);
+}
+body.sheet-fullscreen .sheet-bar-title {
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-6);
+}
+body.sheet-fullscreen .sheet-bar-name {
+  font-family: var(--font-title);
+  font-size: var(--fs-h2);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.sheet-bar-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+}
+body.sheet-fullscreen .sheet-bar-status {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+.sheet-bar > button.sheet-bar-btn {
+  flex: none;
+  height: 36px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--nav-ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--nav-ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sheet-bar > button.sheet-bar-btn:hover {
+  background: var(--nav-ink);
+  color: var(--nav);
+}
+@media (max-width: 700px) {
+  .sheet-bar-sub,
+  .sheet-bar > button.sheet-bar-btn {
+    display: none;
+  }
+}
+
+/* ---- Блок хитов: главный блок экрана, тушь-рамка (§4.2). ---- */
+.hp-apply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-6) var(--sp-7);
+  border: var(--edge-width) solid var(--edge);
+  outline: 1px solid var(--edge);
+  outline-offset: -8px;
+  background: var(--sheet);
+  color: var(--ink);
+}
+.hp-apply__body {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-7);
+}
+.hp-apply__readout {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+.hp-apply__readout b {
+  font-size: var(--fs-hero);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hp-apply__readout span {
+  font-size: var(--fs-h2);
+  color: var(--muted);
+}
+.hp-apply__readout.is-down b {
+  color: var(--mark);
+}
+.hp-apply__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.hp-apply__bar {
+  display: flex;
+  height: 10px;
+  border: var(--edge-width) solid var(--edge);
+}
+.hp-apply__bar i {
+  display: block;
+  background: var(--ink);
+}
+.hp-apply__bar i.is-temp {
+  background: repeating-linear-gradient(135deg, var(--ink) 0 2px, transparent 2px 5px);
+}
+.hp-apply__row,
+.hp-apply__conc,
+.hp-apply__last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.hp-apply__row input {
+  width: 150px;
+  height: 40px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--fs-label);
+}
+.hp-apply__row .d-btn--primary {
+  height: 40px;
+}
+.hp-apply__conc {
+  font-size: var(--fs-meta);
+}
+.hp-apply__conc b {
+  font-family: var(--font-display);
+  font-size: var(--fs-data);
+}
+
+/* ---- Предметы листа держат свою бумагу (Q18–Q24 дизайн-системы). ---- */
+body.sheet-fullscreen :is(.dnd-card-face, .dnd-card-back) {
+  background: var(--sheet-panel);
+  color: var(--ink);
+}
+
+/* ---- Рабочая часть: плашки разделов и строки по линейке (Roll-Sheet). ---- */
+body.sheet-fullscreen .dnd-action-head > span:not(.dnd-action-head-extra) {
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+body.sheet-fullscreen .dnd-action-cards {
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+}
+body.sheet-fullscreen .dnd-action-card {
+  border-bottom: 1px solid var(--line);
+}
+body.sheet-fullscreen .dnd-action-card + .dnd-action-card {
+  border-top: 0;
+}
+
+/* ---- «Досье» основного SoyMan — по теме. ---- */
+body.sheet-fullscreen .character-dossier-extra {
+  color: var(--ink);
+}
+body.sheet-fullscreen :is(.dossier-count, .dossier-note) {
+  color: var(--muted);
+}
+body.sheet-fullscreen .character-dossier-extra .card {
+  background: var(--sheet-panel);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink);
+}
