@@ -1,19 +1,17 @@
-.rt-editor { min-width: 0; }
-.rt-editor-toolbar-slot { position: relative; margin-bottom: var(--sp-1); }
-.rt-editor-toolbar { position: relative; isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); width: fit-content; max-width: 100%; padding: 0 var(--sp-2); min-height: 28px; }
-.rt-editor-toolbar::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--skin-tape) center / 100% 100% no-repeat; opacity: 0.3; }
-.rt-editor--focus:not(.is-focused) .rt-editor-toolbar-slot { margin-bottom: 0; }
-.rt-editor--focus:not(.is-focused) .rt-editor-toolbar { display: none; }
-.rt-editor-toolbar .rt-btn { border-color: transparent; background: transparent; min-width: 28px; }
-.rt-editor-toolbar .rt-btn:hover, .rt-editor-toolbar .rt-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
-.rt-editor-toolbar .rt-select { background: transparent; border-color: transparent; }
-.rt-editor-toolbar .rt-block-select { width: 72px; min-width: 0; flex: none; }
-.rt-editor-toolbar .rt-sep { height: 18px; align-self: center; }
+/* Форматирование — в меню ПКМ (2026-10-29). На виду только «@» и ссылка в
+   правом верхнем углу поля, пока поле в фокусе; место под них поле держит
+   всегда, чтобы текст не перескакивал при фокусе. */
+.rt-editor { position: relative; min-width: 0; }
+.rt-editor-tools { position: absolute; top: var(--sp-1); right: var(--sp-1); z-index: 2; display: flex; gap: 2px; }
+.rt-editor-tools .rt-btn, .rt-editor-strip .rt-btn { min-width: 26px; height: 26px; padding: 0 var(--sp-2); border-color: transparent; background: transparent; color: var(--muted); }
+.rt-editor-tools .rt-btn:hover, .rt-editor-strip .rt-btn:hover { background: var(--accent-soft); color: var(--ink); }
+.rt-editor .rt-prose-input:first-child { padding-right: 64px; }
+/* Телефон: полоса над полем, пока выделен текст. */
+.rt-editor-strip { position: absolute; bottom: 100%; left: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; background: var(--bg-elevated); border: 1px solid var(--line); }
 .rt-editor-content { min-width: 0; }
 .rt-editor--scroll .rt-editor-content { max-height: 60vh; overflow-y: auto; }
 .rt-editor--scroll .rt-prose-input { field-sizing: fixed; overflow-y: auto; resize: vertical; }
-.rt-format-popover { position: absolute; top: 100%; right: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--sp-3); width: min(280px, 100%); padding: var(--sp-4); background: var(--paper-2); border: var(--card-border-width, 1px) solid var(--line); border-radius: var(--card-radius); }
-.rt-format-popover--insert { width: min(180px, 100%); }
+.rt-format-popover { position: absolute; top: 32px; right: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--sp-3); width: min(280px, 100%); padding: var(--sp-4); background: var(--paper-2); border: var(--card-border-width, 1px) solid var(--line); border-radius: var(--card-radius); }
 .rt-format-popover label { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .rt-format-popover select { width: 150px; min-width: 0; }
 .rt-format-popover input { min-width: 0; max-width: 100%; }
@@ -36,9 +34,8 @@
 .rt-table-editable .is-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 .rt-editor textarea.rt-table-cell-input { display: block; width: 100%; min-width: 120px; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; line-height: 1.6; field-sizing: content; }
 .rt-table-editable th .rt-table-cell-input { font-weight: bold; }
-@media (max-width: 520px) { .rt-editor-toolbar .rt-sep { display: none; } }
 @media (pointer: coarse) {
-  .rt-editor-toolbar .rt-btn, .rt-editor-toolbar .rt-select, .rt-table-actions .rt-btn, .rt-table-more summary { min-height: 44px; }
+  .rt-editor-strip .rt-btn, .rt-table-actions .rt-btn, .rt-table-more summary { min-height: 44px; }
   .rt-table-more-menu button, .rt-table-more-menu label { min-height: 44px; }
   .rt-editor textarea { font-size: var(--fs-body); }
 }

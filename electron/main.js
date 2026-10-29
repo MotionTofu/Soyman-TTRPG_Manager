@@ -409,6 +409,11 @@ function spawnWindow(route = "/", parent = null) {
   win.loadURL(`http://127.0.0.1:${PORT}${route.startsWith("/") ? route : "/" + route}`);
   playerDisplay.register(win);
   win.webContents.on("did-create-window", child => playerDisplay.register(child));
+  // Меню ПКМ редактора рисует сама страница; отсюда ей нужны только варианты
+  // орфографии — системная проверка Windows отдаёт их лишь в этом событии.
+  win.webContents.on("context-menu", (_event, params) => {
+    if (params.isEditable) win.webContents.send("spell-context", { word: params.misspelledWord, suggestions: params.dictionarySuggestions });
+  });
   if (!isPackaged) {
     win.webContents.openDevTools({ mode: "detach" });
   }

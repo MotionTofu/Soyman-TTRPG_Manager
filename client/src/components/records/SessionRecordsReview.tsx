@@ -179,7 +179,6 @@ function QuickRecord({ campaignId, sessionId, settingId }: { campaignId: number;
         onChange={setText}
         rows={3}
         autoGrow
-        toolbar="always"
         placeholder="Строка — один черновик. Например: «@Орис — контакт» или «остановились в техкоридоре»"
         defaultSettingId={settingId ?? undefined}
       />

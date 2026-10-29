@@ -159,7 +159,6 @@ export function RecordFormModal(props: Props) {
             autoGrow
             // Панель «при фокусе» сдвигает окно на blur — первый клик по
             // переключателю под полем уходил мимо кнопки.
-            toolbar="always"
             placeholder="Наблюдаемым языком: что произошло, что стало известно"
             defaultSettingId={settingId ?? undefined}
           />

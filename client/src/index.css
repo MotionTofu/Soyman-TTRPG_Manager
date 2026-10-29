@@ -7480,6 +7480,20 @@ details.card[open] summary {
   background: var(--paper-2);
   border-color: transparent;
 }
+.context-menu-hint {
+  float: right;
+  margin-left: var(--sp-7);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.context-menu-foot {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4) var(--sp-1);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
 .context-menu-group {
   display: flex;
   flex-direction: column;

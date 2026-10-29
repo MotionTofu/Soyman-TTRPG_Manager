@@ -7,11 +7,17 @@ import { TableInsertModal } from "./TableInsertModal";
 import { MentionTable, type TableSelection } from "./MentionTable";
 import { findTextTables, replaceTableBlock, serializeTextTable, splitTableDocument, type TableCell, type TextTable } from "./tableDocument";
 import { NavIcon } from "../NavIcons";
+import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
+import { hasElectronAPI } from "../../electronApi";
+import { loadSearchEngine, searchWeb } from "../../searchEngine";
 import type { SearchResult } from "../../types";
 import { scheduleAutoResize, cancelAutoResize } from "./textareaAutoResize";
 import "./mention-editor.css";
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 40];
+// На телефоне ПКМ нет, а долгое нажатие — это выделение: родное меню там не
+// трогаем, форматирование — полосой над полем, пока что-то выделено.
+const COARSE = typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 const SUPPORTS_FIELD_SIZING = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
 function isShortcutKey(e: KeyboardEvent<HTMLTextAreaElement>, letter: string) {
   return e.code === `Key${letter}` || e.key.toUpperCase() === letter;
@@ -29,12 +35,11 @@ interface Props {
   placeholder?: string;
   defaultSettingId?: number;
   onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
-  /** По умолчанию: постоянная у больших полей, при фокусе у коротких. */
-  toolbar?: "always" | "focus";
 }
 type Location = TableSelection | null;
 interface MentionRequest { location: Location; from: number; to: number; query: string }
 interface EditSnapshot { value: string; location: Location; start: number; end: number }
+interface SpellHit { location: Location; start: number; end: number; suggestions: string[] }
 
 function CommittedColorInput({ value, onCommit }: { value: string; onCommit: (color: string) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +57,7 @@ function CommittedColorInput({ value, onCommit }: { value: string; onCommit: (co
 
 /** Prose keeps its original string format; table blocks are edited as cells. */
 export const MentionTextarea = memo(function MentionTextarea({ id, value, onChange, insertRequest, onInsertHandled,
-  rows = 5, autoGrow = true, placeholder, defaultSettingId, onKeyDown, toolbar }: Props) {
+  rows = 5, autoGrow = true, placeholder, defaultSettingId, onKeyDown }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const cellRef = useRef<HTMLTextAreaElement | null>(null);
@@ -62,7 +67,7 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
   const cellSelectionRef = useRef<TableSelection | null>(null);
   const [cellSelection, setCellSelection] = useState<TableSelection | null>(null);
   const [focused, setFocused] = useState(false);
-  const [menu, setMenu] = useState<"insert" | "style" | "link" | null>(null);
+  const [menu, setMenu] = useState<"style" | "link" | null>(null);
   const [query, setQuery] = useState<MentionRequest | null>(null);
   const queryRef = useRef(query);
   queryRef.current = query;
@@ -70,6 +75,10 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
   const [extUrl, setExtUrl] = useState("");
   const extUrlRef = useRef<HTMLInputElement>(null);
   const [tableModalOpen, setTableModalOpen] = useState(false);
+  // Форматирование живёт в меню ПКМ (2026-10-29): панель над полем убрана.
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const [spell, setSpell] = useState<SpellHit | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const lastInsertKey = useRef<number | null>(null);
   const undoStack = useRef<EditSnapshot[]>([]);
   const redoStack = useRef<EditSnapshot[]>([]);
@@ -77,7 +86,6 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
   const blocks = useMemo(() => splitTableDocument(value), [value]);
   const activeTable = blocks.find(block => block.kind === "table" && block.table.id === cellSelection?.id);
   const activeCell = activeTable?.kind === "table" && cellSelection ? activeTable.table.cells[cellSelection.row]?.[cellSelection.column] : undefined;
-  const panelMode = toolbar ?? (rows >= 5 ? "always" : "focus");
 
   function snapshot(): EditSnapshot { const selected = target(); return { value: valueRef.current, ...selected }; }
   function publish(next: string, history = true) {
@@ -180,6 +188,12 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
     setCellSelection(null);
     const offset = Number(el.dataset.from);
     lastSelection.current = [offset + el.selectionStart, offset + el.selectionEnd];
+    setSelecting(el.selectionStart !== el.selectionEnd);
+  }
+  function rememberInput(input: HTMLTextAreaElement) {
+    const tableId = input.closest<HTMLElement>("[data-table-id]")?.dataset.tableId;
+    if (tableId) rememberCell({ id: tableId, row: Number(input.dataset.row), column: Number(input.dataset.column) }, input);
+    else rememberText(input);
   }
   function rememberCell(location: TableSelection, el: HTMLTextAreaElement) {
     cellRef.current = el;
@@ -293,10 +307,7 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
     event.preventDefault();
     let result: SearchResult;
     try { result = JSON.parse(raw); } catch { return; }
-    const input = event.currentTarget;
-    const tableId = input.closest<HTMLElement>("[data-table-id]")?.dataset.tableId;
-    if (tableId) rememberCell({ id: tableId, row: Number(input.dataset.row), column: Number(input.dataset.column) }, input);
-    else rememberText(input);
+    rememberInput(event.currentTarget);
     const { location, start, end } = target();
     void buildMentionToken(result.type, result.id, result.title).then(token => {
       if (token) replaceText(location, start, end, token + (result.kind === "spell" ? " (свиток)" : ""));
@@ -312,9 +323,77 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
       }
       if (isShortcutKey(event, "B") || isShortcutKey(event, "I")) { event.preventDefault(); toggleWeight(isShortcutKey(event, "B") ? "bold" : "italic"); return; }
       if (isShortcutKey(event, "K")) { event.preventDefault(); openLink(); return; }
+      if (event.shiftKey && /^Digit[0-3]$/.test(event.code)) { event.preventDefault(); heading(Number(event.code.slice(5))); return; }
+      if (event.shiftKey && event.code === "Digit8") { event.preventDefault(); bulletList(); return; }
     }
     if (event.altKey && isShortcutKey(event, "Q")) { event.preventDefault(); triggerMention(); }
     if (event.altKey && isShortcutKey(event, "W")) { event.preventDefault(); wrapSelection("{quote}", "{/quote}", "цитата"); }
+  }
+
+  function openContextMenu(event: React.MouseEvent) {
+    // Shift+ПКМ — родное меню браузера; на телефоне — всегда родное.
+    if (event.shiftKey || COARSE || !(event.target instanceof HTMLTextAreaElement)) return;
+    event.preventDefault();
+    rememberInput(event.target);
+    setSpell(null);
+    setMenu(null);
+    setCtx({ x: event.clientX, y: event.clientY });
+  }
+  // Варианты орфографии приходят из Electron чуть позже открытия меню.
+  // Слово ищется вокруг каретки: правый щелчок ставит её туда, где щёлкнули.
+  useEffect(() => {
+    if (!ctx || !window.electronAPI?.onSpellContext) return;
+    return window.electronAPI.onSpellContext(({ word, suggestions }) => {
+      if (!word) return;
+      const { location, start } = target();
+      const offset = location ? 0 : Number(textareaRef.current?.dataset.from ?? 0);
+      const local = location ? textAt(location) : textAt(null).slice(offset);
+      const near = Math.max(0, start - offset);
+      let at = local.lastIndexOf(word, near);
+      if (at < 0 || at + word.length < near) at = local.indexOf(word, Math.max(0, near - word.length));
+      if (at < 0) return;
+      setSpell({ location, start: offset + at, end: offset + at + word.length, suggestions: suggestions.slice(0, 5) });
+    });
+    // target/textAt читают ref'ы — подписка нужна на одно открытие меню.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx]);
+
+  function contextItems(): ContextMenuItem[] {
+    const { location, start, end } = target();
+    const selected = textAt(location).slice(start, end);
+    const clip = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    const items: ContextMenuItem[] = [];
+    if (spell) {
+      if (spell.suggestions.length === 0) items.push({ label: "Нет вариантов" });
+      for (const word of spell.suggestions) items.push({ label: word, onClick: () => replaceText(spell.location, spell.start, spell.end, word) });
+    }
+    const edits = items.length;
+    if (selected && clip) {
+      items.push({ label: "Вырезать", hint: "Ctrl+X", onClick: () => void clip.writeText(selected).then(() => replaceText(location, start, end, "")) });
+      items.push({ label: "Копировать", hint: "Ctrl+C", onClick: () => void clip.writeText(selected) });
+    }
+    if (clip?.readText) items.push({ label: "Вставить", hint: "Ctrl+V", onClick: () => void clip.readText().then(text => text && replaceText(location, start, end, text)) });
+    if (selected.trim()) items.push({ label: `Найти в ${loadSearchEngine().label}`, onClick: () => searchWeb(selected) });
+    if (edits > 0 && items.length > edits) items[edits].dividerBefore = true;
+    const format = items.length;
+    items.push(
+      { label: "Жирный", hint: "Ctrl+B", onClick: () => toggleWeight("bold") },
+      { label: "Курсив", hint: "Ctrl+I", onClick: () => toggleWeight("italic") },
+      { label: "Абзац", children: [
+        { label: "Обычный текст", hint: "Ctrl+Shift+0", onClick: () => heading(0) },
+        { label: "Заголовок 1", hint: "Ctrl+Shift+1", onClick: () => heading(1) },
+        { label: "Заголовок 2", hint: "Ctrl+Shift+2", onClick: () => heading(2) },
+        { label: "Заголовок 3", hint: "Ctrl+Shift+3", onClick: () => heading(3) },
+      ] },
+      { label: "Список", hint: "Ctrl+Shift+8", onClick: bulletList },
+      { label: "Цитата", hint: "Alt+W", onClick: () => wrapSelection("{quote}", "{/quote}", "цитата") },
+      { label: "Упоминание", hint: "Alt+Q", onClick: triggerMention, dividerBefore: true },
+      { label: "Ссылка…", hint: "Ctrl+K", onClick: openLink },
+      { label: "Таблица…", onClick: () => setTableModalOpen(true) },
+      { label: "Стиль…", onClick: () => setMenu("style") },
+    );
+    if (format > 0) items[format].dividerBefore = true;
+    return items;
   }
 
   useEffect(() => {
@@ -351,28 +430,25 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
     return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", escape); };
   }, [menu]);
 
-  const keep = (event: React.MouseEvent) => event.preventDefault();
-  return <div ref={rootRef} className={`mention-textarea-wrap rt-editor rt-editor--${panelMode}${focused ? " is-focused" : ""}${autoGrow ? "" : " rt-editor--scroll"}`}
+  const keep = (event: React.MouseEvent | React.PointerEvent) => event.preventDefault();
+  return <div ref={rootRef} className={`mention-textarea-wrap rt-editor${focused ? " is-focused" : ""}${autoGrow ? "" : " rt-editor--scroll"}`}
     onFocus={() => setFocused(true)} onBlur={event => {
       if (rootRef.current?.contains(event.relatedTarget as Node)) return;
       setFocused(false);
     }}>
-    <div className="rt-editor-toolbar-slot">
-      <div className="rt-editor-toolbar" role="group" aria-label="Форматирование текста">
-        <select className="rt-select rt-block-select" aria-label="Тип абзаца" defaultValue="0" onChange={event => { heading(Number(event.target.value)); event.target.value = "0"; }}>
-          <option value="0">Абзац</option><option value="1">Заголовок 1</option><option value="2">Заголовок 2</option><option value="3">Заголовок 3</option>
-        </select>
-        <button type="button" className="rt-btn" aria-label="Список" title="Список" onMouseDown={keep} onClick={bulletList}>≡</button>
-        <button type="button" className="rt-btn" aria-label="Цитата" title="Цитата (Alt+W)" onMouseDown={keep} onClick={() => wrapSelection("{quote}", "{/quote}", "цитата")}>❝</button>
-        <span className="rt-sep" />
-        <button type="button" className="rt-btn" aria-label="Упоминание" title="Упоминание (Alt+Q)" onMouseDown={keep} onClick={triggerMention}>@</button>
-        <button type="button" className="rt-btn rt-popover-trigger" aria-label="Внешняя ссылка" title="Внешняя ссылка (Ctrl+K)" aria-expanded={menu === "link"} onMouseDown={keep} onClick={openLink}><NavIcon name="link" /></button>
-        <span className="rt-sep" />
-        <button type="button" className="rt-btn rt-popover-trigger" aria-expanded={menu === "insert"} onMouseDown={keep} onClick={() => setMenu(menu === "insert" ? null : "insert")}>Вставить ▾</button>
-        <button type="button" className="rt-btn rt-popover-trigger" aria-expanded={menu === "style"} onMouseDown={keep} onClick={() => setMenu(menu === "style" ? null : "style")}>Стиль ▾</button>
-      </div>
+    {focused && <div className="rt-editor-tools" role="group" aria-label="Вставка">
+      <button type="button" className="rt-btn" aria-label="Упоминание" title="Упоминание (Alt+Q) · форматирование — правой кнопкой" onMouseDown={keep} onClick={triggerMention}>@</button>
+      <button type="button" className="rt-btn rt-popover-trigger" aria-label="Внешняя ссылка" title="Внешняя ссылка (Ctrl+K)" aria-expanded={menu === "link"} onMouseDown={keep} onClick={openLink}><NavIcon name="link" /></button>
+    </div>}
+    {COARSE && focused && selecting && <div className="rt-editor-strip" role="group" aria-label="Форматирование текста">
+      <button type="button" className="rt-btn" onPointerDown={keep} onClick={() => toggleWeight("bold")}><b>Ж</b></button>
+      <button type="button" className="rt-btn" onPointerDown={keep} onClick={() => toggleWeight("italic")}><i>К</i></button>
+      <button type="button" className="rt-btn" onPointerDown={keep} onClick={() => heading(2)}>Заголовок</button>
+      <button type="button" className="rt-btn" onPointerDown={keep} onClick={bulletList}>Список</button>
+      <button type="button" className="rt-btn" onPointerDown={keep} onClick={() => wrapSelection("{quote}", "{/quote}", "цитата")}>Цитата</button>
+      <button type="button" className="rt-btn rt-popover-trigger" onPointerDown={keep} onClick={() => setMenu("style")}>Стиль</button>
+    </div>}
       {menu && <div className={`rt-format-popover rt-format-popover--${menu}`}>
-        {menu === "insert" && <button type="button" className="rt-btn" onClick={() => { setMenu(null); setTableModalOpen(true); }}>Таблица…</button>}
         {menu === "style" && <>
           <label>Цвет текста <CommittedColorInput value={activeCell?.color ?? "#e3d9c6"} onCommit={color => applyStyle({ color }, `color="${color}"`)} /></label>
           <label>Размер <select aria-label="Размер шрифта" defaultValue="" onChange={event => { if (event.target.value) applyStyle({ size: Number(event.target.value) }, `size="${event.target.value}"`); }}>
@@ -389,8 +465,7 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
           <button type="button" className="primary" onClick={insertLink}>Вставить ссылку</button>
         </>}
       </div>}
-    </div>
-    <div className="rt-editor-content">{blocks.map((block, index) => block.kind === "table" ? <div key={`table-${block.table.id}`} data-table-id={block.table.id}>
+    <div className="rt-editor-content" onContextMenu={openContextMenu}>{blocks.map((block, index) => block.kind === "table" ? <div key={`table-${block.table.id}`} data-table-id={block.table.id}>
       <MentionTable table={block.table} selection={cellSelection} onSelect={rememberCell} onChange={updateTable}
         onDelete={() => {
           publish(valueRef.current.slice(0, block.from) + valueRef.current.slice(block.to));
@@ -406,6 +481,7 @@ export const MentionTextarea = memo(function MentionTextarea({ id, value, onChan
       const location = query.location; setQuery(null); queryRef.current = null;
       if (location) focusCell(location, query.to); else focusText(query.to);
     }} />}
+    {ctx && <ContextMenu x={ctx.x} y={ctx.y} ariaLabel="Текст" items={contextItems()} footer={hasElectronAPI() ? undefined : "Shift+ПКМ — меню браузера"} onClose={() => setCtx(null)} />}
     {tableModalOpen && <TableInsertModal onInsertTable={insertTable} onClose={() => setTableModalOpen(false)} />}
   </div>;
 });

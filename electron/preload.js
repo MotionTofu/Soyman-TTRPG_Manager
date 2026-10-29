@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Открыть Telegram автора: сначала установленный клиент (tg://), при его
   // отсутствии — страница t.me в браузере. См. ipcMain "open-telegram".
   openTelegram: () => ipcRenderer.send("open-telegram"),
+  // Орфография для своего меню ПКМ редактора: после правого щелчка main
+  // присылает слово с ошибкой и варианты замены (см. "spell-context" в
+  // main.js). webFrame.isWordMisspelled на Windows молчит — проверку там
+  // делает система, и её ответ есть только в событии context-menu.
+  onSpellContext: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("spell-context", listener);
+    return () => ipcRenderer.removeListener("spell-context", listener);
+  },
   // Returns an unsubscribe function, same shape as a DOM addEventListener
   // cleanup — React effects can call it directly on unmount.
   onUpdateStatus: (callback) => {

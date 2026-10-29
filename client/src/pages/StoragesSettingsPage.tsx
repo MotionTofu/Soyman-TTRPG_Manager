@@ -20,6 +20,7 @@ import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { loadImageTreatment, saveImageTreatment } from "../imagePrefs";
 import { loadHideFinance, saveHideFinance } from "../financePrivacy";
+import { SEARCH_ENGINES, loadSearchEngine, saveSearchEngine, type SearchEngineId } from "../searchEngine";
 import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
 import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
@@ -59,6 +60,7 @@ export function StoragesSettingsPage() {
   const appSettings = useResource<AppSettings>("/app-settings").data ?? null;
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
   const [hideFinance, setHideFinance] = useState(loadHideFinance);
+  const [searchEngine, setSearchEngine] = useState(() => loadSearchEngine().id);
   const [bagSize, setBagSize] = useState(loadBagSize);
   const [useEpithets, setUseEpithets] = useState(loadUseEpithets);
   const [dndPrefs, setDndPrefs] = useState(loadDndPrefs());
@@ -769,6 +771,24 @@ export function StoragesSettingsPage() {
                 Скрывать коммерческую составляющую
               </label>
               <span className="muted" style={{ maxWidth: "62ch" }}>Прячет суммы заработка и ставки — удобно при демонстрации экрана.</span>
+              <label className="row" style={{ gap: 6, marginTop: 8 }}>
+                Искать выделенный текст в
+                <select
+                  value={searchEngine}
+                  onChange={(e) => {
+                    const id = e.target.value as SearchEngineId;
+                    setSearchEngine(id);
+                    saveSearchEngine(id);
+                  }}
+                >
+                  {SEARCH_ENGINES.map((engine) => (
+                    <option key={engine.id} value={engine.id}>
+                      {engine.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="muted" style={{ maxWidth: "62ch" }}>Пункт «Найти в …» в меню правой кнопки текстового поля. Запрос уходит выбранному поисковику.</span>
             </div>
           </details>
 

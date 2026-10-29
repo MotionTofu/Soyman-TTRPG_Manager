@@ -19,16 +19,33 @@ function source() { return screen.getByTestId("source").textContent ?? ""; }
 function focus(input: HTMLElement) { act(() => input.focus()); }
 
 describe("MentionTextarea panels and visual tables", () => {
-  it("chooses a persistent panel for descriptions and a focus panel for short notes", () => {
-    const { container, rerender } = render(<Harness rows={2} />);
-    expect(container.querySelector(".rt-editor--focus")).not.toBeNull();
-    focus(screen.getByRole("textbox"));
-    expect(container.querySelector(".is-focused")).not.toBeNull();
-    rerender(<Harness rows={8} />);
-    expect(container.querySelector(".rt-editor--always")).not.toBeNull();
-    expect(screen.queryByText("Aa")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Жирный" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Курсив" })).toBeNull();
+  it("shows only @ and link while focused; formatting lives in the right-click menu", () => {
+    render(<Harness initial="Текст" rows={8} />);
+    expect(screen.queryByRole("button", { name: "Упоминание" })).toBeNull();
+    const input = screen.getByRole("textbox");
+    focus(input);
+    expect(screen.getByRole("button", { name: "Упоминание" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Внешняя ссылка" })).toBeDefined();
+    expect(screen.queryByLabelText("Тип абзаца")).toBeNull();
+    fireEvent.contextMenu(input);
+    expect(screen.getByRole("menuitem", { name: /Жирный/ })).toBeDefined();
+    expect(screen.getByText("Shift+ПКМ — меню браузера")).toBeDefined();
+  });
+  it("Shift+right-click leaves the browser menu alone", () => {
+    render(<Harness initial="Текст" />);
+    const input = screen.getByRole("textbox");
+    focus(input);
+    fireEvent.contextMenu(input, { shiftKey: true });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+  it("Ctrl+Shift+2 makes a heading and Ctrl+Shift+8 a list", () => {
+    render(<Harness initial="Строка" />);
+    const input = screen.getByRole("textbox") as HTMLTextAreaElement;
+    focus(input); input.setSelectionRange(2, 2); fireEvent.select(input);
+    fireEvent.keyDown(input, { key: "@", code: "Digit2", ctrlKey: true, shiftKey: true });
+    expect(source()).toBe("## Строка");
+    fireEvent.keyDown(input, { key: "*", code: "Digit8", ctrlKey: true, shiftKey: true });
+    expect(source()).toBe("- ## Строка");
   });
   it("keeps selected prose and Cyrillic Ctrl+B shortcuts", async () => {
     render(<Harness initial="Первый второй" />);
@@ -73,7 +90,8 @@ describe("MentionTextarea panels and visual tables", () => {
     const input = (inCell ? screen.getByRole("textbox", { name: "Ячейка A2" }) : screen.getByRole("textbox")) as HTMLTextAreaElement;
     focus(input);
     if (!inCell) { input.setSelectionRange(0, input.value.length); fireEvent.select(input); }
-    fireEvent.click(screen.getByRole("button", { name: "Стиль ▾" }));
+    fireEvent.contextMenu(input);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Стиль…" }));
     const color = screen.getByLabelText("Цвет текста");
     const before = source();
     fireEvent.input(color, { target: { value: "#112233" } });
@@ -96,8 +114,8 @@ describe("MentionTextarea panels and visual tables", () => {
     render(<Harness initial="ДоПосле" />);
     const input = screen.getByRole("textbox") as HTMLTextAreaElement;
     focus(input); input.setSelectionRange(2, 2); fireEvent.select(input);
-    fireEvent.click(screen.getByRole("button", { name: "Вставить ▾" }));
-    fireEvent.click(screen.getByRole("button", { name: "Таблица…" }));
+    fireEvent.contextMenu(input);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Таблица…" }));
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));
     expect(findTextTables(source())).toHaveLength(1);
     expect(source().startsWith("До\n")).toBe(true);

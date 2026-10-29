@@ -6,6 +6,8 @@ export interface ContextMenuItem {
   danger?: boolean;
   /** Черта над пунктом — отделяет группу действий. */
   dividerBefore?: boolean;
+  /** Горячая клавиша справа от подписи. */
+  hint?: string;
   /** Groups related actions under one expandable row instead of listing them
    *  flat (keeps a menu at or under the ~4-choice guideline — see design
    *  critique P2 on the calendar event menu). A parent item with children
@@ -23,10 +25,12 @@ interface Props {
   /** Opt-in menu semantics for keyboard-operated action triggers. */
   ariaLabel?: string;
   items: ContextMenuItem[];
+  /** Мелкая подсказка под пунктами (например, как вызвать меню браузера). */
+  footer?: string;
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, title, ariaLabel, items, onClose }: Props) {
+export function ContextMenu({ x, y, title, ariaLabel, items, footer, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   // Меню открывается там, где щёлкнули, и у правого-нижнего края уезжало за
@@ -91,6 +95,7 @@ export function ContextMenu({ x, y, title, ariaLabel, items, onClose }: Props) {
                     }}
                   >
                     {child.label}
+                    {child.hint && <span className="context-menu-hint">{child.hint}</span>}
                   </button>
                 ))}
               </div>
@@ -108,10 +113,12 @@ export function ContextMenu({ x, y, title, ariaLabel, items, onClose }: Props) {
               }}
             >
               {item.label}
+              {item.hint && <span className="context-menu-hint">{item.hint}</span>}
             </button>
           </Fragment>
         )
       )}
+      {footer && <div className="context-menu-foot">{footer}</div>}
     </div>
   );
 }

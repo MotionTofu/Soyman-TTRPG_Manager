@@ -23,6 +23,8 @@ export interface ElectronAPI {
   openExternal: (url: string) => void;
   /** Открыть Telegram автора: сначала установленный клиент (tg://), фолбэк — браузер. */
   openTelegram: () => void;
+  /** Слово с ошибкой под правым щелчком и варианты замены (пусто — слово верное). */
+  onSpellContext?: (callback: (spell: { word: string; suggestions: string[] }) => void) => () => void;
   /** Показать папку в проводнике / открыть путь — только безопасные абсолютные пути. */
   showInExplorer: (folderPath: string) => Promise<{ ok: boolean; error?: string }>;
   openPath: (targetPath: string) => Promise<{ ok: boolean; error?: string }>;
