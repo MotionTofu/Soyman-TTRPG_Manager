@@ -841,3 +841,91 @@ button.role-chip.is-on {
   gap: var(--sp-4);
 }
 .monster-group > summary .d-plate { margin: 0; }
+
+/* Заклинания таблицей (макет «Д» Roll-Spells): шапка машинописью над
+   тушь-линией, строки с линией 1px, значок школы рядом с её названием. */
+.spell-table-wrap { overflow-x: auto; margin: var(--sp-3) 0 var(--sp-2); }
+.spell-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.spell-table th:nth-child(1) { width: 26%; }
+.spell-table th:nth-child(2) { width: 17%; }
+.spell-table th:nth-child(3) { width: 12%; }
+.spell-table th:nth-child(4) { width: 11%; }
+.spell-table th:nth-child(5) { width: 13%; }
+.spell-table th:nth-child(6) { width: 7%; }
+.spell-table th {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: var(--edge-width) solid var(--edge);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--muted);
+}
+.spell-table td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-data);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spell-table tbody tr { cursor: pointer; }
+.spell-table tbody tr:hover td { background: var(--tab); }
+.spell-table__name { display: flex; align-items: center; gap: var(--sp-2); }
+.spell-table__open {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.spell-table__star {
+  flex: none;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.spell-table__star > svg { width: 14px; height: 14px; }
+.spell-table__star.is-on { color: var(--mark); }
+.spell-table__school {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 20px;
+  margin-right: var(--sp-4);
+  border: var(--edge-width) solid var(--edge);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  vertical-align: middle;
+}
+.spell-table__tags span {
+  margin-right: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+.spell-table__classes {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}

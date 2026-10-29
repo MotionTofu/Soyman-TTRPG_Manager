@@ -38,7 +38,7 @@ import { EMPTY_PROGRESSION, type ClassProgression } from "./dnd/progression";
 import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/effects";
 import { Verstak } from "./Verstak/Verstak";
 import { EquipmentTileGrid } from "./EquipmentTileGrid";
-import { SpellTileGrid } from "./SpellTileGrid";
+import { SpellTable } from "./SpellTable";
 import { ClassTileGrid } from "./ClassTileGrid";
 import { SimpleKindTileGrid } from "./SimpleKindTileGrid";
 import { stripMentions } from "../mentions";
@@ -478,6 +478,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [mechanicsOptions, setMechanicsOptions] = useState<MechanicsOptions>(EMPTY_MECHANICS_OPTIONS);
   const [classOptions, setClassOptions] = useState<ClassGroupOption[]>([]);
   const [classHierarchy, setClassHierarchy] = useState<ClassHierarchy>(EMPTY_CLASS_HIERARCHY);
+  const topClassIds = useMemo(() => new Set(classHierarchy.classes.map((c) => c.id)), [classHierarchy]);
   const [originFeatOptions, setOriginFeatOptions] = useState<MechanicsOption[]>([]);
   const [filterLevel, setFilterLevel] = useState("");
   const [filterClass, setFilterClass] = useState("");
@@ -1680,7 +1681,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection) && (
             <span className="d-seg" role="group" aria-label="Вид">
               <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>
-                Плитки
+                {isSpellSection ? "Таблица" : "Плитки"}
               </button>
               <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
                 Список
@@ -1692,8 +1693,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
 
       <div className="comp-list">
         {isSpellSection && viewMode === "grid" ? (
-          <SpellTileGrid
+          <SpellTable
             entries={filteredTopLevel}
+            classIds={topClassIds}
             grouping={spellGrouping}
             sortDir={sortDir}
             sectionId={section.id}

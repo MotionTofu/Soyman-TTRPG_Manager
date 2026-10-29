@@ -1,8 +1,9 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { addToBag } from "../bag";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
+import { buildSpellDetail } from "./dnd/SheetSpells";
 import type { CompendiumEntry } from "../types";
 
 export type SpellGrouping = "alpha" | "level" | "school";
@@ -20,6 +21,16 @@ function schoolName(entry: CompendiumEntry): string {
   if (!raw) return "";
   if (typeof raw === "string") return raw;
   return raw.name ?? "";
+}
+
+// Сокращение школы стоит рядом с полным названием (решение владельца
+// 2026-10-29): видно сразу оба, сокращение запоминается.
+const SCHOOL_ABBR: Record<string, string> = {
+  "Воплощение": "ВП", "Вызов": "ВЫ", "Иллюзия": "ИЛ", "Некромантия": "НК",
+  "Ограждение": "ОГ", "Очарование": "ОЧ", "Преобразование": "ПБ", "Прорицание": "ПР",
+};
+function schoolAbbr(name: string): string {
+  return SCHOOL_ABBR[name] ?? name.slice(0, 2).toUpperCase();
 }
 
 function monogramLetter(name: string): string {
@@ -70,15 +81,20 @@ interface Props {
   sortDir?: SpellSortDir;
   sectionId: number;
   searchActive: boolean;
+  /** Классы верхнего уровня: в колонке «Классы» подклассы не пишутся. */
+  classIds: ReadonlySet<number>;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }
 
-export function SpellTileGrid({
+/** Заклинания таблицей по группам (макет «Д» Roll-Spells). Строка открывает
+ *  ту же карточку, что прежде плитка. */
+export function SpellTable({
   entries,
   grouping,
   sortDir = "asc",
   sectionId,
   searchActive,
+  classIds,
   onToggleFavourite,
 }: Props) {
   const [modal, setModal] = useState<CompendiumEntry | null>(null);
@@ -97,14 +113,13 @@ export function SpellTileGrid({
     () => groupSpells(entries.filter((e) => !e.favourite), grouping, sortDir),
     [entries, grouping, sortDir]
   );
+  const groupProps = { sectionId, forceOpen: searchActive, classIds, onOpenModal: setModal, onToggleFavourite };
 
   return (
     <div className="stack" style={{ gap: 10 }}>
-      {favourites.length > 0 && (
-        <SpellGroup label="Избранное" sectionId={sectionId} list={favourites} forceOpen={searchActive} onOpenModal={setModal} onToggleFavourite={onToggleFavourite} />
-      )}
+      {favourites.length > 0 && <SpellGroup label="Избранное" list={favourites} {...groupProps} />}
       {groups.map(([label, list]) => (
-        <SpellGroup key={label} label={label} sectionId={sectionId} list={list} forceOpen={searchActive} onOpenModal={setModal} onToggleFavourite={onToggleFavourite} />
+        <SpellGroup key={label} label={label} list={list} {...groupProps} />
       ))}
       {modal && (
         <Modal onClose={() => setModal(null)}>
@@ -129,6 +144,7 @@ function SpellGroup({
   list,
   sectionId,
   forceOpen,
+  classIds,
   onOpenModal,
   onToggleFavourite,
 }: {
@@ -136,6 +152,7 @@ function SpellGroup({
   list: CompendiumEntry[];
   sectionId: number;
   forceOpen: boolean;
+  classIds: ReadonlySet<number>;
   onOpenModal: (e: CompendiumEntry) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }) {
@@ -147,56 +164,79 @@ function SpellGroup({
       return next;
     });
   }, [key]);
+  const isOpen = forceOpen || open;
   return (
-    <details className="comp-category monster-group" open={forceOpen || open} onToggle={(e) => { if (forceOpen) return; remember((e.currentTarget as HTMLDetailsElement).open); }}>
+    <details className="comp-category monster-group" open={isOpen} onToggle={(e) => { if (forceOpen) return; remember((e.currentTarget as HTMLDetailsElement).open); }}>
       <summary className="comp-level-label chevron-summary">
         <NavIcon name="chevron" className="chevron-icon" />
         <span className="d-plate">{label}</span>
         <span className="d-note">{list.length}</span>
       </summary>
-      <div className="monster-grid">
-        {list.map((e) => (
-          <SpellTile key={e.id} entry={e} onOpenModal={onOpenModal} onToggleFavourite={onToggleFavourite} />
-        ))}
-      </div>
+      {/* Закрытая группа таблицу не строит: в разделе ~400 строк. */}
+      {isOpen && (
+        <div className="spell-table-wrap">
+          <table className="spell-table">
+            <thead>
+              <tr>
+                <th>Название</th>
+                <th>Школа</th>
+                <th>Время</th>
+                <th>Дистанция</th>
+                <th>Длительность</th>
+                <th>Метки</th>
+                <th>Классы</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((e) => (
+                <SpellRow key={e.id} entry={e} classIds={classIds} onOpenModal={onOpenModal} onToggleFavourite={onToggleFavourite} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </details>
   );
 }
 
-const SpellTile = memo(function SpellTile({
+function SpellRow({
   entry,
+  classIds,
   onOpenModal,
   onToggleFavourite,
 }: {
   entry: CompendiumEntry;
+  classIds: ReadonlySet<number>;
   onOpenModal: (e: CompendiumEntry) => void;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
 }) {
-  const favourite = !!entry.favourite;
-  const level = spellLevelLabel(entry.level);
+  const detail = buildSpellDetail(entry);
   const school = schoolName(entry);
-  const ritual = !!(entry.data as Record<string, unknown>)?.ritual;
-  const conc = !!(entry.data as Record<string, unknown>)?.concentration;
-  const meta = [level !== UNSET_LABEL ? level : null, school || null].filter(Boolean).join(" · ") || "Заклинание";
+  const data = entry.data as Record<string, unknown>;
+  const classes = ((data.classes as { id: number; name: string }[] | undefined) ?? []).filter((c) => classIds.has(c.id));
+  const favourite = !!entry.favourite;
   return (
-    <article className="monster-tile" onClick={() => onOpenModal(entry)} title="Открыть карточку">
-      <header className="monster-tile__band">
-        <button type="button" className={`monster-tile__star${favourite ? " is-on" : ""}`} title={favourite ? "Убрать из избранного" : "В избранное"} onClick={(ev) => { ev.stopPropagation(); onToggleFavourite(entry, !favourite); }}><NavIcon name="star" filled={favourite} /></button>
-        <span className="monster-tile__name">{entry.name || "Без названия"}</span>
-        <button type="button" className="monster-tile__bag" title="В мешок" onClick={(ev) => { ev.stopPropagation(); addToBag({ type: "compendium_entry", id: entry.id, title: entry.name, kind: entry.kind, system_id: entry.system_id, section_id: entry.section_id }); }}><NavIcon name="bag" /></button>
-      </header>
-      <div className="monster-tile__body">
-        <span className="monster-tile__monogram" aria-hidden="true">{monogramLetter(entry.name)}</span>
-        <div className="monster-tile__facts">
-          <span className="monster-tile__meta">{meta}</span>
-          <span className="monster-tile__value" style={{ fontSize: "var(--fs-meta)" }}>{[ritual ? "ритуал" : null, conc ? "концентрация" : null].filter(Boolean).join(" · ") || "—"}</span>
-        </div>
-      </div>
-      <footer className="monster-tile__actions" onClick={(ev) => ev.stopPropagation()}>
-        <button type="button" onClick={() => onOpenModal(entry)}>Карточка</button>
-        <Link to={`/compendium/${entry.id}`} onClick={(ev) => ev.stopPropagation()}>Профиль</Link>
-      </footer>
-    </article>
+    <tr onClick={() => onOpenModal(entry)}>
+      <td><span className="spell-table__name">
+        <button type="button" className={`spell-table__star${favourite ? " is-on" : ""}`} title={favourite ? "Убрать из избранного" : "В избранное"}
+          onClick={(ev) => { ev.stopPropagation(); onToggleFavourite(entry, !favourite); }}>
+          <NavIcon name="star" filled={favourite} />
+        </button>
+        <button type="button" className="spell-table__open" onClick={(ev) => { ev.stopPropagation(); onOpenModal(entry); }}>
+          {entry.name || "Без названия"}
+        </button>
+      </span></td>
+      <td>{school && <><span className="spell-table__school" aria-hidden="true">{schoolAbbr(school)}</span>{school}</>}</td>
+      <td>{detail.castingTime ?? "—"}</td>
+      <td>{detail.range ?? "—"}</td>
+      <td>{detail.duration ?? "—"}</td>
+      <td className="spell-table__tags">
+        {data.ritual ? <span title="Ритуал">Р</span> : null}
+        {data.concentration ? <span title="Концентрация">К</span> : null}
+      </td>
+      <td className="spell-table__classes" title={classes.map((c) => c.name).join(", ")}>
+        {classes.map((c) => c.name.slice(0, 3).toUpperCase()).join(" ")}
+      </td>
+    </tr>
   );
-});
-
+}
