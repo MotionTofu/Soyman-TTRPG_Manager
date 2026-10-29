@@ -1,23 +1,20 @@
-/* Вкладка «Звук» в Ресурсах.
+/* Вкладка «Звуки» аудиотеки — макет «Д» Roll-Audio (docs/design-system.md).
  *
  * Своя раскладка, а не общие .card/.card-grid: у звука сотня коротких
- * записей, и карточка на каждую превращает библиотеку в простыню, по
- * которой нельзя окинуть взглядом «что у меня вообще есть». Поэтому
- * бэкграунд идёт строчками (у трека важно имя и длина), а эмбиент, погода и
- * стингеры — плитками с иконкой: в пульте они выглядят так же, и глаз
- * запоминает их одинаково в обоих местах.
+ * записей, и карточка на каждую превращает библиотеку в простыню. Все роли
+ * идут строчками в колонки: имя и длина. У эмбиента, погоды и стингеров в
+ * строке остаётся иконка кнопки пульта — глаз узнаёт звук в обоих местах.
  *
- * Правка роли и иконки убрана в отдельное окно по щелчку. На плитке она
- * держала два выпадающих списка на каждый звук — полсотни органов
- * управления в разделе, куда заходят раз в месяц. */
+ * Правка роли и иконки убрана в отдельное окно по щелчку по строке. */
 
+/* Пропавшие файлы — опасность, малиновым (§2.1). */
 .sl-alert {
   display: flex;
   align-items: center;
   gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
   padding: var(--sp-4) var(--sp-5);
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: var(--edge-width) solid var(--mark);
 }
 .sl-alert-body { flex: 1 1 auto; min-width: 0; }
 .sl-alert-title {
@@ -26,7 +23,7 @@
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--mark);
 }
 .sl-alert-note {
   font-family: var(--font-mono);
@@ -35,33 +32,11 @@
   margin-top: var(--sp-1);
 }
 
-.sl-section { display: flex; flex-direction: column; gap: var(--sp-5); }
-
-.sl-section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-4);
-  width: 100%;
-}
-.sl-section-title {
-  font-family: var(--font-ui);
-  font-size: var(--fs-h3);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.sl-section-hint {
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  color: var(--muted);
-}
-.sl-section-spacer { flex: 1 1 auto; }
-
+/* Мелкая кнопка окна правки и наборов. */
 .sl-add {
   flex: 0 0 auto;
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border: 1px solid var(--line);
   border-radius: 0;
   padding: var(--sp-3) var(--sp-5);
   font-family: var(--font-ui);
@@ -72,91 +47,200 @@
   color: var(--ink);
   cursor: pointer;
 }
-.sl-add:hover { border-color: var(--accent); color: var(--accent); }
+.sl-add:hover { border-color: var(--edge); }
+.sl-section-spacer { flex: 1 1 auto; }
 
-.sl-upload-input { display: none; }
-.sl-preview-toolbar, .sl-preview-volume, .sl-preview-now {
+/* Панель: громкость прослушки слева, поиск справа. */
+.sl-preview-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  gap: var(--sp-5) var(--sp-7);
+  margin-bottom: var(--sp-7);
+}
+.sl-preview-volume, .sl-preview-now {
+  display: flex;
+  align-items: center;
   gap: var(--sp-4);
   min-width: 0;
 }
-.sl-preview-toolbar { justify-content: space-between; }
-.sl-preview-volume {
+.sl-preview-volume { font-size: var(--fs-data); }
+.sl-preview-volume > svg { width: 18px; height: 18px; color: var(--muted); }
+.sl-preview-volume input { width: 180px; max-width: 100%; accent-color: var(--ink); }
+.sl-preview-volume output {
+  min-width: 4ch;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.sl-preview-now > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
-.sl-preview-volume input { width: 160px; max-width: 100%; accent-color: var(--accent); }
-.sl-preview-volume output { min-width: 4ch; }
-.sl-preview-now { flex: 1 1 200px; justify-content: flex-end; }
-.sl-preview-now > span {
+.sl-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex: 0 1 320px;
+  min-width: 200px;
+  height: 40px;
+  margin-left: auto;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  background: var(--field);
+}
+.sl-search > svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.sl-search input {
+  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--fs-meta);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-data);
+  outline: none;
+}
+
+/* Раздел роли: плашка, пояснение капсом, сортировка и добавление справа. */
+.sl-section + .sl-section { margin-top: var(--sp-7); }
+.sl-section-head { flex-wrap: wrap; }
+.sl-section-head .d-note { text-transform: uppercase; }
+.sl-section-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.sl-sort {
+  height: 30px;
+  max-width: 100%;
+  padding: 0 var(--sp-4);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--fs-label);
+}
+.sl-upload-input { display: none; }
+.sl-root-label {
+  display: block;
+  margin-bottom: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Строки треков: сетка колонок, линия сверху, без коробки на каждую. */
+.sl-tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0 var(--sp-7);
+}
+.sl-track {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
 }
 .sl-preview {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--paper);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
 }
-.sl-preview > svg { width: 16px; height: 16px; }
-.sl-preview:hover, .sl-preview.is-playing { border-color: var(--accent); color: var(--accent); }
+.sl-preview > svg { width: 12px; height: 12px; }
+.sl-preview:hover { background: var(--tab); }
+.sl-preview.is-playing { background: var(--surface); color: var(--on-surface); }
 .sl-preview:disabled { opacity: 0.4; cursor: default; }
-.sl-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sl-track-edit, .sl-tile-edit {
+.sl-preview:focus-visible { outline: 2px solid var(--edge); outline-offset: 2px; }
+.sl-track-edit {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
   border: 0;
   padding: 0;
   background: transparent;
   color: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.sl-track-edit { flex: 1 1 auto; text-align: left; align-self: stretch; }
-.sl-tile-edit {
-  flex-direction: column;
-  justify-content: center;
-  width: 100%;
-  flex: 1 1 auto;
-  padding-top: var(--sp-8);
+.sl-track-edit:hover .sl-track-name { text-decoration: underline; }
+.sl-track-edit > :is(svg, img) { flex: none; color: var(--ink-2); }
+.sl-track-name {
+  min-width: 0;
+  font-size: var(--fs-data);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.sl-tile > .sl-preview { position: absolute; top: var(--sp-2); left: var(--sp-2); }
-.sl-sort { max-width: 100%; font-size: var(--fs-meta); }
-.sl-root-label {
+.sl-track.is-playing .sl-track-name { font-weight: 600; }
+.sl-loop {
+  flex: none;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
   color: var(--muted);
 }
-.sl-folder {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-  border-top: 1px solid var(--line);
-  padding-top: var(--sp-4);
+.sl-pin { flex: none; font-size: var(--fs-label); color: var(--mark); }
+.sl-track-time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--sp-3);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-data);
+  color: var(--ink-2);
 }
+.sl-track.broken { color: var(--muted); }
+.sl-track.broken .sl-track-time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--mark);
+}
+.sl-tile-note {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.sl-tile-note.broken { color: var(--mark); }
+
+.sl-more {
+  margin-top: var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  cursor: pointer;
+}
+.sl-more:hover { color: var(--ink); text-decoration: underline; }
+
+/* Папки: строка со стрелкой, именем и счётчиком, мелкие кнопки справа. */
+.sl-folder { margin-top: var(--sp-5); }
 .sl-folder-head, .sl-folder-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--sp-3);
 }
+.sl-folder-head { padding: var(--sp-2) 0; border-top: var(--edge-width) solid var(--edge); }
 .sl-folder-toggle {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--sp-3);
   flex: 1 1 160px;
   min-width: 0;
@@ -171,116 +255,25 @@
   font-family: var(--font-ui);
   font-size: var(--fs-data);
   font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.sl-section .sl-tile { height: auto; min-height: 104px; }
-@media (max-width: 720px) {
-  .sl-section-hint { flex: 1 1 100%; }
-  .sl-folder-toggle .sl-section-hint { flex: 0 0 auto; }
-  .sl-folder-actions { width: 100%; }
-  .sl-sort { width: 100%; }
-}
-
-/* Бэкграунд: строчки */
-.sl-tracks {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--sp-4);
-}
-.sl-track {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  padding: var(--sp-4) var(--sp-4);
-  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.sl-track:hover { border-color: var(--accent); }
-.sl-track-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sl-track-time {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  color: var(--muted);
-}
-.sl-track.broken {
-  background: transparent;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  color: var(--muted);
-}
-
-/* Эмбиент, погода, стингеры: плитки */
-.sl-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: var(--sp-4);
-}
-.sl-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-  height: 104px;
-  padding: var(--sp-4);
-  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: inherit;
-  cursor: pointer;
-}
-.sl-tile:hover { border-color: var(--accent); }
-.sl-tile.broken {
-  background: transparent;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  color: var(--muted);
-}
-.sl-tile-name {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  text-align: center;
-  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
-.sl-tile-note {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  color: var(--muted);
-}
-.sl-tile-note.broken { color: var(--accent); }
-.sl-pin {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  font-size: var(--fs-micro);
-  color: var(--accent);
+@media (max-width: 720px) {
+  .sl-section-end { margin-left: 0; width: 100%; }
+  .sl-search { margin-left: 0; flex: 1 1 100%; }
+  .sl-folder-actions { width: 100%; }
 }
 
 .sl-empty {
+  margin: var(--sp-3) 0;
   font-family: var(--font-mono);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
 
 .sl-foot {
+  margin-top: var(--sp-8);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   letter-spacing: 0.14em;

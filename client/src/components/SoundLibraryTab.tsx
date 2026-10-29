@@ -35,6 +35,7 @@ export function SoundLibraryTab() {
   const [relink, setRelink] = useState<MissingFile | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [uploading, setUploading] = useState<AudioRole | null>(null);
+  const [query, setQuery] = useState("");
   const refresh = useCallback(() => afterWrite(SOUND_LIBRARY_AFFECTS), [afterWrite]);
   const tracks = useMemo(() => sounds.filter((s) => !s.missing).map((s) => ({ id: s.resource_id, src: s.src })), [sounds]);
   const durations = useDurations(tracks);
@@ -129,8 +130,13 @@ export function SoundLibraryTab() {
       </label>
       {previewSound && <div className="sl-preview-now">
         <span>{previewSound.name}</span>
-        <button type="button" className="sl-add" onClick={preview.stop} aria-label="Остановить предпрослушивание">Стоп</button>
+        <button type="button" className="d-btn d-btn--sm" onClick={preview.stop} aria-label="Остановить предпрослушивание">Стоп</button>
       </div>}
+      <label className="sl-search">
+        <NavIcon name="search" />
+        <input type="search" aria-label="Найти звук" placeholder="Найти трек…" value={query}
+          onChange={(event) => setQuery(event.target.value)} />
+      </label>
     </div>
     {preview.error && <p className="sl-empty" role="alert">{preview.error}</p>}
     {!editing && <audio ref={preview.audioRef} preload="none" onPause={preview.onPause}
@@ -141,15 +147,15 @@ export function SoundLibraryTab() {
         <div className="sl-alert-title">{missingAudio.length} звуков не найдено</div>
         <div className="sl-alert-note">В пульте эти кнопки погашены заранее — разобрать лучше сейчас, а не за столом.</div>
       </div>
-      <button className="sl-add" onClick={() => setRelink(missingAudio[0])}>Разобрать</button>
+      <button className="d-btn d-btn--sm" onClick={() => setRelink(missingAudio[0])}>Разобрать</button>
     </div>}
     {folderState.error && <div className="sl-alert" role="alert">
       <span>Не удалось загрузить папки: {folderState.error}</span>
-      <button className="sl-add" onClick={folderState.reload}>Повторить</button>
+      <button className="d-btn d-btn--sm" onClick={folderState.reload}>Повторить</button>
     </div>}
     {SECTIONS.map((section) => <SoundLibrarySection key={section.role} section={section}
       sounds={sounds} folders={folders} durations={durations} uploading={uploading}
-      playingId={preview.playingId} onPreview={preview.toggle}
+      playingId={preview.playingId} query={query} onPreview={preview.toggle}
       onUpload={upload} onEdit={openEditor}
       onCreate={() => void nameFolder(section.role)}
       onRename={(folder) => void nameFolder(section.role, folder)}

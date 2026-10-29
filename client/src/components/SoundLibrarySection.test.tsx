@@ -93,6 +93,18 @@ describe("раздел аудиотеки", () => {
     expect(within(screen.getByRole("region", { name: "Папка: Дорога" })).getByText("Пока пусто.")).toBeTruthy();
   });
 
+  it("показывает 12 звуков корня до «Показать все», поиск снимает предел и раскрывает папку", () => {
+    const many = Array.from({ length: 13 }, (_, i) => sound(100 + i, `Трек ${i + 1}`));
+    const data = props();
+    const view = render(<SoundLibrarySection {...data} sounds={[...many, sound(3, "Буря", 7)]} />);
+    expect(names(view.container)).toHaveLength(13);
+    fireEvent.click(screen.getByRole("button", { name: "Показать все 13 ›" }));
+    expect(names(view.container)).toHaveLength(14);
+    fireEvent.click(screen.getByRole("button", { name: /^Дорога/ }));
+    view.rerender(<SoundLibrarySection {...data} sounds={[...many, sound(3, "Буря", 7)]} query="бур" />);
+    expect(names(view.container)).toEqual(["Буря"]);
+  });
+
   it("сортирует названия без учёта регистра и с естественным порядком чисел", () => {
     const list = [sound(1, "Трек 10"), sound(2, "трек 2"), sound(3, "Арка")];
     expect(sortSounds(list, "name-asc", new Map()).map((s) => s.name)).toEqual(["Арка", "трек 2", "Трек 10"]);

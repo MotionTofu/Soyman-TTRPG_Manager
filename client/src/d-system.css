@@ -151,6 +151,14 @@
   text-transform: uppercase;
   text-align: left;
 }
+/* Счётчик на ярлыке — машинописью. */
+:is(.d-tabs, .entity-page--paper > .tabs) button b {
+  margin-left: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  color: var(--muted);
+}
 :is(.d-tabs, .entity-page--paper > .tabs) button:hover {
   color: var(--ink);
 }
