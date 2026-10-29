@@ -13,10 +13,10 @@ export function AudioLibraryPage(){
  const soundCount=useResource<SoundButton[]>("/sounds").data?.length;
  const setCount=useResource<SoundSetSummary[]>("/sound-sets").data?.length;
  return <PageFrame section="resources" title="Аудиотека"><SectionBackground/>
- <div className="tabs d-tabs"><button className={tab==="sounds"?"active":""} onClick={()=>setTab("sounds")}>Звуки{soundCount!==undefined&&<b>{soundCount}</b>}</button><button className={tab==="sets"?"active":""} onClick={()=>setTab("sets")}>Наборы{setCount!==undefined&&<b>{setCount}</b>}</button></div>
+ <div className="d-tabbed"><div className="tabs d-tabs"><button className={tab==="sounds"?"active":""} onClick={()=>setTab("sounds")}>Звуки{soundCount!==undefined&&<b>{soundCount}</b>}</button><button className={tab==="sets"?"active":""} onClick={()=>setTab("sets")}>Наборы{setCount!==undefined&&<b>{setCount}</b>}</button></div>
  <div className="d-sheet">
  {ownership?.scope==="all" && <p className="muted" role="status">Прослушивание приостановлено катсценой. После завершения запустите его заново.</p>}
  {tab==="sounds"?<SoundLibraryTab/>:<SoundSetsTab/>}
- </div>
+ </div></div>
  </PageFrame>;
 }

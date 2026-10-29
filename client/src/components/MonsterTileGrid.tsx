@@ -226,7 +226,7 @@ function MonsterGroup({
 
   return (
     <details
-      className="comp-category"
+      className="comp-category monster-group"
       open={forceOpen || open}
       onToggle={(e) => {
         if (forceOpen) return;
@@ -235,13 +235,8 @@ function MonsterGroup({
     >
       <summary className="comp-level-label chevron-summary">
         <NavIcon name="chevron" className="chevron-icon" />
-        {label}{" "}
-        <span
-          className="muted"
-          style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}
-        >
-          · {list.length}
-        </span>
+        <span className="d-plate">{label}</span>
+        <span className="d-note">{list.length}</span>
       </summary>
       <div className="monster-grid">
         {list.map((e) => (
@@ -335,6 +330,7 @@ const MonsterTile = memo(function MonsterTile({
         >
           <NavIcon name="bag" />
         </button>
+        {isPhb && <span className="monster-tile__crplate">{cr ? `КО ${cr}` : "КО —"}</span>}
       </header>
 
       <div className="monster-tile__body">
@@ -353,7 +349,6 @@ const MonsterTile = memo(function MonsterTile({
           <span className="monster-tile__meta">
             {[type, isPhb ? size : null].filter(Boolean).join(" · ") || "Тип не указан"}
           </span>
-          {isPhb && <span className="monster-tile__cr">{cr ? `КО ${cr}` : "КО —"}</span>}
           <span className="monster-tile__value">
             КЗ {ac || "—"} · {hp ? `${hp} хитов` : "хитов —"}
           </span>

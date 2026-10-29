@@ -322,41 +322,45 @@
    260 px без места под портрет, а на 2560 — по 500. */
 .monster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--sp-5);
   margin: var(--sp-3) 0 var(--sp-1);
 }
 .monster-tile {
-  border: var(--card-border-width) solid var(--ink);
-  border-radius: var(--card-radius);
-  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--sheet);
   color: var(--ink);
   display: flex;
   flex-direction: column;
   cursor: pointer;
 }
 .monster-tile:hover {
-  border-color: var(--accent);
+  border-color: var(--edge);
 }
 /* Шапка — плашка-инверсия (§1.4). Звезда слева, мешок справа: обе цели
    стоят по краям плашки и не спорят с именем в середине. */
 .monster-tile__band {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--surface);
-  color: var(--on-surface);
-  border-radius: calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px) 0 0;
+  min-height: 32px;
+  padding: 0 0 0 var(--sp-4);
+  border-bottom: 1px solid var(--line);
 }
 .monster-tile__name {
   flex: 1 1 auto;
   min-width: 0;
-  font-family: var(--font-display);
+  align-self: center;
+  font-family: var(--font-ui);
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
   text-transform: uppercase;
-  line-height: 0.96;
-  font-size: var(--fs-h3);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .monster-tile__star,
 .monster-tile__bag {
@@ -365,32 +369,44 @@
   border: 0;
   padding: 0 var(--sp-1);
   cursor: pointer;
-  color: var(--on-surface-muted);
+  color: var(--muted);
   display: flex;
   align-items: center;
 }
 .monster-tile__star:hover,
 .monster-tile__bag:hover {
+  color: var(--ink);
+}
+.monster-tile__crplate {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-4);
+  background: var(--surface);
   color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 /* Избранное различается ЗАЛИВКОЙ звезды, а не цветом: в «Соевом нуаре»
    --accent равен чернилам, и закрашенная акцентом звезда на плашке-инверсии
    пропадала совсем. Контур приглушён, залитая — в полный цвет плашки. */
 .monster-tile__star.is-on {
-  color: var(--on-surface);
+  color: var(--mark);
 }
 .monster-tile__body {
   display: flex;
-  gap: var(--sp-4);
-  padding: var(--sp-4);
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   align-items: flex-start;
 }
 .monster-tile__portrait,
 .monster-tile__monogram {
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
   flex: 0 0 auto;
-  border: var(--card-border-width) solid var(--ink);
+  border: var(--edge-width) solid var(--edge);
   border-radius: 0;
 }
 .monster-tile__portrait {
@@ -406,9 +422,8 @@
   font-family: var(--font-display);
   font-size: var(--fs-h2);
   line-height: 1;
-  color: var(--ink);
-  background: var(--paper-2);
-  border-color: var(--line);
+  color: var(--muted);
+  background: var(--ph);
 }
 .monster-tile__facts {
   display: flex;
@@ -429,7 +444,8 @@
 }
 .monster-tile__dpr {
   font-family: var(--font-mono);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 /* УВР отсаживается от чипов: только когда идёт после роли. */
 .monster-tile__role + .monster-tile__dpr {
@@ -438,9 +454,9 @@
 /* Чипсы ролей в фильтрах бестиария: невыбранный — обычная кнопка ряда,
    выбранный — плашка-инверсия (§1.4), как тип существа на карточке. */
 button.role-chip.is-on {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
+  background: var(--surface);
+  color: var(--on-surface);
+  border-color: var(--surface);
 }
 /* Двойной ползунок УВР в фильтрах раздела: две точки на одной линейке.
    Инпуты лежат друг на друге, ловят только большими пальцами. */
@@ -504,27 +520,27 @@ button.role-chip.is-on {
   border-radius: 0;
 }
 .monster-tile__role {
+  font-family: var(--font-ui);
   font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  border: var(--card-border-width) solid var(--line);
-  padding: 0 var(--sp-2);
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  padding: 0 var(--sp-3);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .monster-tile__en {
+  font-family: var(--font-mono);
   color: var(--muted);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-micro);
   overflow-wrap: anywhere;
 }
 .monster-tile__meta {
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
+  font-size: var(--fs-label);
+  color: var(--ink-2);
 }
 /* Значение — моноширинным (§1.5). __cr — бестиарий (КО), __value — транспорт
    (КД · хиты): один и тот же класс-строка, переименование в __value целиком
@@ -536,20 +552,27 @@ button.role-chip.is-on {
   margin-top: var(--sp-1);
 }
 .monster-tile__actions {
-  display: flex;
-  border-top: var(--card-border-width) solid var(--line);
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  border-top: 1px solid var(--line);
   margin-top: auto;
 }
 .monster-tile__actions > * {
-  flex: 1 1 0;
-  text-align: center;
-  padding: var(--sp-3) var(--sp-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 var(--sp-2);
+  font-family: var(--font-ui);
   font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   background: none;
   border: 0;
-  border-left: var(--card-border-width) solid var(--line);
+  border-left: 1px solid var(--line);
   border-radius: 0;
-  color: var(--text);
+  color: var(--ink-2);
   text-decoration: none;
   cursor: pointer;
 }
@@ -796,3 +819,25 @@ button.role-chip.is-on {
   margin-top: var(--sp-4);
   border-top: var(--card-border-width) solid var(--line);
 }
+
+/* Бестиарий «Д»: строки фильтров, итог с сегментами, группы плашкой. */
+.monster-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.monster-bar__search { flex: 1 1 220px; min-width: 180px; }
+.monster-bar__on { background: var(--surface); color: var(--on-surface); }
+.monster-bar__on:hover { background: var(--surface); color: var(--on-surface); }
+.monster-bar__gap { margin-left: var(--sp-4); }
+.monster-bar__num { width: 72px; height: 30px; }
+.monster-bar__end { margin-left: auto; }
+.monster-bar--total { margin-top: var(--sp-3); }
+.monster-bar__segs { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.monster-group > summary.comp-level-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.monster-group > summary .d-plate { margin: 0; }

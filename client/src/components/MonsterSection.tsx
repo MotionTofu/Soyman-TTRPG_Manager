@@ -269,64 +269,35 @@ export function MonsterSection({ systemId, section }: Props) {
     navigate(`/compendium/${created.id}`);
   }
 
+  // Раскладка — макет «Д» Roll-Bestiary: поиск и списки, строка ролей,
+  // строка итога с сортировкой и видом.
+  const sortButton = (mode: string, label: string) => (
+    <button
+      type="button"
+      className={sortMode === mode ? "active" : ""}
+      aria-pressed={sortMode === mode}
+      onClick={() => changeSortMode(mode as SortMode)}
+      title={sortMode === mode ? `${label}: повтор меняет порядок` : label}
+    >
+      {label}{sortMode === mode ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+    </button>
+  );
+
   return (
-    <div className="card stack">
-      <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
-        <span className="row" style={{ gap: 4, alignItems: "center" }}>
-          <span className="muted">Сортировка:</span>
-          <button
-            className={sortMode === "alpha" ? "active-sort" : ""}
-            onClick={() => changeSortMode("alpha")}
-            title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}
-          >
-            {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
-          </button>
-          <button
-            className={sortMode === "creature_type" ? "active-sort" : ""}
-            onClick={() => changeSortMode("creature_type")}
-          >
-            По типу{sortMode === "creature_type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-          </button>
-          {isPhb && (
-            <button
-              className={sortMode === "cr" ? "active-sort" : ""}
-              onClick={() => changeSortMode("cr")}
-            >
-              По КО{sortMode === "cr" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-            </button>
-          )}
-          {isPhb && (
-            <button
-              className={sortMode === "size" ? "active-sort" : ""}
-              onClick={() => changeSortMode("size")}
-            >
-              По размеру{sortMode === "size" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-            </button>
-          )}
-        </span>
-        <span className="row" style={{ gap: 6, alignItems: "center" }}>
-          <button type="button" className={viewMode === "grid" ? "active-sort" : ""} onClick={() => setViewMode("grid")} title="Плитками">▦ Плитки</button>
-          <button type="button" className={viewMode === "list" ? "active-sort" : ""} onClick={() => setViewMode("list")} title="Списком">☰ Список</button>
-        </span>
-      </div>
-      <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          type="text"
-          placeholder="Поиск по названию…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: 260 }}
-        />
-        {searchQuery !== "" && (
-          <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
-            <NavIcon name="close" />
-          </button>
-        )}
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {filteredTopLevel.length} / {topLevel.length}
-        </span>
-        <select value={filterCreatureType} onChange={(e) => setFilterCreatureType(e.target.value)}>
-          <option value="">Все типы существ</option>
+    <div className="stack monster-section">
+      <div className="monster-bar">
+        <label className="d-field monster-bar__search">
+          <NavIcon name="search" />
+          <input
+            type="search"
+            aria-label="Найти существо"
+            placeholder="Найти существо…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </label>
+        <select className="d-select" aria-label="Тип существа" value={filterCreatureType} onChange={(e) => setFilterCreatureType(e.target.value)}>
+          <option value="">Все типы</option>
           {creatureTypes.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
@@ -334,8 +305,8 @@ export function MonsterSection({ systemId, section }: Props) {
           ))}
         </select>
         {isPhb && (
-          <select value={filterCR} onChange={(e) => setFilterCR(e.target.value)}>
-            <option value="">Все классы опасности</option>
+          <select className="d-select" aria-label="Класс опасности" value={filterCR} onChange={(e) => setFilterCR(e.target.value)}>
+            <option value="">Все КО</option>
             {CHALLENGE_RATINGS.map((cr) => (
               <option key={cr} value={cr}>
                 {cr}
@@ -344,7 +315,7 @@ export function MonsterSection({ systemId, section }: Props) {
           </select>
         )}
         {isPhb && (
-          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
+          <select className="d-select" aria-label="Размер" value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
             <option value="">Все размеры</option>
             {CREATURE_SIZES.map((s) => (
               <option key={s} value={s}>
@@ -355,29 +326,19 @@ export function MonsterSection({ systemId, section }: Props) {
         )}
         <button
           type="button"
-          className={showFavOnly ? "active-sort" : ""}
+          className={`d-btn d-btn--sm${showFavOnly ? " monster-bar__on" : ""}`}
+          aria-pressed={showFavOnly}
           onClick={() => setShowFavOnly((v) => !v)}
           title={showFavOnly ? "Показать всех" : "Только избранное"}
         >
-          <NavIcon name="star" filled={showFavOnly} /> {showFavOnly ? "Только избранное" : "Избранное"}
+          <NavIcon name="star" filled={showFavOnly} /> Избранное
         </button>
-        {/* Только пока есть что разбирать: разобрали последнее — кнопка ушла. */}
-        {(reviewCount > 0 || showReviewOnly) && (
-          <button
-            type="button"
-            className={showReviewOnly ? "active-sort" : ""}
-            onClick={() => setShowReviewOnly((v) => !v)}
-            title="Статблоки, которые не перевелись из текста книги в поля: трекеры боевого режима по ним не считают"
-          >
-            Требует разбора ({reviewCount})
-          </button>
-        )}
       </div>
-      <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-        <span className="muted">Роли:</span>
+      <div className="monster-bar">
+        <span className="d-note">РОЛИ:</span>
         <button
           type="button"
-          className="role-chip is-on"
+          className="d-chip active"
           onClick={cycleFilterLogic}
           title={FILTER_LOGIC_HINT[filterLogic]}
         >
@@ -387,14 +348,15 @@ export function MonsterSection({ systemId, section }: Props) {
           <button
             key={r}
             type="button"
-            className={`role-chip${filterRoles.includes(r) ? " is-on" : ""}`}
+            className={`d-chip${filterRoles.includes(r) ? " active" : ""}`}
+            aria-pressed={filterRoles.includes(r)}
             onClick={() => toggleFilterRole(r)}
             title={filterRoles.includes(r) ? `Убрать роль «${r}»` : `Только роль «${r}»`}
           >
             {r}
           </button>
         ))}
-        <span className="muted" style={{ marginLeft: 8 }}>УВР:</span>
+        <span className="d-note monster-bar__gap">УВР:</span>
         {dprBoundMax > 0 && (
           <DprRangeSlider
             boundMax={dprBoundMax}
@@ -405,6 +367,7 @@ export function MonsterSection({ systemId, section }: Props) {
           />
         )}
         <input
+          className="d-select monster-bar__num"
           type="number"
           min={0}
           step={1}
@@ -412,10 +375,10 @@ export function MonsterSection({ systemId, section }: Props) {
           aria-label="УВР от"
           value={filterDprMin}
           onChange={(e) => setFilterDprMin(e.target.value)}
-          style={{ width: 70 }}
         />
-        <span className="muted">–</span>
+        <span className="d-note">–</span>
         <input
+          className="d-select monster-bar__num"
           type="number"
           min={0}
           step={1}
@@ -423,15 +386,41 @@ export function MonsterSection({ systemId, section }: Props) {
           aria-label="УВР до"
           value={filterDprMax}
           onChange={(e) => setFilterDprMax(e.target.value)}
-          style={{ width: 70 }}
         />
         {/* Кнопки нет, пока сбрасывать нечего (§1.11): пустая кнопка в
              ряду фильтров — это лишний орган управления за столом. */}
         {monsterFiltersActive && (
-          <button type="button" onClick={resetMonsterFilters}>
+          <button type="button" className="d-btn d-btn--sm" onClick={resetMonsterFilters}>
             Сбросить фильтры
           </button>
         )}
+        {/* Только пока есть что разбирать: разобрали последнее — метка ушла. */}
+        {(reviewCount > 0 || showReviewOnly) && (
+          <button
+            type="button"
+            className={`d-mark monster-bar__end${showReviewOnly ? " active" : ""}`}
+            aria-pressed={showReviewOnly}
+            onClick={() => setShowReviewOnly((v) => !v)}
+            title="Статблоки, которые не перевелись из текста книги в поля: трекеры боевого режима по ним не считают"
+          >
+            Требует разбора · {reviewCount}
+          </button>
+        )}
+      </div>
+      <div className="monster-bar monster-bar--total">
+        <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>
+        <span className="d-end monster-bar__segs">
+          <span className="d-seg" role="group" aria-label="Сортировка">
+            {sortButton("alpha", sortMode === "alpha" && sortDir === "desc" ? "Я–А" : "А–Я")}
+            {sortButton("creature_type", "Тип")}
+            {isPhb && sortButton("cr", "КО")}
+            {isPhb && sortButton("size", "Размер")}
+          </span>
+          <span className="d-seg" role="group" aria-label="Вид">
+            <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>Плитки</button>
+            <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>Список</button>
+          </span>
+        </span>
       </div>
       <div className="comp-list">
         {viewMode === "grid" ? (
@@ -466,7 +455,7 @@ export function MonsterSection({ systemId, section }: Props) {
           />
         )}
       </div>
-      <button style={{ alignSelf: "flex-start" }} onClick={addMonster}>
+      <button className="d-btn d-btn--sm" style={{ alignSelf: "flex-start" }} onClick={addMonster}>
         + Добавить {kindLabel("monster").toLowerCase()}
       </button>
     </div>

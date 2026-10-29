@@ -115,7 +115,7 @@ export function BookLibraryPage(){
  return <PageFrame section="mastering" title="Библиотека" actions={<Link to="/mastering/cutscenes" className="button">Катсцены</Link>} className={`mastering-page mastering-library${selectedId?" is-reading":""}`}>
  {confirmDialog}<SectionBackground/>
  {!selectedId&&<>
- <div className="tabs d-tabs library-departments" aria-label="Подразделы библиотеки"><button className={department==="room"?"active":""} onClick={()=>changeDepartment("room")}>Читальный зал</button>{departments.map(item=><button key={item.id} className={department===String(item.id)?"active":""} onClick={()=>changeDepartment(String(item.id))}>{item.name}</button>)}<button className={department==="none"?"active":""} onClick={()=>changeDepartment("none")}>Без подраздела</button><button aria-label="Создать подраздел" onClick={()=>setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length})}>+</button></div>
+ <div className="d-tabbed"><div className="tabs d-tabs library-departments" aria-label="Подразделы библиотеки"><button className={department==="room"?"active":""} onClick={()=>changeDepartment("room")}>Читальный зал</button>{departments.map(item=><button key={item.id} className={department===String(item.id)?"active":""} onClick={()=>changeDepartment(String(item.id))}>{item.name}</button>)}<button className={department==="none"?"active":""} onClick={()=>changeDepartment("none")}>Без подраздела</button><button aria-label="Создать подраздел" onClick={()=>setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length})}>+</button></div>
  <div className="library-sheet d-sheet">
  <div className="mastering-toolbar"><label className="mastering-search"><NavIcon name="search"/><input type="search" aria-label="Поиск по всем книгам" placeholder="Найти книгу…" value={query} onChange={event=>setQuery(event.target.value)}/></label><button onClick={()=>setFiltersOpen(!filtersOpen)}>Фильтры</button><button onClick={()=>upload.current?.click()}>Загрузить PDF / .md</button><button onClick={()=>setOrganization({kind:"shelf",id:null,name:"",department:department==="room"||department==="none"?null:Number(department),position:shelves.length})}>+ Полка</button><button onClick={()=>newBook()}>+ Книга</button><input ref={upload} type="file" accept=".pdf,.md,.zip" hidden onChange={event=>{void importFile(event.target.files?.[0]);event.target.value="";}}/></div>
  {department!=="room"&&department!=="none"&&<button className="library-department-settings" onClick={()=>{const item=departments.find(item=>item.id===Number(department));if(item)setOrganization({kind:"department",id:item.id,name:item.name,position:item.position,department:null});}}>Настройки подраздела</button>}
@@ -128,7 +128,7 @@ export function BookLibraryPage(){
  {!books.length&&!first.loading&&<p>Здесь пока нет книг. Добавь книгу или загрузи файл.</p>}
  {first.data&&books.length<first.data.total&&<button onClick={()=>setPages(pages+1)}>Загрузить ещё · {first.data.total-books.length}</button>}
  </div>
- </div>
+ </div></div>
  </>}
  {selection.error&&<LoadErrorCard message={selection.error} action={<button onClick={closeBook}>На полку</button>}/>}
  {selectedId&&!selected&&!selection.error&&<ListSkeleton variant="paragraph"/>}

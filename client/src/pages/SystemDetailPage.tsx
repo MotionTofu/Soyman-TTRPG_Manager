@@ -47,9 +47,10 @@ export function SystemDetailPage() {
   const activeTab = searchParams.get("section") ?? "overview";
   const focusEntryId = searchParams.get("entry") ? Number(searchParams.get("entry")) : undefined;
   // Сколько записей в каждом разделе — строка «Классы: 13» в хиро-карточке
-  // «Обзора». Считает сервер одним запросом, без вытягивания самих записей.
+  // «Обзора» и счётчики на ярлыках. Считает сервер одним запросом, без
+  // вытягивания самих записей.
   const countRows = useResource<{ section_id: number; count: number }[]>(
-    activeTab === "overview" && sections.length > 0 ? systemPaths.entryCounts(systemId) : null
+    sections.length > 0 ? systemPaths.entryCounts(systemId) : null
   ).data;
   const sectionCounts = useMemo<Record<number, number>>(
     () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, r.count])),
@@ -185,7 +186,8 @@ export function SystemDetailPage() {
       // «Обзор» стоит в полосе первой вкладкой. Прежде его в полосе не было
       // вовсе: попасть на обзор можно было только щелчком по названию
       // системы — приём, о котором неоткуда узнать.
-      tabs={[{ id: "overview", label: "Обзор" }, ...sections.map((sec) => ({ id: String(sec.id), label: sec.name }))]}
+      tabs={[{ id: "overview", label: "Обзор" }, ...sections.map((sec) => ({ id: String(sec.id), label: sec.name, count: sectionCounts[sec.id] }))]}
+      sheet
       tab={activeTab}
       onTab={(t) => selectTab(t)}
       badges={system.code && <span className="sys-stamp">{system.code}</span>}

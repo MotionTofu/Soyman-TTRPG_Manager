@@ -77,6 +77,8 @@ export interface EntityPageTab {
   label?: string;
   /** Знак перед подписью язычка (профиль кампании, 2026-10-23). */
   icon?: NavIconName;
+  /** Счётчик на ярлыке машинописью (макет «Д»). */
+  count?: number;
 }
 
 export interface EntityPageProps {
@@ -133,6 +135,9 @@ export interface EntityPageProps {
    *  значка вида, а «…» — язычком справа на полосе.
    *  Пилот — профиль существа; остальные карточки переходят своими раундами. */
   paper?: boolean;
+  /** Вид «Д» без бумаги: заголовок над ярлыками, тело — лист в тушь-рамке
+   *  (d-system.css, .d-tabs/.d-sheet). Макеты Roll-* разделов систем. */
+  sheet?: boolean;
   children: ReactNode;
 }
 
@@ -160,6 +165,7 @@ export function EntityPage({
   overlays,
   fill,
   paper,
+  sheet,
   children,
 }: EntityPageProps) {
   // Меню «…» открывается под своей кнопкой, а не там, где щёлкнули: у кнопки
@@ -235,6 +241,55 @@ export function EntityPage({
   // профиль открыл.
   const moreInTabs = paper && !!tabs?.length;
 
+  const tabStrip = tabs && tabs.length > 0 && (
+    <div ref={tabsRef} className={sheet ? "tabs d-tabs" : "tabs"} role="tablist">
+      {shownTabs.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={tab === t.id}
+          className={tab === t.id ? "active" : ""}
+          onClick={() => onTab?.(t.id)}
+        >
+          {t.icon && <NavIcon name={t.icon} />}
+          {t.label ?? t.id}
+          {t.count !== undefined && <b>{t.count}</b>}
+        </button>
+      ))}
+      {restTabs.length > 0 && (
+        // Список спрятанных вкладок идёт тем же меню, что и «…», а не
+        // выпадающим блоком внутри полосы. Полоса прокручивается вбок и
+        // потому обрезает всё, что торчит из неё вниз: прежний
+        // `<details>` в SettingDetailPage раскрывался, но был не виден —
+        // дефект жил ровно столько, сколько обе части рядом, и не
+        // попадался, потому что виден только у сеттинга без кампаний.
+        <button
+          ref={moreTabsRef}
+          type="button"
+          className="entity-page__tabs-more"
+          aria-haspopup="menu"
+          onClick={() => {
+            const r = moreTabsRef.current?.getBoundingClientRect();
+            if (r) setTabsMenuAt({ x: r.right, y: r.bottom });
+          }}
+        >
+          Ещё ▾
+        </button>
+      )}
+      {onAddTab && (
+        <button
+          type="button"
+          aria-label={addTabLabel ?? "Новая вкладка"}
+          title={addTabLabel ?? "Новая вкладка"}
+          onClick={onAddTab}
+        >
+          +
+        </button>
+      )}
+      {moreInTabs && more}
+    </div>
+    );
+
   return (
     <div
       className={`stack entity-page${fill ? " page-fill" : ""}${paper ? " entity-page--paper" : ""}`}
@@ -280,53 +335,7 @@ export function EntityPage({
         />
       )}
 
-      {tabs && tabs.length > 0 && (
-        <div ref={tabsRef} className="tabs" role="tablist">
-          {shownTabs.map((t) => (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={tab === t.id}
-              className={tab === t.id ? "active" : ""}
-              onClick={() => onTab?.(t.id)}
-            >
-              {t.icon && <NavIcon name={t.icon} />}
-              {t.label ?? t.id}
-            </button>
-          ))}
-          {restTabs.length > 0 && (
-            // Список спрятанных вкладок идёт тем же меню, что и «…», а не
-            // выпадающим блоком внутри полосы. Полоса прокручивается вбок и
-            // потому обрезает всё, что торчит из неё вниз: прежний
-            // `<details>` в SettingDetailPage раскрывался, но был не виден —
-            // дефект жил ровно столько, сколько обе части рядом, и не
-            // попадался, потому что виден только у сеттинга без кампаний.
-            <button
-              ref={moreTabsRef}
-              type="button"
-              className="entity-page__tabs-more"
-              aria-haspopup="menu"
-              onClick={() => {
-                const r = moreTabsRef.current?.getBoundingClientRect();
-                if (r) setTabsMenuAt({ x: r.right, y: r.bottom });
-              }}
-            >
-              Ещё ▾
-            </button>
-          )}
-          {onAddTab && (
-            <button
-              type="button"
-              aria-label={addTabLabel ?? "Новая вкладка"}
-              title={addTabLabel ?? "Новая вкладка"}
-              onClick={onAddTab}
-            >
-              +
-            </button>
-          )}
-          {moreInTabs && more}
-        </div>
-      )}
+      {!sheet && tabStrip}
 
       {tabsMenuAt && restTabs.length > 0 && (
         <ContextMenu
@@ -337,7 +346,22 @@ export function EntityPage({
         />
       )}
 
-      {error ? (
+      {sheet ? (
+        // Ярлыки и лист — одним блоком: зазор колонки .stack не должен
+        // отрывать ярлыки от листа.
+        <div className="d-tabbed">
+          {tabStrip}
+          <div className="d-sheet">
+            {error ? (
+              <LoadErrorCard message={<>Ошибка загрузки: {error}</>} onRetry={onRetry} />
+            ) : loading ? (
+              <ListSkeleton variant="paragraph" label="Загрузка" />
+            ) : (
+              children
+            )}
+          </div>
+        </div>
+      ) : error ? (
         <LoadErrorCard
           message={<>Ошибка загрузки: {error}</>}
           onRetry={onRetry}

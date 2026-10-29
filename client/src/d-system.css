@@ -136,6 +136,7 @@
   align-items: flex-end;
   position: relative;
   z-index: 2;
+  margin-bottom: calc(-1 * var(--edge-width));
 }
 :is(.d-tabs, .entity-page--paper > .tabs) button {
   margin-right: calc(-1 * var(--sp-5));
@@ -179,3 +180,78 @@
   outline-offset: -8px;
   background: var(--sheet);
 }
+
+/* Органы фильтра (§6.6, макеты Roll-Bestiary/Spells/Classes): поле поиска,
+   выпадающий список и сегменты с кромкой, чипы с линией, малиновая метка. */
+.d-field {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: 36px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  background: var(--field);
+}
+.d-field > svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.d-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-data);
+  outline: none;
+}
+.d-select {
+  height: 36px;
+  max-width: 100%;
+  padding: 0 var(--sp-4);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--fs-label);
+}
+.d-seg {
+  display: inline-flex;
+  border: var(--edge-width) solid var(--edge);
+}
+.d-seg button {
+  height: 30px;
+  padding: 0 var(--sp-5);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.d-seg button + button { border-left: var(--edge-width) solid var(--edge); }
+.d-seg button.active { background: var(--surface); color: var(--on-surface); }
+.d-chip {
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+.d-chip:hover { border-color: var(--edge); }
+.d-chip.active { background: var(--surface); color: var(--on-surface); border-color: var(--surface); }
+.d-mark {
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--edge-width) solid var(--mark);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mark);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.d-mark.active { background: var(--mark); color: var(--on-mark); }
