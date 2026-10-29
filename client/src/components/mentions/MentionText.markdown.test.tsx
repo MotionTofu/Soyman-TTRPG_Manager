@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { MentionText } from "./MentionText";
 import { MentionTextarea } from "./MentionTextarea";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("compatible Markdown prose", () => {
   it("keeps UID links inside GFM tables and supports old styled runs", () => {
@@ -49,6 +49,35 @@ describe("compatible Markdown prose", () => {
     render(<QueryClientProvider client={client}><MentionText text={`[Открыть карту](soyman:resource/${uid}) ![Карта](soyman:resource/${uid})`} /></QueryClientProvider>);
     expect((await screen.findByRole("link", { name: "Открыть карту" })).getAttribute("href")).toBe(`/resources/link/${uid}`);
     expect(screen.getByRole("img", { name: "Карта" }).getAttribute("src")).toBe("/files/map.png?sig=test");
+  });
+
+  it.each([
+    ["", "/resources/42/read"],
+    ["#page=87", "/resources/42/read?page=87"],
+  ])("opens a PDF Resource at its requested page (%s)", async (fragment, href) => {
+    const uid = "12345678-1234-1234-1234-123456789abc";
+    vi.spyOn(api, "get").mockResolvedValue([{ uid, id: 42, name: "Правила", type: "note", category: "pdf", file_url: "/files/core.pdf?sig=test" }]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MentionText text={`[Правила](soyman:resource/${uid}${fragment})`} /></QueryClientProvider>);
+    expect((await screen.findByRole("link", { name: "Правила" })).getAttribute("href")).toBe(href);
+  });
+
+  it.each(["#page=0", "#page=-1", "#page=1.5", "#page=9007199254740992", "#page=87&next=other", "#other=87"])("keeps an invalid PDF page link inactive (%s)", async (fragment) => {
+    const uid = "12345678-1234-1234-1234-123456789abc";
+    vi.spyOn(api, "get").mockResolvedValue([{ uid, id: 42, name: "Правила", type: "note", category: "pdf", file_url: "/files/core.pdf?sig=test" }]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(<QueryClientProvider client={client}><MentionText text={`[Правила](soyman:resource/${uid}${fragment})`} /></QueryClientProvider>);
+    expect(await screen.findByText(/Правила/)).toBeTruthy();
+    expect(container.querySelector("a")).toBeNull();
+  });
+
+  it("does not apply PDF page fragments to non-PDF Resources", async () => {
+    const uid = "12345678-1234-1234-1234-123456789abc";
+    vi.spyOn(api, "get").mockResolvedValue([{ uid, id: 42, name: "Карта", type: "image", category: "image", file_url: "/files/map.png?sig=test" }]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><MentionText text={`[Карта](soyman:resource/${uid}#page=87)`} /></QueryClientProvider>);
+    expect(await screen.findByText(/Ресурс недоступен/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Карта" })).toBeNull();
   });
 
   it("appends a picked Resource when the editor had no cursor yet", () => {

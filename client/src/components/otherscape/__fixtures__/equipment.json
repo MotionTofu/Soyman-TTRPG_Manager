@@ -1,0 +1,776 @@
+[
+  {
+    "name": "Пятая тема и доступность тегов",
+    "name_original": "The Loadout Theme",
+    "description": "**The Loadout Theme**\n\nПостоянные power tags четырёх основных тем описывают снаряжение, составляющее основу персонажа; story tags — временные или случайно полученные вещи. Loadout хранит доступные ресурсы: вещи на складе, оружие союзников, ранее открытые каналы доступа. Все PC начинают с трёх loadout tags.\n\nLoadout tags являются power tags, но по умолчанию сожжены. После Loading Up ими пользуются как обычными тегами силы: их можно сжигать ради Power, терять из-за Consequences и восстанавливать через Restore. Незагруженный тег не влияет на игру: вещь может физически существовать, но быть недоступной, необслуженной или не находиться в центре внимания.\n\nLoadout нельзя потерять или заменить как основную тему, и у неё нет Decay; отдельные теги могут удаляться. Это не дополнительная категория Self, Mythos или Noise для определения Essence.\n\nИсточник: [Core Book, с. 114](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=114); [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116).",
+    "role": "rule"
+  },
+  {
+    "name": "Наборы тегов и слабости предметов",
+    "name_original": "Loadout Tag Sets / Loadout Weakness Tags",
+    "description": "**Loadout Tag Sets / Loadout Weakness Tags**\n\nОдин предмет может иметь несколько тегов: например, винтовка, телескопический тепловизионный прицел, крупнокалиберные патроны и гиростабилизаторы. Если все четыре прямо подходят действию, каждый даёт +1 Power, суммарно до +4. Наличие набора не делает все его признаки полезными в любой ситуации.\n\nПри добавлении предмета — одного тега или набора — игрок либо MC может добавить ему одну weakness tag, отражающую недостаток. Применение слабости уменьшает Power на 1 и даёт клетку Upgrade именно теме Loadout.\n\nПравила оплаты каждого признака: [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Choosing Loadout Tags]].\n\nИсточник: [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 252](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=252).",
+    "role": "rule"
+  },
+  {
+    "name": "Сила для подготовки снаряжения",
+    "name_original": "Loading Up Power",
+    "description": "**Loading Up Power**\n\nВ конце Downtime или перед новым заданием MC может объявить Loading Up. Каждый игрок получает базовую **1 Power** для загрузки тегов своей темы Loadout. Эту Power можно увеличить:\n\n- улучшениями Loadout, дающими постоянные +1 Power при Loading Up;\n- частью Power, выбранной как польза Downtime;\n- прямо подходящими power tags упаковки и переноски: каждый даёт +1 Power, например carrying capacity, preparedness, toolbelt или tons of RAM.\n\nПо решению MC применимые слабости, например physically weak или heavy ammunition, могут уменьшать эту Power на 1 каждая. За каждое такое применение отметьте клетку Upgrade темы, которой принадлежит соответствующая слабость. Обычная польза Downtime — 3 Power без броска либо одна клетка Upgrade; эти варианты не выдаются одновременно.\n\nИсточник: [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 124](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=124); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134).",
+    "role": "rule"
+  },
+  {
+    "name": "Выбор загружаемых тегов",
+    "name_original": "Choosing Loadout Tags",
+    "description": "**Choosing Loadout Tags**\n\nПотратьте Loading Up Power: **1 Power восстанавливает один loadout tag**, снимая отметку сжигания. Если предмет представлен набором, каждый тег оплачивается отдельно; сначала нужно загрузить первый, основной тег предмета, затем его дополнительные признаки. Покупка одного тега не загружает весь набор.\n\nВыбор ограничен историей и условиями. Например, обычный доступ к препарату в Megacity не гарантирует возможность подготовить его посреди дикой местности. Загруженные теги можно применять в течение задания как обычные power tags до сжигания или Loading Off.\n\nИсточник: [Core Book, с. 114](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=114); [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115).",
+    "role": "rule"
+  },
+  {
+    "name": "Неопределённые слоты снаряжения",
+    "name_original": "Wildcard Loadout Tags",
+    "description": "**Wildcard Loadout Tags**\n\nВо время Loading Up можно заплатить **2 Power за wildcard loadout tag** — пока не определённый слот. В любой момент задания раскройте его как один из тегов своей темы Loadout: персонаж предусмотрительно взял нужную вещь заранее. Это позволяет отложить выбор, но не создать отсутствующий в теме предмет.\n\nКогда слот использован для конкретного тега, выбор уже нельзя менять. Неиспользованные wildcard tags также сжигаются при Loading Off. Veteran Special [[compendium_entry@c30c1598a1be5f9db80a83481f033689|otherscape|Backpack Beast]] снижает цену wildcard до 1 Power.\n\nИсточник: [Core Book, с. 114](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=114); [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "rule"
+  },
+  {
+    "name": "Разгрузка после задания",
+    "name_original": "Loading Off",
+    "description": "**Loading Off**\n\nВ начале Downtime или в конце задания MC может объявить Loading Off. Сожгите все загруженные теги темы Loadout, включая неиспользованные wildcards. Физически снаряжение не обязано исчезать: ему может требоваться уход или подготовка, либо оно перестаёт играть значимую роль.\n\nЧтобы сохранить те же активные возможности для следующего задания, снова загрузите нужные теги в следующий Loading Up.\n\nИсточник: [Core Book, с. 114](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=114); [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116).",
+    "role": "rule"
+  },
+  {
+    "name": "Добыча и награды",
+    "name_original": "Loot",
+    "description": "**Loot**\n\nОплата, награда, трофеи и найденные ресурсы могут быть представлены loot catalog — списком предметов. Каждый предмет, то есть отдельный тег или набор, обычно можно скопировать в тему Loadout только одного PC; исключения определяет MC.\n\nПолученные так теги добавляются сожжёнными. Их нужно загрузить через Loading Up либо восстановить через Restore во время задания, если MC не решил иначе.\n\nИсточник: [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116).",
+    "role": "rule"
+  },
+  {
+    "name": "Покупка, изготовление и наём",
+    "name_original": "Buying, Crafting & Hiring",
+    "description": "**Buying, Crafting & Hiring**\n\nВо время задания или Downtime совершите подходящее действие, создающее loadout tags по правилам story tags: **2 Power за каждый тег** через Create. Эти теги сразу активны и не сожжены; ближайший Loading Off сожжёт их вместе с остальными.\n\n- **Buy It:** используйте доступ к подходящим продавцам, деньги, статусы и навыки торговли. Можно получить вещи Street Catalog или иные ресурсы, к которым применённые теги дают правдоподобный доступ.\n- **Workshop and Practice:** создавайте вещи подходящим ремеслом либо изучайте заклинания и отрабатывайте приёмы, которые затем вспоминаются при Loading Up.\n- **Recruiting and Hiring:** привлекайте специалистов, помощников и подчинённых через связи, услуги, оплату или убеждение.\n\nОписание действия и применённые теги должны соответствовать приобретаемому ресурсу: один навык фармацевта не позволяет получить штурмовую винтовку. Эффект: [[compendium_entry@0f83f73117205e42990d594d421e701e|otherscape|Create]].\n\nИсточник: [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116); [Core Book, с. 117](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=117).",
+    "role": "rule"
+  },
+  {
+    "name": "Передача снаряжения",
+    "name_original": "Sharing Gear",
+    "description": "**Sharing Gear**\n\nВ Downtime персонажи могут обмениваться предметами своих тем Loadout, если их можно передать и они работают так же у нового владельца: предмет не должен требовать индивидуальной настройки или подгонки под прежнего.\n\nВо время задания можно аналогично передать другому PC активный loadout tag. Если сама передача неопределённа и драматична, MC может потребовать действие, обычно с quick outcome. Это передача ресурса, а не его бесплатное копирование.\n\nИсточник: [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116).",
+    "role": "rule"
+  },
+  {
+    "name": "Сохранение сюжетного тега",
+    "name_original": "Keeping Story Tags",
+    "description": "**Keeping Story Tags**\n\nИмеющийся у персонажа полезный story tag — созданный действием, полученный от MC или через Special — можно записать как loadout tag. Он становится активным несожжённым тегом, продолжает работать как прежде, а ближайший Loading Off сжигает его.\n\nТак сохраняют только надёжный ресурс, который разумно подготавливать снова и снова. MC может запретить перенос либо потребовать действие Create по правилам снабжения. Например, проводник, принуждённый оружием, вряд ли останется доступным; довольный наёмный проводник может согласиться помочь вновь.\n\nИсточник: [Core Book, с. 117](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=117).",
+    "role": "rule"
+  },
+  {
+    "name": "Удаление тегов из темы",
+    "name_original": "Removing Tags From the Loadout Theme",
+    "description": "**Removing Tags From the Loadout Theme**\n\nИгрок может убрать любой loadout tag: персонаж больше не имеет лёгкого доступа к этому предмету или ресурсу. MC может удалить loadout tags при соответствующем преобразующем статусе tier-6, например broken-6, alienated-6 или burned-down-6 у склада.\n\nУдаление отличается от сжигания: простой Restore не вернёт тег, которого больше нет в теме. Более частое удаление как Consequence — отдельное необязательное правило: [[compendium_entry@757d91bedb405b579aa198933e9577b3|otherscape|Optional Rule: Removing Loadout Tags as a Consequence]].\n\nИсточник: [Core Book, с. 117](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=117).",
+    "role": "rule"
+  },
+  {
+    "name": "Необязательное правило: потеря вещей как последствие",
+    "name_original": "Optional Rule: Removing Loadout Tags as a Consequence",
+    "description": "**Optional Rule: Removing Loadout Tags as a Consequence**\n\n**Optional Rule.** Если группа использует этот вариант, MC может удалять любое число loadout tags через Consequences. Примеры:\n\n- Единственный экземпляр предмета украден, конфискован или непоправимо повреждён. Удаление может сопровождаться Consequence, сжигающей тег.\n- Доступ отозван: разрыв с контактом или союзником лишает вещей и услуг, которые тот регулярно предоставлял.\n\nЭто необязательное расширение обычного удаления при преобразующем tier-6, а не автоматическое правило каждой поломки.\n\nИсточник: [Core Book, с. 117](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=117).",
+    "role": "rule"
+  },
+  {
+    "name": "Как пользоваться каталогом",
+    "name_original": "Catalogs / General and Specific Items",
+    "description": "**Catalogs / General and Specific Items**\n\nКаталоги предлагают готовые теги для добавления в Loadout. Street Catalog описывает обычно доступные ресурсы Megacity; loot catalogs — найденные запасы и награды. Фактический доступ зависит от тем и прошлого PC, места, времени, связей, инструментов и условий; MC может ограничивать конкретные предметы и целые категории.\n\n**General Items:** выбирайте общие предметы и комбинируйте предложенные Features и Flaws. Это варианты, а не единый обязательный набор. У предмета или набора может быть одна weakness tag.\n\n**Specific Items:** готовые товары и услуги имеют описание, 3–4 loadout tags и weakness tag. Первый тег — основа предмета, подходящая всякий раз, когда он полезен. Второй и третий описывают дополнительные функции для определённых условий; четвёртый — иную грань, необычный способ использования или вызываемое впечатление.\n\nПолучить предмет и загрузить его — разные процедуры. [[compendium_entry@166b2b6c3b9b5d9591b1d5a1f4a3a952|otherscape|Получение]]; [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Loading Up]].\n\nИсточник: [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 116](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=116); [Core Book, с. 252](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=252).",
+    "role": "rule"
+  },
+  {
+    "name": "Улучшения Loadout",
+    "name_original": "Loadout Upgrades",
+    "description": "**Loadout Upgrades**\n\nПрименение loadout weakness tag обычно даёт одну клетку Upgrade темы Loadout. Заполнив три клетки, получите улучшение и очистите трек. Выберите постоянные **+1 Power при Loading Up** либо новую **Loadout Theme Special**; каждый из этих вариантов улучшения можно выбирать неоднократно.\n\nОсобенности: [[compendium_entry@1f6a87fc97c85989ae871611afd7b50b|otherscape|Loadout Theme Specials]]. Связанная карточка в развитии персонажа: [[compendium_entry@752f5f3317cd5489a7a0e3663a314800|otherscape|Loadout Theme Upgrades]].\n\nИсточник: [Core Book, с. 115](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=115); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "rule"
+  },
+  {
+    "name": "Глубокая настройка",
+    "name_original": "Deeply Customizable",
+    "description": "**Deeply Customizable**\n\nВыберите один предмет в своей теме Loadout. Один раз за Downtime можно добавить в эту тему loadout tag, представляющий особенность или дополнение именно этого предмета, применимое в определённых условиях или для определённой цели.\n\n**Оригинал правила**\n\n*Choose one item in your loadout theme. Once per downtime, you can add to your loadout theme a loadout tag that represents a feature or add-on of that item that can be used under specific conditions or for a specific purpose.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Полная комплектация",
+    "name_original": "Fully Decked",
+    "description": "**Fully Decked**\n\nВыберите категорию Street Catalog. Теперь все её теги входят в вашу тему Loadout, и любые из них можно активировать при Loading Up. Получение всех тегов не означает, что все они сразу загружены: обычная процедура Loading Up сохраняется. Эту Special можно выбирать неоднократно для разных категорий.\n\n**Оригинал правила**\n\n*Pick a category in the Street Catalog. You now have all of its tags in your loadout theme and may activate any of them when Loading Up. This may be chosen multiple times for different categories.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Запасной найдётся?",
+    "name_original": "Got A Spare?",
+    "description": "**Got A Spare?**\n\nОдин раз за сессию можно скопировать один загруженный (Loaded Up) loadout tag, представляющий неуникальный предмет, и передать копию участнику команды или союзнику, оставив свой тег у себя. Это копия одного тега, а не автоматически всего набора тегов предмета.\n\n**Оригинал правила**\n\n*Once per session, you can duplicate a Loaded Up loadout tag representing a non-unique item and give that copy to one of your crew members or allies, while keeping yours.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Полный тюнинг",
+    "name_original": "Modded Out",
+    "description": "**Modded Out**\n\nОдин раз за сессию, бросая с тремя или более положительными loadout tags из одного и того же набора (set), можно заменить промах (6−) на смешанный успех (7–9) либо смешанный успех (7–9) на сильный успех (10+). За это применение результат повышается на одну ступень.\n\n**Оригинал правила**\n\n*Once per session, when you roll with three or more positive loadout tags from the same set, you can swap a miss (6-) result with a mixed hit (7-9), or a mixed hit (7-9) with a strong hit (10+).*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Новое назначение",
+    "name_original": "Repurpose",
+    "description": "**Repurpose**\n\nОдин раз между Loading Up и Loading Off можно переписать один загруженный loadout tag. Новая формулировка сохраняется и дальше, а не исчезает с окончанием задания.\n\n**Оригинал правила**\n\n*Once between Loading Up and Loading Off, you may rewrite a Loaded Up loadout tag. It remains in its new version going forward.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Условия возврата",
+    "name_original": "Return Policy",
+    "description": "**Return Policy**\n\nОдин раз за Downtime можно заменить один loadout tag в своей теме Loadout другим тегом.\n\n**Оригинал правила**\n\n*Once per downtime, you can replace one of the loadout tags in your loadout theme with a different one.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Делиться ресурсами",
+    "name_original": "Spread the Wealth",
+    "description": "**Spread the Wealth**\n\nУчастники вашей команды могут применять ваши power tags в действиях по получению новых предметов для своих тем Loadout, если эти теги подходят. Вы и другие участники не можете использовать один и тот же тег в действиях по снабжению, происходящих одновременно.\n\n**Оригинал правила**\n\n*Your crew members may use your power tags when taking action to procure new items for their loadout theme (provided your power tags are relevant). You or other crew members cannot use the same tag in your procurement actions if they are happening at the same time.*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Слаженное снаряжение",
+    "name_original": "Synergetic Gear",
+    "description": "**Synergetic Gear**\n\nОдин раз за сессию, бросая с тремя или более положительными loadout tags, представляющими разные предметы, можно заменить промах (6−) на смешанный успех (7–9) либо смешанный успех (7–9) на сильный успех (10+). В отличие от Modded Out, здесь нужны разные предметы, а не один набор.\n\n**Оригинал правила**\n\n*Once per session, when you roll with three or more positive loadout tags representing different items, you can swap a miss (6-) result with a mixed hit (79), or a mixed hit (7-9) with a strong hit (10+).*\n\nИсточник: [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "special"
+  },
+  {
+    "name": "Общие варианты: Доступ и привилегии",
+    "name_original": "General Items / Access & Perks",
+    "description": "**General Items / Access & Perks**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **компромат** — *blackmail material*\n- **подкупленный вышибала** — *bribed bouncer*\n- **планы здания** — *building schematics*\n- **доступ в VIP-зону** — *VIP area access*\n\n**Признаки — Features**\n\n- **групповой пропуск** — *group pass*\n- **источник трудно отследить** — *hard-to-trace source*\n- **символ статуса** — *status symbol*\n\n**Слабости — Flaws**\n\n- **заметный** — *conspicuous*\n- **регулярные платежи** — *recurring fees*\n- **не проверено** — *unverified*\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "generic"
+  },
+  {
+    "name": "Корпоративное удостоверение",
+    "name_original": "Certified corp ID",
+    "description": "**Certified corp ID**\n\nНастоящее корпоративное удостоверение открывает доступ к закрытым системам. Оно принадлежит кому-то другому: остаётся надеяться, что владелец не заметит пропажи.\n\n**Оригинал описания**\n\n*You obtained a legit corporate ID for accessing proprietary systems. It’s not yours. Hope nobody misses it!*\n\n**Теги снаряжения — Loadout Tags**\n\n- **корпоративное удостоверение** — основной тег\n  *certified corp ID*\n- **доступ к закрытым системам**\n  *access to proprietary systems*\n- **доступ на территорию корпорации**\n  *access to corporate grounds*\n\n**Слабость — Weakness**\n\nдля полной проверки нужен ещё PIN\n\n*full authentication also requires PIN*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Цифровой обходной доступ",
+    "name_original": "Digital backdoor access",
+    "description": "**Digital backdoor access**\n\nОдноразовый код для входа в защищённую часть Domain.\n\n**Оригинал описания**\n\n*A one-use code into a secure part of a Domain.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **цифровой обходной доступ** — основной тег\n  *digital backdoor access*\n- **бесшумный вход**\n  *silent entry*\n- **не оставляет следов**\n  *leaves no trace*\n- **права администратора**\n  *administrative privileges*\n\n**Слабость — Weakness**\n\nкороткое окно возможностей\n\n*short window of opportunity*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Вызов экстренной медицинской помощи",
+    "name_original": "Emergency treatment call",
+    "description": "**Emergency treatment call**\n\nМедицинская бригада быстрого реагирования готова прийти на помощь.\n\n**Оригинал описания**\n\n*A rapid response medical team is standing ready to serve you.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **вызов экстренной помощи** — основной тег\n  *emergency treatment call*\n- **от потери конечности до лучевого отравления**\n  *from missing limb to radiation poisoning*\n- **поддержка эвакуации**\n  *evacuation support*\n- **ситуация под контролем**\n  *the situation is under control*\n\n**Слабость — Weakness**\n\nнеохотно входит в закрытые зоны\n\n*hesitant to enter restricted areas*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Хакер на связи",
+    "name_original": "Hacker on call",
+    "description": "**Hacker on call**\n\nХакер задолжал вам услугу либо вы заранее оплатили его время.\n\n**Оригинал описания**\n\n*A hacker owes you a favor, or perhaps you’ve paid for their time.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **хакер на связи** — основной тег\n  *hacker on call*\n- **проникнуть в систему**\n  *infiltrate a system*\n- **помощь при Harnessing**\n  *provide Harnessing assistance*\n- **новости киберпространства**\n  *cyberspace news*\n\n**Слабость — Weakness**\n\n«Дай мне делать свою работу»\n\n*“Let me do my job”*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Частный VR-домен",
+    "name_original": "Private VR Domain",
+    "description": "**Private VR Domain**\n\nЛичное место для встреч в VR. Меняющееся шифрование обеспечивает вход только по приглашению.\n\n**Оригинал описания**\n\n*A private spot for meeting folks in VR with rotating encryption to ensure it remains invite-only.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **частный VR-домен** — основной тег\n  *private VR domain*\n- **скрыт в киберпространстве**\n  *hidden in cyberspace*\n- **быстрый доступ**\n  *quick access*\n- **индивидуальный аватар**\n  *bespoke avatar*\n\n**Слабость — Weakness**\n\nкраткосрочная аренда\n\n*short-term lease*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Убежище",
+    "name_original": "Safehouse",
+    "description": "**Safehouse**\n\nЧастное, нигде не зарегистрированное место на случай, если всё пойдёт плохо и понадобится залечь на дно.\n\n**Оригинал описания**\n\n*You’ve secured a private, off-the-books location just in case things go badly and you need to lie low.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **убежище** — основной тег\n  *safehouse*\n- **незарегистрированное место**\n  *off-the-books location*\n- **аварийный запас припасов**\n  *emergency supply stash*\n\n**Слабость — Weakness**\n\nдалековато\n\n*a bit too far*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Сервис умных автомобилей",
+    "name_original": "Smart car service",
+    "description": "**Smart car service**\n\nПодписка на беспилотные машины предоставляет не самый впечатляющий транспорт Megacity, зато чрезвычайно удобна.\n\n**Оригинал описания**\n\n*Subscription services for drone vehicles don’t give you the most impressive wheels in the Megacity but the convenience is hard to beat.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **сервис умных автомобилей** — основной тег\n  *smart car service*\n- **сядь и расслабься**\n  *sit back and relax*\n- **принимает свои маршруты**\n  *accepts custom routes*\n\n**Слабость — Weakness**\n\nтолько обычное использование\n\n*mundane use only*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 254](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=254).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Боеприпасы",
+    "name_original": "General Items / Ammo",
+    "description": "**General Items / Ammo**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **прилипающие патроны** — *adhesive rounds*\n- **бронебойные боеприпасы** — *armor-piercing ammo*\n- **разрывные патроны** — *explosive cartridges*\n- **запасная обойма** — *extra clip*\n- **патроны высокого останавливающего действия** — *high stopping power ammo*\n- **экспансивные пули** — *hollow points*\n- **нелетальные патроны** — *non-lethal rounds*\n- **ускоритель заряжания** — *speed loader*\n- **трассирующие патроны** — *tracer rounds*\n\n**Слабости — Flaws**\n\n- **попадаются осечки** — *contains duds*\n- **легко потерять** — *easy to misplace*\n- **тяжёлые** — *heavy*\n- **крайне нестабильные** — *highly volatile*\n- **долгая перезарядка** — *slow to reload*\n\nИсточник: [Core Book, с. 255](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=255).",
+    "role": "generic"
+  },
+  {
+    "name": "Противомеханоидные патроны Fenix Corp",
+    "name_original": "Fenix Corp Anti-Mechanoid Rounds",
+    "description": "**Fenix Corp Anti-Mechanoid Rounds**\n\nЭти пули опасны и для людей, но встроенный ЭМИ, проводящая оболочка и пробивная конструкция особенно эффективны против дронов и кибернетики.\n\n**Оригинал описания**\n\n*These specialized bullets can still damage a human but the internal EMP, conductive jacket, and piercing design are especially brutal against drones and cybernetics.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **противомеханоидные патроны** — основной тег\n  *anti-mechanoid rounds*\n- **локальный электромагнитный импульс**\n  *localized electromagnetic pulse*\n- **бронебойность**\n  *armor-piercing*\n- **нарушить сетевое соединение**\n  *disrupt network connection*\n\n**Слабость — Weakness**\n\nслабо действует против людей\n\n*weak against humans*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 255](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=255).",
+    "role": "item"
+  },
+  {
+    "name": "Патроны-метки Fenix Corp",
+    "name_original": "Fenix Corp Tagger Rounds",
+    "description": "**Fenix Corp Tagger Rounds**\n\nВместо нанесения вреда патроны прикрепляются к цели и передают зашифрованный GPS-сигнал для её отслеживания.\n\n**Оригинал описания**\n\n*These special rounds do not attempt to harm their target, and instead adhere to it. They send an encrypted GPS signal so the subject can be tracked.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **патроны для слежения** — основной тег\n  *tracking rounds*\n- **кодированный сигнал**\n  *encoded signal*\n- **крошечные и тихие**\n  *tiny and silent*\n\n**Слабость — Weakness**\n\nслабый сигнал\n\n*weak signal*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 255](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=255).",
+    "role": "item"
+  },
+  {
+    "name": "Электрошоковые патроны Kojima M7",
+    "name_original": "Kojima Security Tech M7 Electrostun rounds",
+    "description": "**Kojima Security Tech M7 Electrostun rounds**\n\nНелетальные патроны сочетают удар резиновой пули с обезвреживающим действием электрошокера и хорошо работают даже через броню.\n\n**Оригинал описания**\n\n*These non-lethal rounds combine the blunt force of rubber bullets with the neutralizing power of a taser. Unlike these, they work well through armor.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **электрошоковые патроны** — основной тег\n  *electrostun rounds*\n- **мокрые цели**\n  *wet targets*\n- **игнорирует обычную броню**\n  *ignores standard armor*\n- **яркие и громкие попадания**\n  *flashy and loud impacts*\n\n**Слабость — Weakness**\n\nзаземлённая цель\n\n*grounded target*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 255](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=255).",
+    "role": "item"
+  },
+  {
+    "name": "Бронебойные пули Kojima M8",
+    "name_original": "Kojima Security Tech M8 Armor Piercing Bullets",
+    "description": "**Kojima Security Tech M8 Armor Piercing Bullets**\n\nУдлинённые пули с сердечником высокой плотности распространены в армиях Азии, а через чёрный рынок — и среди банд.\n\n**Оригинал описания**\n\n*These elongated bullets with high density cores are found in military supplies throughout Asia and, thanks to the black market, among criminal gangs too.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **бронебойные пули** — основной тег\n  *armor piercing bullets*\n- **пробить бетон**\n  *break through concrete*\n- **пробить выстроившиеся цели**\n  *pierce through lined up targets*\n\n**Слабость — Weakness**\n\nнеэффективно на большой дистанции\n\n*ineffective at long range*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 255](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=255).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Приложения, чипы и базы данных",
+    "name_original": "General Items / Apps, Chips & Databases",
+    "description": "**General Items / Apps, Chips & Databases**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **дешёвое приложение Harnessing** — *cheap Harnessing app*\n- **офисные инструменты Epis** — *Epis office tools*\n- **чип KOCMOC [обычный навык]** — *KOCMOC [mundane skill] chip*\n- **база самых разыскиваемых** — *most wanted database*\n\n**Признаки — Features**\n\n- **адаптивная конструкция** — *adaptive design*\n- **мгновенная загрузка** — *insta-loader*\n- **экономия памяти** — *memory saver*\n- **умный поиск** — *smart search*\n\n**Слабости — Flaws**\n\n- **отвлекающие уведомления** — *distracting notifications*\n- **плохо сочетается с другими** — *doesn’t play well with others*\n- **сбоит** — *glitchy*\n- **пожирает память** — *memory guzzler*\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "generic"
+  },
+  {
+    "name": "HUD оператора дронов",
+    "name_original": "Drone operator HUD",
+    "description": "**Drone operator HUD**\n\nДисплей подробно показывает показатели и реакцию дрона. Разные поставщики выпускают версии для различных устройств.\n\n**Оригинал описания**\n\n*A heads-up display giving detailed readouts on drone performance and response, available from a variety of vendors and for a variety of devices.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **HUD оператора дронов** — основной тег\n  *drone operator HUD*\n- **протоколы безопасности дрона**\n  *drone safety protocols*\n- **программирование автопилота**\n  *auto-pilot programming*\n- **доступ к сенсорным данным**\n  *access sensory data*\n\n**Слабость — Weakness**\n\nрассеянное внимание\n\n*divided attention*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "item"
+  },
+  {
+    "name": "Подавитель выражения эмоций",
+    "name_original": "Emotive damper",
+    "description": "**Emotive damper**\n\nПрограмма нейроимпланта временно прерывает сигналы эмоциональных центров мозга: чувства сохраняются, но лицо ничего не выражает.\n\n**Оригинал описания**\n\n*A software that runs on neural implants. Overrides the brain’s emotional centers to temporarily interrupt their signal. You still feel the emotions but your expression is blank.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **подавитель эмоций** — основной тег\n  *emotive damper*\n- **непроницаемое лицо**\n  *poker face*\n- **показать нужную эмоцию**\n  *display desired emotion*\n\n**Слабость — Weakness**\n\nсильные эмоции трудно подавить\n\n*strong emotions are hard to surpass*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "item"
+  },
+  {
+    "name": "Оружейный интерфейс Gorts & Jasper",
+    "name_original": "Gorts & Jasper Integrated Weapons Link",
+    "description": "**Gorts & Jasper Integrated Weapons Link**\n\nПарные оружейный модуль и HUD для визора или глазного импланта рассчитывают углы стрельбы, показывают прицельные отметки и помогают управлять боеприпасами.\n\n**Оригинал описания**\n\n*A paired weapon accessory and HUD (attachable to visor or eye implant), this technology calculates optimal firing angles, and presents ammo management and aiming reticles.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **оружейный интерфейс** — основной тег\n  *weapons link*\n- **точно целиться в малые цели**\n  *precise aim at small targets*\n- **трюковые выстрелы**\n  *trick shots*\n- **отслеживание движения**\n  *movement tracking*\n\n**Слабость — Weakness**\n\nперегрузка визуальными данными\n\n*visual data overload*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "item"
+  },
+  {
+    "name": "Географическая база MentalMap",
+    "name_original": "MentalMap Geographic Database Subscription",
+    "description": "**MentalMap Geographic Database Subscription**\n\nПодробные карты встроены в мозговой имплант или AR-дисплей и подключены к GPS.\n\n**Оригинал описания**\n\n*A detailed mapping software hardwired into your brain implant or AR display, including a GPS connection.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **географическая база** — основной тег\n  *geographic database*\n- **GPS-навигация в реальном времени**\n  *realtime GPS guidance*\n- **разные слои информации**\n  *various info layers*\n- **рекомендации обозревателей**\n  *reviewer recommendations*\n\n**Слабость — Weakness**\n\nвсё частное скрыто цензурой\n\n*everything private is censored*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "item"
+  },
+  {
+    "name": "Языковой и культурный помощник MentalMap",
+    "name_original": "MentalMap Language and Culture Assistant",
+    "description": "**MentalMap Language and Culture Assistant**\n\nНезаметный AI помогает ориентироваться в многочисленных языках и культурах Megacity и не оскорбить неподходящего человека.\n\n**Оригинал описания**\n\n*With so many different languages and cultures floating around the Megacity, it’s handy to have an AI silently helping you not to insult the wrong person.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **языковой и культурный помощник** — основной тег\n  *language and culture assistant*\n- **советы о культуре**\n  *cultural advice*\n- **говорить как носитель**\n  *sound like a native speaker*\n\n**Слабость — Weakness**\n\nвыражение сложных понятий\n\n*communicate complex concepts*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 256](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=256).",
+    "role": "item"
+  },
+  {
+    "name": "Сенсорная связка Nu-Phase Body Snatcher",
+    "name_original": "Nu-Phase Body Snatcher",
+    "description": "**Nu-Phase Body Snatcher**\n\nНабор чипов, по слухам выпущенный без должного тестирования, соединяет зрение и другие чувства двух пользователей и позволяет обмениваться приложениями.\n\n**Оригинал описания**\n\n*Released to the market without proper experimentation (so they say), this chip bundle allows two users to link their visual fields and other sensory inputs, and share apps.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **нейронная связка чувств и приложений** — основной тег\n  *neural sensory and app linking*\n- **доступ к приложениям друг друга**\n  *access each other’s apps*\n- **согласованные движения**\n  *coordinated movement*\n- **тактильная связь**\n  *haptic linking*\n\n**Слабость — Weakness**\n\nдезориентирующая задержка\n\n*disorienting lag*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "item"
+  },
+  {
+    "name": "Медицинская база Santos-Krupp IV",
+    "name_original": "Santos-Krupp Medical Database IV",
+    "description": "**Santos-Krupp Medical Database IV**\n\nПолный медицинский справочник с поддержкой сенсоров и визуальными подсказками HUD.\n\n**Оригинал описания**\n\n*A full medical reference database integrated with full sensory support and visual HUD indicators.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **медицинская база** — основной тег\n  *medical database*\n- **диагноз по физическим показателям**\n  *diagnose according to physical metrics*\n- **помощь при первой помощи**\n  *first aid support*\n- **простите, я врач**\n  *excuse me I’m a doctor*\n\n**Слабость — Weakness**\n\nне знает Mythoi\n\n*doesn’t know Mythoi*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Броня",
+    "name_original": "General Items / Armor",
+    "description": "**General Items / Armor**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **арктический комбинезон выживания** — *arctic survival jumpsuit*\n- **пуленепробиваемый жилет** — *bullet-proof vest*\n- **бронированный корпоративный костюм** — *corpwear armored suit*\n- **огнестойкий костюм** — *fire-retardant suit*\n- **усиленный плащ** — *reinforced duster*\n- **сканер угроз** — *threat scanner*\n\n**Признаки — Features**\n\n- **бронированные перчатки** — *armored gloves*\n- **баллистические вставки** — *ballistic inserts*\n- **шлем** — *helmet*\n- **скрытый карман** — *hidden pouch*\n- **незаметная** — *inconspicuous*\n- **полицейский щит** — *riot shield*\n\n**Слабости — Flaws**\n\n- **абляционная защита** — *ablative*\n- **тяжёлая** — *heavy*\n- **уязвима к [тип атаки]** — *susceptible to [attack type]*\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "generic"
+  },
+  {
+    "name": "Костюм радиоэлектронной борьбы Fenix Corp",
+    "name_original": "Fenix Corp Electronic Warfare Suit",
+    "description": "**Fenix Corp Electronic Warfare Suit**\n\nЗащитная куртка с портами для периферии и подавителями сигналов стала популярной благодаря дизайнеру-любителю, работавшему уличным наёмником.\n\n**Оригинал описания**\n\n*Popularized by an amateur designer and street mercenary, this protective jacket comes with peripheral plugins and signal jammers.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **костюм радиоэлектронной борьбы** — основной тег\n  *electronic warfare suit*\n- **срывать кибератаки**\n  *disrupt cyber attacks*\n- **порты для периферии**\n  *peripheral plug-in ports*\n- **материал бронежилета**\n  *flak jacket material*\n\n**Слабость — Weakness**\n\nбатарея быстро садится\n\n*battery drains quickly*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "item"
+  },
+  {
+    "name": "Маскировочный костюм Lexington Arachnis",
+    "name_original": "Lexington Arachnis Camouflage Suit",
+    "description": "**Lexington Arachnis Camouflage Suit**\n\nКостюм на всё тело с активной маскировочной сеткой даёт хамелеоноподобную невидимость и позволяет слиться с окружением.\n\n**Оригинал описания**\n\n*This full body suit’s main feature is an active camouflage mesh that grants chameleon-like invisibility, allowing the user to blend with their environment.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **маскировочный костюм** — основной тег\n  *camouflage suit*\n- **лучше всего стоя неподвижно**\n  *best when standing still*\n- **кевларовая защита**\n  *Kevlar protection*\n- **тонкий и лёгкий**\n  *thin and light*\n\n**Слабость — Weakness**\n\nмедленная адаптация\n\n*slow adaptation*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "item"
+  },
+  {
+    "name": "Тактический жилет Lexington Sherwood",
+    "name_original": "Lexington Sherwood Tactical Vest",
+    "description": "**Lexington Sherwood Tactical Vest**\n\nГибкий жилет из усиленного углеродного нановолокна задерживает клинки и пули. Легко складывается и неожиданно лёгок, поэтому очень распространён.\n\n**Оригинал описания**\n\n*This flexible, reinforced carbon nanofiber vest is designed to stop blades and bullets alike. It’s easily foldable and surprisingly lightweight, which made it one of the most common armored vests in use.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **тактический жилет** — основной тег\n  *tactical vest*\n- **защита от клинков**\n  *blade resistance*\n- **баллистическая защита**\n  *ballistic resistance*\n- **складной и лёгкий**\n  *foldable and lightweight*\n\n**Слабость — Weakness**\n\nзакрывает только грудь\n\n*only covers the chest*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 257](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=257).",
+    "role": "item"
+  },
+  {
+    "name": "Противоударная броня UrbanWar",
+    "name_original": "UrbanWar Riot Armor",
+    "description": "**UrbanWar Riot Armor**\n\nБроня со шлемом из поликарбонатных пластин создана по образцу повседневного защитного снаряжения полиции.\n\n**Оригинал описания**\n\n*This armor-helmet combination made of polycarbonate platings is modeled after the everyday protective suits used by police worldwide.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **противоударная броня** — основной тег\n  *riot armor*\n- **прочная**\n  *sturdy*\n- **дисплей на шлеме**\n  *helmet-mounted display*\n- **отойди, я разберусь**\n  *stand aside I’ll handle this*\n\n**Слабость — Weakness**\n\nгромоздкая\n\n*bulky*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 258](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=258).",
+    "role": "item"
+  },
+  {
+    "name": "Костюм для бейсджампинга UrbanWar Urban Assault",
+    "name_original": "UrbanWar “Urban Assault” Lightweight Base Jumping Armor",
+    "description": "**UrbanWar “Urban Assault” Lightweight Base Jumping Armor**\n\nУмные материалы усилены «супершёлком». Перепонки между руками и ногами позволяют на высокой скорости планировать по Megacity.\n\n**Оригинал описания**\n\n*Constructed with smart materials and reinforced with “super-silk”, this suit can equip webbing between the arms and legs to allow high-velocity gliding through the Megacity.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **броня для бейсджампинга** — основной тег\n  *base jumping armor*\n- **убирающийся парашют**\n  *retractable parachute*\n- **перепонки**\n  *webbings*\n- **сорвиголова**\n  *daredevil*\n\n**Слабость — Weakness**\n\nсильные ветра\n\n*high winds*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 258](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=258).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Телесные модификации и кибернетика",
+    "name_original": "General Items / Body Attachments & Cybernetics",
+    "description": "**General Items / Body Attachments & Cybernetics**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **декоративный придаток** — *aesthetic appendage*\n- **фильтры токсинов крови** — *blood toxin filters*\n- **усиленная нервная система** — *boosted nervous system*\n- **ускоритель мозга** — *brain accelerator*\n- **встроенная консоль Harnessing** — *built-in Harnessing console*\n- **коммуникационный имплант** — *comms implant*\n- **киберуши** — *cyber ears*\n- **киберглаза** — *cyber eyes*\n- **киберноги** — *cyber legs*\n- **киберхвост** — *cyber tail*\n- **киберкрылья** — *cyber wings*\n- **киберрука** — *cyberarm*\n- **экзоскелет** — *exo-skeleton*\n- **дополнительные конечности** — *extra limbs*\n- **сетка изменения лица** — *face-altering mesh*\n- **связка глаза и руки** — *hand-eye link*\n- **внутренний массив сканеров** — *internal scanner array*\n- **нейросвязь** — *neural link*\n- **нейровизор** — *neural visor*\n\n**Признаки — Features**\n\n- **выглядит органическим** — *appears organic*\n- **прочные материалы** — *durable materials*\n- **защита от ЭМИ** — *EMP shielding*\n- **обновления прошивки** — *firmware updates*\n- **передовое ПО** — *high-end software*\n- **впечатляющий** — *impressive*\n- **внутренний межсетевой экран** — *internal firewall*\n- **долгая работа батареи** — *long battery life*\n- **мощные сервомоторы** — *powerful servo-motors*\n- **надёжный** — *reliable*\n- **выдвижное [оружие или устройство]** — *retractable [weapon or device]*\n\n**Слабости — Flaws**\n\n- **привлекает внимание** — *draws attention*\n- **сбоит** — *glitchy*\n- **тяжёлый** — *heavy*\n- **нейронный шум** — *neural noise*\n- **рубцовая ткань** — *scar tissue*\n- **неудобный** — *unwieldy*\n\nИсточник: [Core Book, с. 258](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=258).",
+    "role": "generic"
+  },
+  {
+    "name": "Силовые ноги Apex CN62-s",
+    "name_original": "Apex CN62-s Power Legs",
+    "description": "**Apex CN62-s Power Legs**\n\nТонкий лёгкий синтетический экзоскелет на ногах улучшает бег, прыжки, удары ногами и плавание.\n\n**Оригинал описания**\n\n*This thin, light synthetic exoskeleton is mounted on the legs, providing improved running, jumping, kicking, and swimming capabilities.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **силовые ноги** — основной тег\n  *power legs*\n- **усиленный прыжок**\n  *enhanced jump*\n- **длительное усилие**\n  *continuous effort*\n- **уверенная походка**\n  *confident gait*\n\n**Слабость — Weakness**\n\nломота и боли\n\n*aches and pains*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Крылья Apex VI-80 Halcón",
+    "name_original": "Apex VI-80 “Halcón” Wings",
+    "description": "**Apex VI-80 “Halcón” Wings**\n\nЭффектные крылья с лёгким металлическим каркасом и углеволоконными «перьями» раскрываются из наплечных контейнеров. Популярны у любителей острых ощущений.\n\n**Оригинал описания**\n\n*These striking wings unfold from shoulder-mounted storage with lightweight metal frames and carbon fiber “feathers.” Popular among thrill seekers.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **носимые крылья** — основной тег\n  *wearable wings*\n- **медленное планирование**\n  *slow gliding*\n- **компактная конструкция**\n  *compact design*\n- **любитель острых ощущений**\n  *thrill seeker*\n\n**Слабость — Weakness**\n\nво власти ветра\n\n*at the whim of winds*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Выдвижной клинок Elysian Blades",
+    "name_original": "Elysian Blades Retractable Quick-Blade",
+    "description": "**Elysian Blades Retractable Quick-Blade**\n\nПлоский наруч с убирающимся клинком: выпуск и втягивание управляются мышечным усилием.\n\n**Оригинал описания**\n\n*A flat forearm bracer with a retractable blade, released or retracted with muscle control.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **выдвижной клинок** — основной тег\n  *retractable quick-blade*\n- **быстрый колющий удар**\n  *quick stabbing motion*\n- **скрыт в наруче**\n  *hidden in bracer*\n- **фактор неожиданности**\n  *surprise factor*\n\n**Слабость — Weakness**\n\nхрупкий клинок\n\n*fragile blade*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Головной коммуникатор Epis Cranius",
+    "name_original": "Epis Cranius Headcomms",
+    "description": "**Epis Cranius Headcomms**\n\nКрошечное ушное устройство работает с визорами и имплантами для обмена аудио и видео. Субвокальный микрофон позволяет отвечать очень тихо.\n\n**Оригинал описания**\n\n*This tiny comm device is placed in the ear and integrates with visors and implants for sending and receiving audiovisual messages. Includes subvocal mic for very quiet responses.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **головной коммуникатор** — основной тег\n  *head comms*\n- **частная сеть**\n  *private network*\n- **усилитель дальности**\n  *range booster*\n- **тихое обсуждение**\n  *quiet discussion*\n\n**Слабость — Weakness**\n\nслишком много болтовни\n\n*too much chatter*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Углеродная дермальная броня Fenix Corp",
+    "name_original": "Fenix Corp Carbon Dermal Plating",
+    "description": "**Fenix Corp Carbon Dermal Plating**\n\nПрилегающая к коже защита из углеволокна отражает оружие и пули, защищает от абразивной среды и других опасностей.\n\n**Оригинал описания**\n\n*Figure-hugging carbon fiber protection bonded to the host’s skin which can deflect weapons, bullets, abrasive environments and more.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **дермальная броня** — основной тег\n  *dermal plating*\n- **отражать оружие ближнего боя**\n  *deflect melee weapons*\n- **защищённые жизненно важные органы**\n  *shielded vitals*\n\n**Слабость — Weakness**\n\nуязвима к тупой травме\n\n*weak to bludgeon trauma*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Мультиспектральная линза Navachar Nazar",
+    "name_original": "Navachar Electronics “Nazar” Multispectral Lens",
+    "description": "**Navachar Electronics “Nazar” Multispectral Lens**\n\nКонтактная линза стала новым отраслевым стандартом. Даёт видимый, тепловой, ультрафиолетовый и другие диапазоны, увеличение и микроскопическое зрение.\n\n**Оригинал описания**\n\n*The new industry standard, this contact lens allows its user to see in visible, thermographic, ultraviolet, and other specialized wavelengths, including zoom and microscopic.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **мультиспектральная линза** — основной тег\n  *multispectral lens*\n- **увеличение и микроскопическое зрение**\n  *zoom and microscopic vision*\n- **видеозапись**\n  *video recording*\n\n**Слабость — Weakness**\n\nвизуальная перегрузка\n\n*visual overload*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Углеволоконные мышцы Osprey",
+    "name_original": "Osprey Enhanced Carbon Fiber Muscles",
+    "description": "**Osprey Enhanced Carbon Fiber Muscles**\n\nПлотные полусинтетические мышцы выращивают на углеродной сетке под конкретного носителя и устанавливают за часовую операцию. Сильно увеличивают силу, но примерно через день разлагаются и отпадают.\n\n**Оригинал описания**\n\n*Dense, semi-synthetic muscles custom grown on a carbon fiber mesh for each host and attached to the body in a one hour surgery. Greatly increase strength, but rot and drop after about a day.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **углеволоконные мышцы** — основной тег\n  *carbon fiber muscles*\n- **повышенная выносливость**\n  *enhanced stamina*\n- **работать на пределе**\n  *push to the limits*\n- **со мной не шути**\n  *don’t mess with me*\n\n**Слабость — Weakness**\n\nперестараться и навредить себе\n\n*overreach and harm yourself*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Экранированная накладка на торс",
+    "name_original": "Shielded thoracic cover",
+    "description": "**Shielded thoracic cover**\n\nПопулярный у контрабандистов клейкий карман из синтетической кожи накрывает небольшой предмет и скрывает его от сканеров.\n\n**Оригинал описания**\n\n*Popular among smugglers and other semi-legal professions, this synthetic skin compartment is adhesive to the skin, placed over a small item to hide it from scanners.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **экранированная накладка на торс** — основной тег\n  *shielded thoracic cover*\n- **обходит большинство сканирований**\n  *avoids most scans*\n- **амортизирующая пена с памятью**\n  *shock-absorbing memory foam*\n\n**Слабость — Weakness**\n\nприступы боли\n\n*bouts of pain*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Нейроускоритель Talonwerks XR-11",
+    "name_original": "Talonwerks XR-11 High Capacity Nerve Overcharger",
+    "description": "**Talonwerks XR-11 High Capacity Nerve Overcharger**\n\nУстройство размером с пуговицу крепится на затылке и ускоряет реакцию. Talonwerks давно задаёт стандарты таких усилителей.\n\n**Оригинал описания**\n\n*Talonwerks has long set the standard for nerve boosting. This button-sized device is attached to the back of the neck, improving reaction time.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **нейроускоритель** — основной тег\n  *nerve overcharger*\n- **точные движения**\n  *precision movement*\n- **сверхбыстрые рефлексы**\n  *super quick reflexes*\n- **программируемые движения**\n  *programmable movement*\n\n**Слабость — Weakness**\n\nмышечные спазмы\n\n*muscle spasms*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 259](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=259).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Киберпространство",
+    "name_original": "General Items / Cyberspace",
+    "description": "**General Items / Cyberspace**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Программы — Software**\n\n- **программа грубого обрушения приложений** — *brute force app crasher*\n- **анализатор кода** — *code analyzer*\n- **перехват связи** — *comms tap*\n- **подделыватель учётных данных** — *credentials forger*\n- **дешифратор** — *decryptor app*\n- **приложение дипфейков** — *deepfake app*\n- **межсетевой экран** — *firewall*\n- **взломщик межсетевого экрана** — *firewall buster*\n- **выжигатель мозга хакера** — *hacker brain-fryer*\n- **удалитель вредоносного кода** — *malcode remover*\n- **прокси-сервис** — *proxy service*\n- **вирус отключения безопасности** — *security-disabling virus*\n- **трассировщик и локатор источника** — *source tracer & locator*\n\n**Модели VR — VR Models**\n\n- **VR-конструкция в форме [объекта]** — *[object]-shaped VR construct*\n- **аватар в форме [персоны]** — *[persona]-shaped avatar*\n- **редактор окружения** — *environment editor*\n- **инструмент клонирования VR** — *VR clone tool*\n- **приложение VR-невидимости** — *VR invisibility app*\n- **VR-щит** — *VR shield*\n- **VR-оружие** — *VR weapon*\n\n**Признаки программ и VR — Software / VR Features**\n\n- **быстрая загрузка** — *fast loading*\n- **безобидная сигнатура** — *innocuous signature*\n- **низкие требования** — *low requirements*\n- **надёжный код** — *robust coding*\n\n**Слабости программ и VR — Software / VR Flaws**\n\n- **потребляет ресурсы** — *consumes resources*\n- **легко отследить** — *easily traced*\n- **сбоит** — *glitchy*\n- **незаконный** — *illegal*\n- **характерный код** — *signature code*\n- **нужно время на загрузку** — *takes a moment to load*\n\n**Устройства — Hardware**\n\n- **спутниковая связь «отовсюду»** — *“anywhere” satlink*\n- **коммуникационный имплант** — *comms implant*\n- **вычислительное устройство** — *computing device*\n- **кристаллический накопитель** — *crystal-state datadrive*\n- **индивидуальная сумка** — *custom carryall*\n- **планшет данных** — *datapad*\n- **верстак электроники** — *electronics workbench*\n- **консоль Harnessing** — *Harnessing console*\n- **нейросеть** — *neural net*\n- **подавитель сигналов** — *signal jammer*\n- **защита от скачков напряжения** — *surge protector*\n- **VR-очки** — *VR goggles*\n\n**Признаки устройств — Hardware Features**\n\n- **одноразовый** — *burner*\n- **защита от ЭМИ** — *EMP shielding*\n- **система охлаждения теплоотвода** — *heatsink coolant rig*\n- **встроенный межсетевой экран** — *integrated firewall*\n- **много оперативной памяти** — *lots of RAM*\n\n**Слабости устройств — Hardware Flaws**\n\n- **легко перегревается** — *easily overheats*\n- **дёрганая графика** — *janky graphics*\n- **на поколение устарел** — *one generation behind*\n- **фантомные сигналы** — *phantom signals*\n- **слабая батарея** — *weak battery*\n\nИсточник: [Core Book, с. 260](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=260).",
+    "role": "generic"
+  },
+  {
+    "name": "Электронное одеяло Astra-10",
+    "name_original": "Astra-10 Electronic Blanket",
+    "description": "**Astra-10 Electronic Blanket**\n\nНебольшое устройство экранирует сигналы в малом радиусе, делая цифровую активность внутри зоны незаметной снаружи.\n\n**Оригинал описания**\n\n*This small device shields signals in a small radius, making all digital activity inside the zone undetectable from the outside.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **излучатель электронного одеяла** — основной тег\n  *electronic blanket emitter*\n- **блокировать входящие сигналы**\n  *disable incoming signals*\n- **дать ложные сенсорные показания**\n  *provide false sensory reading*\n\n**Слабость — Weakness**\n\nсильно зависит от металла вокруг\n\n*highly affected by metal*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Генератор помех Astra-10",
+    "name_original": "Astra-10 Personal Security Field Spammer",
+    "description": "**Astra-10 Personal Security Field Spammer**\n\nПроизводитель рекламирует защиту от враждебных дронов, но чаще прибор применяют для жестоких атак отказа в обслуживании.\n\n**Оригинал описания**\n\n*While Astra-10 bills these as protective devices against being attacked by hostile drones they are more often used for vicious Denial-of-Service attacks.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **генератор электромагнитных помех** — основной тег\n  *EM field spammer*\n- **атака отказа в обслуживании**\n  *denial of service attack*\n- **отключить дронов**\n  *disable drones*\n- **отключить AR**\n  *disable AR*\n\n**Слабость — Weakness**\n\nперегрев\n\n*overheating*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Дешифратор Gordian Exploiter",
+    "name_original": "Gordian Exploiter",
+    "description": "**Gordian Exploiter**\n\nПопулярная программа расшифровки действует методично и незаметно.\n\n**Оригинал описания**\n\n*A popular decryption program that is methodical and subtle in its approach.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **программа взлома шифров** — основной тег\n  *crypto-breaker software*\n- **деликатный подход**\n  *subtle touch*\n- **оставить работать всю ночь**\n  *leave to soak all night*\n\n**Слабость — Weakness**\n\nнужно время на настройку\n\n*takes time to set up*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Моды разгона Harness",
+    "name_original": "Harness overclocking mods",
+    "description": "**Harness overclocking mods**\n\nОткрытые модификации выводят программы Harness за расчётные пределы. Кодер применяет их при создании и настройке аватаров.\n\n**Оригинал описания**\n\n*Open source mods for pushing Harness softwares past their design limits, used by the coder when creating or adjusting avatars.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **моды разгона Harness** — основной тег\n  *Harness overclocking mods*\n- **создать предельно эффективное тело аватара**\n  *create peak performance avatar body*\n- **дать чрезмерно сильную способность**\n  *grant OP ability*\n\n**Слабость — Weakness**\n\nвыбор из готовых шаблонов\n\n*must pick from pre-designed templates*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Консоль Nu-Phase Kicker",
+    "name_original": "Nu-Phase Kicker Console",
+    "description": "**Nu-Phase Kicker Console**\n\nВысококлассная консоль цифровой безопасности от загадочных инженеров Nu-Phase полезна как для защиты, так и для нападения.\n\n**Оригинал описания**\n\n*For those serious about digital security nothing beats the Kicker, a top-tier security console from the enigmatic engineers of Nu-Phase. Also useful for going on the offensive.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **консоль кибербезопасности** — основной тег\n  *cybersecurity console*\n- **киберзащита высшего класса**\n  *top-tier cybersecurity*\n- **модуль кибератак**\n  *cyberattack mod*\n- **действующая гарантия**\n  *active warranty*\n\n**Слабость — Weakness**\n\nне рассчитана на применение через Harnessing\n\n*not designed for Harnessed use*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Беспроводной анализатор Nu-Phase",
+    "name_original": "Nu-Phase Wireless Sniffer",
+    "description": "**Nu-Phase Wireless Sniffer**\n\nНебольшой незаметный прибор обнаруживает и точно определяет положение беспроводных сигналов поблизости.\n\n**Оригинал описания**\n\n*A small, discreet device for detecting and pinpointing wireless signals in the vicinity.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **беспроводной анализатор** — основной тег\n  *wireless sniffer*\n- **анализировать сигнал**\n  *analyze signal*\n- **незаметный**\n  *discreet*\n\n**Слабость — Weakness**\n\nотвлекают бесчисленные посторонние сигналы\n\n*distracted by countless other signals*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Упакованный частный Domain",
+    "name_original": "Packaged custom private Domain",
+    "description": "**Packaged custom private Domain**\n\nЧастный Domain заранее настраивается по одному из шаблонов. Его можно «развернуть» в любом месте киберпространства как маленькое карманное измерение.\n\n**Оригинал описания**\n\n*A private Domain, pre-customised (several templates are available), that can be “released” anywhere in cyberspace as a small pocket dimension.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **индивидуальный частный Domain** — основной тег\n  *custom private Domain*\n- **разнообразные удобства**\n  *various amenities*\n- **помещается везде**\n  *fits everywhere*\n- **безопасное убежище**\n  *safe refuge*\n\n**Слабость — Weakness**\n\nнедолговечный\n\n*short-lived*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Маска аватара Quicksilver",
+    "name_original": "Quicksilver Avatar Mask",
+    "description": "**Quicksilver Avatar Mask**\n\nПрограмма хакерского коллектива Quicksilver сканирует и копирует чужой аватар для маскировки при Harnessing.\n\n**Оригинал описания**\n\n*A software distributed by the hacker collective Quicksilver, that scans and copies another user’s avatar, allowing for Harnessed disguises.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **программа маски аватара** — основной тег\n  *avatar mask software*\n- **копировать эмоции и анимацию ожидания**\n  *copy emotes and idle animation*\n- **библиотека маскировок**\n  *library of disguises*\n\n**Слабость — Weakness**\n\nдля точности нужно много подробностей\n\n*requires many details to be precise*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Эксплойт грубой силы Shever",
+    "name_original": "Shever Brute Force Exploit",
+    "description": "**Shever Brute Force Exploit**\n\nПопулярная программа принудительного входа быстро ломает шифрование, но действует очень шумно и заметно.\n\n**Оригинал описания**\n\n*A popular forced-entry software that is very effective at breaking encryption quickly but also very loud and obvious.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **программа взлома грубой силой** — основной тег\n  *brute force exploit software*\n- **разрушать защитные конструкции**\n  *shatter defensive constructs*\n- **сопутствующий ущерб**\n  *ollateral damage*\n\n**Слабость — Weakness**\n\nзаметный\n\n*conspicuous*\n\nВ печатном английском теге стоит *ollateral damage* без начальной c; опечатка сохранена в оригинале.\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Трассировщик соединений Smarter Jack",
+    "name_original": "Smarter Jack Connection Tracer",
+    "description": "**Smarter Jack Connection Tracer**\n\nОсторожные пользователи применяют программу, чтобы установить личность собеседника и его местоположение и не стать жертвами мошенников.\n\n**Оригинал описания**\n\n*Safety-minded users who wish to avoid scams sometimes use this program to narrow down just who they are talking to and where they are located.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **трассировщик соединений** — основной тег\n  *connection tracer*\n- **определить физическое местоположение**\n  *identify physical location*\n- **определить учётную запись**\n  *identify user’s account*\n- **незаметная работа**\n  *inconspicuous operation*\n\n**Слабость — Weakness**\n\n«Задержи их, мне нужно ещё 30 секунд!»\n\n*“Stall them, I need 30 more seconds!”*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Буфер личности Smarter Jack",
+    "name_original": "Smarter Jack Identity Buffer",
+    "description": "**Smarter Jack Identity Buffer**\n\nРезкое отключение опасно для путешественников по Spirals и наёмников с Harnessing. Утилита даёт мозгу несколько дополнительных секунд на возвращение в физический мир.\n\n**Оригинал описания**\n\n*Violent disconnections are the bane of anyone who travels the Spirals (and Harnessed mercs). This powerful utility gives the brain a few more seconds to adjust to meatspace, which can make all the difference.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **буфер личности** — основной тег\n  *identity buffer*\n- **сосредоточиться и успокоиться**\n  *refocus and stay calm*\n- **быстрое безопасное отключение**\n  *quick and safe disconnection*\n\n**Слабость — Weakness**\n\nплохо сочетается с другими аугментациями мозга\n\n*doesn’t play well with other brain augs*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 261](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=261).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Дроны",
+    "name_original": "General Items / Drones",
+    "description": "**General Items / Drones**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **андроид-помощник** — *android assistant*\n- **грузовой дрон** — *carrier drone*\n- **дрон наблюдения** — *surveillance drone*\n\n**Признаки — Features**\n\n- **человекоподобный** — *anthroform*\n- **автоматическая стабилизация** — *auto-stabilization*\n- **долгая работа батареи** — *long battery life*\n\n**Слабости — Flaws**\n\n- **легко повредить** — *easily damaged*\n- **жёстко запрограммирован** — *hardcoded*\n- **тугое управление** — *stiff controls*\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "generic"
+  },
+  {
+    "name": "Ударный дрон Acciaio Chirurga V",
+    "name_original": "Acciaio Clandestine “Chirurga V” Military Strike Drone",
+    "description": "**Acciaio Clandestine “Chirurga V” Military Strike Drone**\n\nИзящный скрытный дрон несёт неожиданно тяжёлое вооружение и при этом помещается в рюкзак. Самый распространённый дрон убийц на рынке.\n\n**Оригинал описания**\n\n*A sleek, stealthy drone capable of carrying impressively heavy weapons despite being able to fit in a backpack. The most common assassin drone on the market.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **ударный дрон** — основной тег\n  *strike drone*\n- **скрытный полёт**\n  *stealthy flight*\n- **установленное вооружение**\n  *mounted weaponry*\n- **изящный**\n  *sleek*\n\n**Слабость — Weakness**\n\nпосредственные стабилизаторы отдачи\n\n*mediocre recoil stabilizers*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "item"
+  },
+  {
+    "name": "Роевые микродроны Apex TB-X",
+    "name_original": "Apex TB-X Swarm-Linked Microdrones",
+    "description": "**Apex TB-X Swarm-Linked Microdrones**\n\nДвадцать дронов размером 3 см могут действовать согласованным роем или по отдельности.\n\n**Оригинал описания**\n\n*A collection of twenty 3cm drones capable of operating as a coordinated swarm or individually.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **роевые микродроны** — основной тег\n  *swarm-linked microdrones*\n- **самостоятельный полёт**\n  *self-sustained flight*\n- **согласованное наблюдение**\n  *coordinated surveillance*\n\n**Слабость — Weakness**\n\nхрупкие\n\n*delicate*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "item"
+  },
+  {
+    "name": "Дрон-пёс Epis Rex",
+    "name_original": "Epis Canine Companion Drone “Rex”",
+    "description": "**Epis Canine Companion Drone “Rex”**\n\nЧетвероногий дрон задуман как помощник и поддержка военизированных групп, но его часто переделывают в боевой.\n\n**Оригинал описания**\n\n*A canineform drone intended to be a helpful companion and support unit for paramilitary groups, often retooled as a combat drone.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **дрон-пёс** — основной тег\n  *canine drone*\n- **протокол атаки**\n  *attack protocol*\n- **протокол поддержки**\n  *support protocol*\n- **электронные датчики запахов**\n  *electronic scent detectors*\n\n**Слабость — Weakness**\n\nмедленная реакция\n\n*slow reaction time*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "item"
+  },
+  {
+    "name": "Механоидный погрузчик NM3 Mark II",
+    "name_original": "NM3 Industrial Mechanoid Loader Mark II",
+    "description": "**NM3 Industrial Mechanoid Loader Mark II**\n\nОгромные прочные промышленные дроны иногда переделываются в бойцов арены или возвышающиеся над врагами боевые машины.\n\n**Оригинал описания**\n\n*A common sight in industrial settings, these giant, durable drones are sometimes repurposed for arena brawling or as towering weapons.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **промышленный механоидный погрузчик** — основной тег\n  *industrial mechanoid loader*\n- **очень сильный**\n  *very strong*\n- **возвышающаяся угроза**\n  *towering threat*\n\n**Слабость — Weakness**\n\nнеповоротливый\n\n*lumbering*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "item"
+  },
+  {
+    "name": "Складной паукообразный дрон NM3 Arachnid III",
+    "name_original": "NM3 Unfolding “Backpack” Arachnid III",
+    "description": "**NM3 Unfolding “Backpack” Arachnid III**\n\nВ сложенном виде похож на жёсткий рюкзак; раскрывается в ловкого паука размером с крупную собаку. Часто используется для исследования города и спасательных работ.\n\n**Оригинал описания**\n\n*When stowed, this drone looks like a hard-shelled backpack. It unfolds into a spider-like, agile drone the size of a large dog, which sees much use in urban exploration and rescue missions.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **паук-дрон из рюкзака** — основной тег\n  *backpack arachnid drone*\n- **лазать по стенам**\n  *wall crawling*\n- **проникать в тесные места**\n  *enter tight spaces*\n- **прочный**\n  *durable*\n\n**Слабость — Weakness**\n\nмедлительный\n\n*slow-moving*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 262](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=262).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Усилители",
+    "name_original": "General Items / Enhancers",
+    "description": "**General Items / Enhancers**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **успокоитель** — *downer*\n- **концентратор** — *focuser*\n- **стимулятор** — *upper*\n\n**Признаки — Features**\n\n- **обострённые рефлексы** — *heightened reflexes*\n- **обезболивание** — *numbing*\n- **необнаружимый** — *undetectable*\n\n**Слабости — Flaws**\n\n- **вызывает зависимость** — *addictive*\n- **незаконный** — *illegal*\n- **галлюциногенный** — *trippy*\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "generic"
+  },
+  {
+    "name": "Anchor — «Якорь»",
+    "name_original": "Anchor",
+    "description": "**Anchor**\n\nРецептурный препарат против киберпространственного делирия — распространённой проблемы после слишком быстрого отключения от VR.\n\n**Оригинал описания**\n\n*This prescription drug is subscribed to people who suffer from cyberspace delirium, a common issue among people who disconnect from VR way too fast.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **Anchor** — основной тег\n  *Anchor*\n- **быть здесь и сейчас**\n  *be here and now*\n- **устранить киберделирий**\n  *negate cyberspace delirium*\n- **видеть сквозь иллюзии**\n  *see through illusions*\n\n**Слабость — Weakness**\n\nвызывает зависимость\n\n*addictive*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "item"
+  },
+  {
+    "name": "Nitro — «Нитро»",
+    "name_original": "Nitro",
+    "description": "**Nitro**\n\nРаспространённый уличный препарат в небольших неоново-жёлтых баллончиках временно делает пользователя быстрее, сильнее и возбуждённее.\n\n**Оригинал описания**\n\n*A common street drug that is sold in small canisters of neon-yellow color. Gives you a boost when you need it, making you faster, stronger, and psyched-up.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **Nitro** — основной тег\n  *Nitro*\n- **стряхнуть усталость**\n  *shake off tiredness*\n- **игнорировать боль**\n  *ignore pain*\n- **искусственное возбуждение**\n  *artificially excited*\n\n**Слабость — Weakness**\n\nвызывает зависимость\n\n*addictive*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "item"
+  },
+  {
+    "name": "Наноботы быстрого заживления",
+    "name_original": "Rapid healing nanobots",
+    "description": "**Rapid healing nanobots**\n\nРазные компании выпускают инъекции и пасты с наноботами, ускоряющими естественное заживление организма.\n\n**Оригинал описания**\n\n*A number of companies produce syringes or pastes of nanobots that accelerate their host’s natural healing.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **наноботы быстрого заживления** — основной тег\n  *rapid healing nanobots*\n- **облегчение боли**\n  *pain relief*\n- **фильтрация токсинов**\n  *toxin filtering*\n- **здоровый вид**\n  *healthy glow*\n\n**Слабость — Weakness**\n\nне справляются с мифическим\n\n*can’t handle the Mythic*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "item"
+  },
+  {
+    "name": "Santos-Krupp Mindsharp",
+    "name_original": "Santos-Krupp X-2031 (“Mindsharp”)",
+    "description": "**Santos-Krupp X-2031 (“Mindsharp”)**\n\nПопавший с военного рынка на улицы препарат обостряет чувства: помогает сосредоточиться на задаче или читать микровыражения на допросе.\n\n**Оригинал описания**\n\n*A military drug that made it to the street, Mindsharp focuses your senses to fixate on a task or read microexpressions in interrogation subjects.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **Mindsharp** — основной тег\n  *Mindsharp*\n- **сосредоточиться на задаче**\n  *focus on a task*\n- **острые чувства**\n  *sharp senses*\n- **читать микровыражения**\n  *read microexpressions*\n\n**Слабость — Weakness**\n\nзастигнут врасплох\n\n*blindsided*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "item"
+  },
+  {
+    "name": "Sunspot — «Солнечное пятно»",
+    "name_original": "Sunspot",
+    "description": "**Sunspot**\n\nИзначально рейвовый гиперстимулятор модифицирован для уличных наёмников, которым нужна предельная бдительность.\n\n**Оригинал описания**\n\n*Originally a rave drug, a modified version of this hyper stimulant is used by street mercs to put themselves on high alert.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **Sunspot** — основной тег\n  *Sunspot*\n- **стряхнуть усталость**\n  *shake off tiredness*\n- **долгое бодрствование на препарате**\n  *long term drug-fueled wakefulness*\n- **сосредоточенное внимание**\n  *focused attention*\n\n**Слабость — Weakness**\n\nоткат усталости\n\n*rebound fatigue*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 263](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=263).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Одежда и мода",
+    "name_original": "General Items / Garments & Fashion",
+    "description": "**General Items / Garments & Fashion**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **форма [корпорации]** — *[corp] uniform*\n- **[субкультурная одежда]** — *[subculture garment]*\n- **электризующий плащ** — *electrifying cape*\n- **модный наряд** — *fashionable outfit*\n- **куртка банды** — *gang jacket*\n- **парящие ботинки** — *hoverboots*\n- **ночной гардероб** — *nightlife wardrobe*\n- **форма охраны** — *security uniform*\n- **телескопические очки** — *telescopic eyewear*\n- **ожерелье с видеоустройством** — *video-rig necklace*\n\n**Признаки — Features**\n\n- **подлинная** — *authentic*\n- **слиться с толпой** — *blend in the crowd*\n- **привлекать внимание** — *grab attention*\n- **скрытые карманы** — *hidden pockets*\n- **встроенный сканер** — *integrated scanner*\n- **роскошная** — *luxurious*\n- **атмосферостойкая** — *weather-resistant*\n\n**Слабости — Flaws**\n\n- **дорогая** — *expensive*\n- **непрочная** — *flimsy*\n- **стесняет движения** — *limited motion*\n- **требует подзарядки** — *requires recharging*\n\nИсточник: [Core Book, с. 264](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=264).",
+    "role": "generic"
+  },
+  {
+    "name": "Биометрически маскирующая парадная одежда",
+    "name_original": "Biometric masking formalwear",
+    "description": "**Biometric masking formalwear**\n\nСшитая на заказ одежда для официальных мероприятий оснащена технологиями, мешающими распознаванию на сканерах и способными давать ложные показания.\n\n**Оригинал описания**\n\n*These clothes, which must be tailored to you, are perfect for formal occasions. They are laced with technology to prevent you from being identified in scans, possibly giving false readings.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **биометрически маскирующая одежда** — основной тег\n  *biometric masking formalwear*\n- **нарядная**\n  *fancy*\n- **давать ложные показания**\n  *give false readings*\n\n**Слабость — Weakness**\n\nмешает кибернетике\n\n*interfere with cyberware*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 264](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=264).",
+    "role": "item"
+  },
+  {
+    "name": "Украшения из кристаллов данных",
+    "name_original": "Data crystal jewelry",
+    "description": "**Data crystal jewelry**\n\nЭффектное украшение совмещает моду и практичность: кристаллическая решётка содержит вместительное хранилище данных.\n\n**Оригинал описания**\n\n*Combining fashion with pragmatism, this stunning piece of jewelry contains a large-capacity data storage in the lattice of the crystals.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **украшения из кристаллов данных** — основной тег\n  *data crystal jewelry*\n- **шифрование**\n  *encryption*\n- **геометки**\n  *geotagged*\n- **потрясающее украшение**\n  *stunning jewelry*\n\n**Слабость — Weakness**\n\nдля доступа нужен особый порт\n\n*requires a unique port to access*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 264](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=264).",
+    "role": "item"
+  },
+  {
+    "name": "Капюшон приватности",
+    "name_original": "Privacy hood",
+    "description": "**Privacy hood**\n\nКапюшон искажает цифровую запись, размывает лицо и маскирует профиль пользователя от постоянного наблюдения.\n\n**Оригинал описания**\n\n*In an age of constant surveillance, this hood disrupts digital recording to blur your face and mask your profile.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **капюшон приватности** — основной тег\n  *privacy hood*\n- **срывать доступ к моему снаряжению**\n  *disrupt attempts to access my gear*\n- **скрывать профиль**\n  *mask my profile*\n\n**Слабость — Weakness**\n\nподавляет и полезные сетевые соединения\n\n*also dampens useful network connections*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 264](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=264).",
+    "role": "item"
+  },
+  {
+    "name": "Парадная одежда из умной ткани",
+    "name_original": "Smart fabric formalwear",
+    "description": "**Smart fabric formalwear**\n\nНовейшая ткань переливается узорами, меняет форму и реагирует на другие костюмы из умных тканей.\n\n**Оригинал описания**\n\n*A formal outfit made of the latest smart fabric tech, shimmering in patterns, adjusting shape, and responding to other smart fabric outfits.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **парадная одежда из умной ткани** — основной тег\n  *smart fabric formalwear*\n- **голографические излучатели**\n  *holographic emitters*\n- **база гардероба**\n  *wardrobe database*\n- **одет с иголочки**\n  *sharp dresser*\n\n**Слабость — Weakness**\n\nизнос\n\n*wear and tear*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 264](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=264).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Снаряжение наёмника",
+    "name_original": "General Items / Merc Gear",
+    "description": "**General Items / Merc Gear**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **армейский нож** — *army knife*\n- **скрытая кобура** — *concealed holster*\n- **баллон едкой кислоты** — *corrosive acid canister*\n- **набор первой помощи** — *first aid kit*\n- **противогаз** — *gas mask*\n- **голопроектор** — *holo projector*\n- **вещмешок** — *kitbag*\n- **полимерная верёвка** — *polymer rope*\n- **ребризер** — *rebreather*\n- **ремонтный набор** — *repair kit*\n- **защищённый накопитель** — *secured data stick*\n- **сканер конструкций** — *structural scanner*\n\n**Признаки — Features**\n\n- **прочный** — *durable*\n- **легко скрыть** — *easily concealable*\n- **дополнительные запасы** — *extra supplies*\n- **лёгкий** — *light*\n\n**Слабости — Flaws**\n\n- **легко ломается** — *breaks easily*\n- **громоздкий** — *cumbersome*\n- **утомительный** — *exhausting*\n- **низкое качество** — *poor quality*\n- **нужна установка** — *requires setup*\n- **быстро заканчивается** — *runs out easily*\n- **медленно работает** — *slow operation*\n- **неудобный** — *unwieldy*\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "generic"
+  },
+  {
+    "name": "Автовзломщик Astra-10",
+    "name_original": "Astra-10 Autocracker and Sequencer",
+    "description": "**Astra-10 Autocracker and Sequencer**\n\nАвтоматическое устройство для вскрытия любых замков, механических и электронных.\n\n**Оригинал описания**\n\n*An automated lock picking device that works on any lock, physical and electronic.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **автовзломщик** — основной тег\n  *autocracker*\n- **обнаружить датчики тревоги**\n  *detect alarm triggers*\n- **насадки для вскрытия сейфов**\n  *safecracking tool attachments*\n\n**Слабость — Weakness**\n\nржавые или сломанные замки\n\n*rusted or broken locks*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Биометрический репликатор Astra-10",
+    "name_original": "Astra-10 Biometric Replicator",
+    "description": "**Astra-10 Biometric Replicator**\n\nПрофессиональное устройство подделки печатает контактные линзы, накладки на пальцы и дыхательные капсулы для обмана биометрических сканеров.\n\n**Оригинал описания**\n\n*A professional forging device capable of 3D printing contacts, fingertip covers, and breath capsules to fool biometric scanners.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **биометрический репликатор** — основной тег\n  *biometric replicator*\n- **копировать образец**\n  *duplicate sample*\n- **малые размеры**\n  *small sized*\n\n**Слабость — Weakness**\n\nограничен размером картриджа\n\n*limited by cartridge size*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Шифрованный наручный коммуникатор Astra-10",
+    "name_original": "Astra-10 Encrypted Wrist Comm",
+    "description": "**Astra-10 Encrypted Wrist Comm**\n\nНаручный аудиовидеокоммуникатор связывается через киберпространство с числом подобных устройств до двенадцати.\n\n**Оригинал описания**\n\n*A wrist-mounted audiovisual communications unit that is linked with up to a dozen others through cyberspace.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **наручный коммуникатор** — основной тег\n  *wrist comm*\n- **снимать и передавать видео**\n  *capture and share video*\n- **адаптивные алгоритмы шифрования**\n  *reactive encryption algorithms*\n\n**Слабость — Weakness**\n\nпомехи сигнала\n\n*signal interference*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Персональный AI Epis Leigh",
+    "name_original": "Epis Personal Assistant AI “Leigh”",
+    "description": "**Epis Personal Assistant AI “Leigh”**\n\nПопулярный AI-компаньон следит за привычками владельца и упрощает повседневность. Его часто взламывают для помощи в менее законных делах.\n\n**Оригинал описания**\n\n*The leading companion AI on the market, these programs track user’s habits to better deal with daily life. Often cracked to help with less legal operations.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **личный AI** — основной тег\n  *personal AI*\n- **организовывать операции**\n  *organize operations*\n- **давать статистические выводы**\n  *provide statistical insights*\n- **осваивать новые привычки**\n  *ease into new habits*\n\n**Слабость — Weakness**\n\nнедопонимание\n\n*misunderstandings*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Портативный сканер кибернетики Epis",
+    "name_original": "Epis Portable Cybernetics Scanner",
+    "description": "**Epis Portable Cybernetics Scanner**\n\nБыстрый ручной или стационарный сканер выявляет любые импланты. Его используют и для официальной проверки безопасности, и для уличного контроля.\n\n**Оригинал описания**\n\n*Fast scanner, handheld or upright, that detects any implants. Ostensibly used for security checks in public areas they are just as often used for street security.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **сканер кибернетики** — основной тег\n  *cybernetics scanner*\n- **обнаружить импланты**\n  *detect implants*\n- **анализ имплантов**\n  *implant analysis*\n- **быстрый**\n  *fast*\n\n**Слабость — Weakness**\n\nочень малая дальность\n\n*very limited range*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Аптечка KOCMOC",
+    "name_original": "KOCMOC Medkit",
+    "description": "**KOCMOC Medkit**\n\nСтандартная первая помощь: умные бинты, обычные обезболивающие, спреи синтетической кожи и другие средства быстрого восстановления.\n\n**Оригинал описания**\n\n*The standard first aid kit, featuring smart bandages, basic painkillers, synthetic skin sprays, and other fast fixes.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **аптечка** — основной тег\n  *medkit*\n- **поставить тебя на ноги**\n  *get you back on your legs*\n- **дефибриллятор**\n  *defibrillator*\n- **здесь, чтобы помочь**\n  *here to help*\n\n**Слабость — Weakness**\n\nограниченные запасы\n\n*limited supplies*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Набор маскировки Nanoware",
+    "name_original": "Nanoware disguise kit",
+    "description": "**Nanoware disguise kit**\n\nНезаконно модифицированный 3D-принтер печатает латексные накладки на лицо, обманывающие программы распознавания.\n\n**Оригинал описания**\n\n*This illegally modified 3D printer produces latex face disguises that can fool face recognition apps.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **набор маскировки Nanoware** — основной тег\n  *nanoware disguise kit*\n- **копировать образец**\n  *copy sample*\n- **срочный ремонт маски**\n  *emergency mask repair*\n\n**Слабость — Weakness**\n\nошибается на нечеловеческих чертах\n\n*confused by non-human features*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "3D-сканер Navachar Essence",
+    "name_original": "Navachar Electronics “Essence” 3D Scanner",
+    "description": "**Navachar Electronics “Essence” 3D Scanner**\n\nПрибор в форме жезла сканирует объекты в трёх измерениях и создаёт модели для 3D-печати или VR.\n\n**Оригинал описания**\n\n*This wand-like device takes three dimensional scans of an object to create models suitable for 3D printing or inclusion in a VR.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **3D-сканер** — основной тег\n  *3D scanner*\n- **размеры и подробности**\n  *measurements and details*\n- **мультиспектральное сканирование**\n  *multispectrum scan*\n- **быстрая обработка**\n  *quick processing*\n\n**Слабость — Weakness**\n\nобъекты из множества частей\n\n*objects with multiple parts*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 265](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=265).",
+    "role": "item"
+  },
+  {
+    "name": "Шлем механика NM3",
+    "name_original": "NM3 Machinist’s Helm",
+    "description": "**NM3 Machinist’s Helm**\n\nГарнитура с визором просвечивает машины, показывает внутренние схемы и сопоставляет их со встроенной базой.\n\n**Оригинал описания**\n\n*Headset and visor that x-rays machines and devices, displaying internal schematics and matching them with its own internal database.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **HUD механика** — основной тег\n  *machinist’s HUD*\n- **понять скрытые особенности**\n  *understand hidden features*\n- **большая база конструкций**\n  *large design database*\n- **испачкать руки**\n  *get your hands dirty*\n\n**Слабость — Weakness**\n\nметаллическое экранирование\n\n*metal shielding*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 266](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=266).",
+    "role": "item"
+  },
+  {
+    "name": "Адаптивное альпинистское снаряжение Osprey",
+    "name_original": "Osprey Adaptive Climbing Gear",
+    "description": "**Osprey Adaptive Climbing Gear**\n\nПерчатки и ботинки с микроадгезионными поверхностями помогают лазать.\n\n**Оригинал описания**\n\n*These gloves and boots feature micro-adhesion surfaces to help with climbing.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **адаптивное альпинистское снаряжение** — основной тег\n  *adaptive climbing gear*\n- **резервный крюкомёт**\n  *grappling gun backup*\n- **полимерная верёвка**\n  *polymer rope*\n\n**Слабость — Weakness**\n\nвлага\n\n*moisture*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 266](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=266).",
+    "role": "item"
+  },
+  {
+    "name": "Искусственные жабры Osprey",
+    "name_original": "Osprey Artificial Gill Breathers",
+    "description": "**Osprey Artificial Gill Breathers**\n\nУстройство крепится на рот или удерживается зубами и быстро извлекает кислород из воды, позволяя дышать под водой.\n\n**Оригинал описания**\n\n*A device that either straps over your mouth or is held between teeth, rapidly processing water into oxygen to allow you to breathe underwater.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **искусственные жабры** — основной тег\n  *artificial gill breathers*\n- **компьютер для погружений**\n  *dive computer*\n- **в воде как дома**\n  *at home in water*\n\n**Слабость — Weakness**\n\nгрязная вода\n\n*dirty water*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 266](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=266).",
+    "role": "item"
+  },
+  {
+    "name": "Крюк-кошка UrbanWar",
+    "name_original": "UrbanWar Grappling Hook",
+    "description": "**UrbanWar Grappling Hook**\n\nВысотки, башни и опоры почти любого района Megacity делают крюк-кошку полезным инструментом тактических действий.\n\n**Оригинал описания**\n\n*Almost every Megacity district has more than enough highrises, towers and utility poles to justify the use of a grappling hook in tactical warfare.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **крюк-кошка** — основной тег\n  *grappling hook*\n- **цепкая верёвка**\n  *grippy climbing rope*\n- **магнитный крюк**\n  *magnetic hook*\n- **раскачиваться между зданиями**\n  *swing between buildings*\n\n**Слабость — Weakness**\n\nосыпающаяся опора\n\n*crumbling anchoring*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 266](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=266).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Предметы, затронутые Источником",
+    "name_original": "General Items / Source-Touched Items",
+    "description": "**General Items / Source-Touched Items**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **святая вода** — *blessed water*\n- **перо полёта** — *flight-giving feather*\n- **песнопение умиротворения призраков** — *ghost-appeasing chant*\n- **пояс силы великана** — *girdle of giant’s strength*\n- **талисман удачи** — *good luck talisman*\n- **кольцо невидимости** — *invisibility ring*\n- **мазь железной кожи** — *ironskin salve*\n- **поисковое заклинание** — *locator spell*\n- **усыпляющая лира** — *lulling lyre*\n- **кинжал губитель магов** — *magebane dagger*\n- **мазь убийцы чудовищ** — *monster-slaying ointment*\n- **точило бесшумного убийства** — *silent-kill whetstone*\n- **амулет паучьего лазанья** — *spider-climbing charm*\n- **соль связывания духов** — *spirit-binding salt*\n- **костюм обольщения** — *suit of beguilement*\n- **браслет пламени** — *wristband of flames*\n- **омолаживающая инъекция крови виверны** — *wyvern blood rejuvenating shot*\n\n**Признаки — Features**\n\n- **незаметный** — *discreet*\n- **долго действует** — *long lasting*\n- **сильнее [во время / в месте / при условии]** — *stronger [at time / in place / if condition]*\n- **сильнее против [существа]** — *stronger against [being]*\n- **сильнее против обычного** — *stronger against mundane*\n- **сильнее против технологий** — *stronger against tech*\n\n**Слабости — Flaws**\n\n- **активируется кровью** — *activated with blood*\n- **привлекает [существо]** — *attracts [being]*\n- **легко рассеять** — *easy to dispel*\n- **нужна перезарядка** — *needs recharging*\n- **заметный** — *noticeable*\n- **работает только [во время / в месте / при условии]** — *only works [at time / in place / if condition]*\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "generic"
+  },
+  {
+    "name": "Эгида",
+    "name_original": "Aegis",
+    "description": "**Aegis**\n\nКопия щита древнегреческих богов защищает почти от любого удара.\n\n**Оригинал описания**\n\n*A replica of the shield carried by the gods of ancient Greece, protective against nearly any blow.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **магический щит** — основной тег\n  *magical shield*\n- **отразить атаку**\n  *deflect attack*\n- **ужасает своим видом**\n  *awful to behold*\n- **стоять на своём**\n  *stand your ground*\n\n**Слабость — Weakness**\n\nгромоздкая\n\n*cumbersome*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Демонический кулон",
+    "name_original": "Demonic pendant",
+    "description": "**Demonic pendant**\n\nКулон со зловещим знаком предвещает беду, но несёт тёмную и могучую силу.\n\n**Оригинал описания**\n\n*This necklace bears an evil sign, which connotes bad omens but also a dark and powerful force.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **демонический кулон** — основной тег\n  *demonic pendant*\n- **навлечь неудачу**\n  *inflict bad luck*\n- **повелевать злыми духами**\n  *command malicious spirits*\n\n**Слабость — Weakness**\n\nслабее при дневном свете\n\n*weaker in daylight*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Стекло истинного зрения",
+    "name_original": "Glass of True Vision",
+    "description": "**Glass of True Vision**\n\nОкруглый осколок морского стекла позволяет видеть сквозь иллюзии и различать истинный облик оборотней.\n\n**Оригинал описания**\n\n*Looking through this rounded shard of sea glass lets you see through illusion and the true form of shapeshifters.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **стекло истинного зрения** — основной тег\n  *glass of true vision*\n- **видеть сквозь иллюзии**\n  *see through illusions*\n- **пронизывающий взгляд**\n  *penetrating stare*\n\n**Слабость — Weakness**\n\nзрению нужно время проясниться\n\n*takes a moment for the vision to clear*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Исцеляющее зелье",
+    "name_original": "Healing potion",
+    "description": "**Healing potion**\n\nМагическое универсальное лекарство — отличное, но дорогое средство против открытых ран и переломов.\n\n**Оригинал описания**\n\n*A magical cure-all, an excellent but costly solution to open wounds and broken bones.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **исцеляющее зелье** — основной тег\n  *healing potion*\n- **закрыть раны**\n  *close wounds*\n- **срастить кости**\n  *mend bones*\n\n**Слабость — Weakness**\n\nкибернетика\n\n*cyberware*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Карта лей-линий",
+    "name_original": "Leyline map",
+    "description": "**Leyline map**\n\nСтаринная карта показывает точки схождения разнообразных мистических сил.\n\n**Оригинал описания**\n\n*An ancient map showing the convergence points of various mystical powers.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **карта лей-линий** — основной тег\n  *leyline map*\n- **полезная навигация**\n  *helpful navigation*\n- **черпать энергии земли**\n  *tap earth energies*\n\n**Слабость — Weakness**\n\nустаревшая\n\n*outdated*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Потусторонний контракт",
+    "name_original": "Otherworldly contract",
+    "description": "**Otherworldly contract**\n\nТщательно составленный договор с дьяволом, фейри или духом об оказании услуги.\n\n**Оригинал описания**\n\n*A tightly worded contract with a devil, a fae, or some spirit, to provide a service.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **потусторонний контракт** — основной тег\n  *otherworldly contract*\n- **призвать полезного фамильяра**\n  *summon helpful familiar*\n- **сверхъестественный совет**\n  *preternatural advice*\n- **точные формулировки**\n  *careful articulation*\n\n**Слабость — Weakness**\n\nмелкий шрифт и лазейки\n\n*small print and loopholes*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Молитвенные чётки",
+    "name_original": "Prayer beads",
+    "description": "**Prayer beads**\n\nНить для подсчёта молитв благословлена или иначе освящена как Source.\n\n**Оригинал описания**\n\n*Commonly used to count the prayers you have made, this Source strand has been blessed or otherwise consecrated.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **молитвенные чётки** — основной тег\n  *prayer beads*\n- **защита от демонов**\n  *protection from demons*\n- **благословенное наставление**\n  *blessed guidance*\n\n**Слабость — Weakness**\n\nсаркастичный пользователь\n\n*sarcastic user*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Взрывные молитвенные чётки",
+    "name_original": "Prayer beads, explosive",
+    "description": "**Prayer beads, explosive**\n\nДемонические чётки наполнены отрицательной энергией и готовы к броску; из них идут чёрные испарения и слышно хихиканье.\n\n**Оригинал описания**\n\n*Demonic beads, full of negative energy, ready to be thrown. You can see the black vapors and hear the cackling.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **взрывные чётки** — основной тег\n  *explosive prayer beads*\n- **демонический огонь**\n  *demonic fire*\n- **радиус взрыва**\n  *blast radius*\n- **нарушать магию**\n  *disrupts magic*\n\n**Слабость — Weakness**\n\nнеизбирательный урон\n\n*indiscriminate damage*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Мрачные знаки",
+    "name_original": "Somber markings",
+    "description": "**Somber markings**\n\nГрим из человеческого пепла наносят на лицо для защиты от призраков. Иногда он даёт видения земель мёртвых.\n\n**Оригинал описания**\n\n*Makeup made from human ash, used to mark the face and offer protections against ghosts. Occasionally provides visions of the lands of the dead.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **мрачные знаки** — основной тег\n  *somber markings*\n- **умиротворять призраков**\n  *ghost placation*\n- **видеть в подземный мир**\n  *see into the underworld*\n\n**Слабость — Weakness**\n\nжуткий вид\n\n*creepy*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Пленённый дух",
+    "name_original": "Trapped spirit",
+    "description": "**Trapped spirit**\n\nВ стеклянной сфере заключён злобный дух. Разбив стекло, можно выпустить его ярость — желательно на врагов.\n\n**Оригинал описания**\n\n*Within this glass sphere is a trapped vicious spirit. Shattering the glass will release its wrath, hopefully towards your enemies.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **пленённый дух** — основной тег\n  *trapped spirit*\n- **телекинетическая атака**\n  *telekinetic assault*\n- **неистовый вопль**\n  *hectic scream*\n\n**Слабость — Weakness**\n\nнеизбирательные цели\n\n*indiscriminate targets*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 267](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=267).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Транспорт",
+    "name_original": "General Items / Vehicles",
+    "description": "**General Items / Vehicles**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Предметы — Items**\n\n- **чоппер** — *chopper*\n- **гироцикл** — *gyrocycle*\n- **дельтаплан** — *hand glider*\n- **парящий автомобиль** — *hover car*\n- **ховерборд** — *hoverboard*\n- **водный мотоцикл** — *jet ski*\n- **парашют** — *parachute*\n- **личный летательный аппарат** — *personal aircraft*\n- **ржавый наземный автомобиль** — *rusty ground car*\n\n**Признаки — Features**\n\n- **бронированный** — *armored*\n- **с межсетевым экраном** — *firewalled*\n- **впрыск реактивного топлива** — *jet fuel injection system*\n- **нейронное пилотирование** — *neural piloting*\n\n**Слабости — Flaws**\n\n- **склонен к авариям** — *accident-prone*\n- **прожорливый** — *guzzler*\n- **плохая управляемость** — *poor handling*\n- **угнанный** — *stolen*\n\nВ оригинале напечатано *hand glider*; английская строка сохранена, по смыслу речь о дельтаплане.\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "generic"
+  },
+  {
+    "name": "Спорткар Gyeong Motors V-260",
+    "name_original": "Gyeong Motors V-260 Sports Car",
+    "description": "**Gyeong Motors V-260 Sports Car**\n\nБыстрая манёвренная модель с множеством полезных встроенных устройств.\n\n**Оригинал описания**\n\n*Fast and agile, this particular model features many useful integrated devices.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **спорткар** — основной тег\n  *sports car*\n- **превосходная управляемость**\n  *superior handling*\n- **встроенные устройства**\n  *integrated devices*\n- **символ богатства**\n  *symbol of wealth*\n\n**Слабость — Weakness**\n\nминимум средств безопасности\n\n*minimal safety features*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "item"
+  },
+  {
+    "name": "Бронированный автомобиль NM3 Mark V",
+    "name_original": "NM3 Armored Utility Car Mark V",
+    "description": "**NM3 Armored Utility Car Mark V**\n\nБезопасный транспорт с многослойной бронёй и активными датчиками угроз.\n\n**Оригинал описания**\n\n*A secure transportation option with multi-layered armor panels and active threat sensors.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **бронеавтомобиль** — основной тег\n  *armored car*\n- **низкий центр тяжести**\n  *low center of gravity*\n- **активные датчики угроз**\n  *active threat sensors*\n- **даже не пробуй**\n  *don’t even try me*\n\n**Слабость — Weakness**\n\nмедленный и размеренный\n\n*slow and steady*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "item"
+  },
+  {
+    "name": "Летательный аппарат NM3 Hawk-2 VTOL",
+    "name_original": "NM3 Hawk-2 VTOL flier",
+    "description": "**NM3 Hawk-2 VTOL flier**\n\nЛидер рынка военизированных групп: аппарат вертикального взлёта и посадки, которому доверяют почти любые задачи.\n\n**Оригинал описания**\n\n*Market leader among paramilitary groups, this vertical take-off and landing (VTOL) vehicle is trusted to do almost any job.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **аппарат вертикального взлёта** — основной тег\n  *VTOL flier*\n- **толстая броня**\n  *thick armor*\n- **долгие полёты**\n  *long flights*\n- **защита от ЭМИ**\n  *reinforced against EMP*\n\n**Слабость — Weakness**\n\nсильные ветра\n\n*strong winds*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "item"
+  },
+  {
+    "name": "Ховерборд Qhaos Pro-Level",
+    "name_original": "Qhaos Pro-Level Hoverboard",
+    "description": "**Qhaos Pro-Level Hoverboard**\n\nИзвестная марка досок с векторной тягой рассчитана на полёт в нескольких метрах над землёй; смельчаки поднимаются ещё выше.\n\n**Оригинал описания**\n\n*A widely known name in vector-thrust hoverboards. Designed to soar several meters above the ground, the daring go even higher.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **ховерборд** — основной тег\n  *hoverboard*\n- **рискованные трюки**\n  *daredevil tricks*\n- **крутой вид**\n  *cool factor*\n\n**Слабость — Weakness**\n\nрезкие повороты\n\n*sharp turns*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "item"
+  },
+  {
+    "name": "Мотоцикл Taipan E5X Venom",
+    "name_original": "Taipan E5X “Venom” Motorbike",
+    "description": "**Taipan E5X “Venom” Motorbike**\n\nЛюбимец уличных воинов благодаря встроенным креплениям оружия.\n\n**Оригинал описания**\n\n*A favorite among street warriors, thanks to its built-in weapon mounts.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **бронированный мотоцикл** — основной тег\n  *armored motorbike*\n- **быстрый на улицах**\n  *fast in the streets*\n- **крепления оружия**\n  *weapon mounts*\n- **вести машину и стрелять**\n  *drive and shoot*\n\n**Слабость — Weakness**\n\nслабая рама\n\n*weak chassis*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 268](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=268).",
+    "role": "item"
+  },
+  {
+    "name": "Общие варианты: Оружие",
+    "name_original": "General Items / Weapons",
+    "description": "**General Items / Weapons**\n\nВыбирайте и сочетайте подходящие варианты; это не автоматическая выдача всех тегов. Квадратные скобки обозначают уточняемую часть формулировки.\n\n**Огнестрельное оружие — Firearms**\n\n- **штурмовая винтовка** — *assault rifle*\n- **тяжёлый пистолет** — *heavy pistol*\n- **охотничья винтовка** — *hunting rifle*\n- **автоматический пистолет** — *machine-pistol*\n- **миниган** — *minigun*\n- **карманный пистолет** — *pocket pistol*\n- **рельсотрон** — *rail gun*\n- **револьвер** — *revolver*\n- **дробовик** — *shotgun*\n- **снайперская винтовка** — *sniper rifle*\n- **пистолет-пулемёт** — *submachine gun*\n- **тактическая винтовка** — *tactical rifle*\n- **электрошокер** — *taser*\n\n**Холодное оружие — Cold Weapons**\n\n- **армейский нож** — *army knife*\n- **дубинка** — *baton*\n- **штык** — *bayonet*\n- **широкий меч** — *broadsword*\n- **церемониальный кинжал** — *ceremonial dagger*\n- **композитный лук** — *composite bow*\n- **арбалет** — *crossbow*\n- **гаррота** — *garrote*\n- **катана** — *katana*\n- **кастет** — *knucklebuster*\n- **моргенштерн** — *morningstar*\n- **спасательный топор** — *rescue ax*\n- **сюрикены** — *shurikens*\n- **копьё** — *spear*\n- **посох** — *staff*\n- **кнут** — *whip*\n\n**Взрывчатка — Explosives**\n\n- **[осколочные/светошумовые/дымовые/усыпляющие] гранаты** — *[frag/stun/smoke/sleep gas] grenades*\n- **лазерный указатель авианалёта** — *airstrike laser pointer*\n- **противопехотная мина** — *anti-personnel mine*\n- **гранатомёт** — *grenade launcher*\n- **ракетная установка** — *rocket launcher*\n\n**Признаки — Features**\n\n- **изготовлено на заказ** — *custom-made*\n- **защитное** — *defensive*\n- **легко скрыть** — *easily concealed*\n- **предельная дальность** — *extreme range*\n- **автоматический огонь** — *full-auto*\n- **чувствительный спуск** — *hair trigger*\n- **крупнокалиберная пуля** — *high caliber bullet*\n- **устрашающее** — *intimidating*\n- **инфракрасный прицел** — *IR sight*\n- **большой магазин** — *large magazine*\n- **мономолекулярная кромка** — *mono-molecule edge*\n- **быстрая перезарядка** — *quick reload*\n- **умное наведение** — *smart targeting*\n- **телескопический прицел** — *telescopic sight*\n- **небронированные цели** — *unarmored targets*\n- **неотслеживаемое** — *untraceable*\n- **широкий разброс** — *wide spread*\n\n**Слабости — Flaws**\n\n- **дешёвая сборка** — *cheap make*\n- **громоздкое** — *cumbersome*\n- **неточное** — *inaccurate*\n- **часто клинит** — *often jams*\n- **склонно ржаветь** — *tends to rust*\n- **неудобное** — *unwieldy*\n\nИсточник: [Core Book, с. 269](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=269).",
+    "role": "generic"
+  },
+  {
+    "name": "Раскладной пистолет Acciaio Pop Out",
+    "name_original": "Acciaio Clandestine “Pop Out” Articulated Sidearm and Brace",
+    "description": "**Acciaio Clandestine “Pop Out” Articulated Sidearm and Brace**\n\nМеталлический наруч по жесту раскрывается в ладонь пистолетом, стреляющим стреловидными боеприпасами.\n\n**Оригинал описания**\n\n*A metal bracer that fits over the forearm which activates with a gesture to unfold into a flechette pistol pressed into your palm.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **пистолет с наручем** — основной тег\n  *sidearm and brace*\n- **стреловидные боеприпасы**\n  *flechette ammo*\n- **быстрое извлечение**\n  *quick draw*\n- **фактор неожиданности**\n  *surprise factor*\n\n**Слабость — Weakness**\n\nтолстые рукава или перчатки\n\n*thick sleeves or gloves*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 269](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=269).",
+    "role": "item"
+  },
+  {
+    "name": "Бесшумный пистолет Acciaio Riservato II",
+    "name_original": "Acciaio Clandestine “Riservato II” Silenced Pistol",
+    "description": "**Acciaio Clandestine “Riservato II” Silenced Pistol**\n\nВстроенные поглотители газа и ствол без трения делают выстрел почти неслышным.\n\n**Оригинал описания**\n\n*With built-in gas absorbers and a frictionless barrel, this pistol barely makes any detectable sound when fired.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **бесшумный пистолет** — основной тег\n  *silenced pistol*\n- **выстрел в упор**\n  *point blank shot*\n- **скрываемый**\n  *concealable*\n\n**Слабость — Weakness**\n\nнеточный на большой дистанции\n\n*inaccurate at long distance*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 269](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=269).",
+    "role": "item"
+  },
+  {
+    "name": "Монофиламентный меч Elysian Blades",
+    "name_original": "Elysian Blades Monofilament Longsword",
+    "description": "**Elysian Blades Monofilament Longsword**\n\nЛезвие легированного стального меча окаймлено синтетической нитью в несколько молекул толщиной — предельно острым машинным краем.\n\n**Оригинал описания**\n\n*The edge of this alloyed steel blade is lined with a synthetic wire just a few molecules wide, the sharpest edge that machines can make.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **монофиламентный длинный меч** — основной тег\n  *monofilament longsword*\n- **прорезать броню**\n  *cut through armor*\n- **индивидуальные ножны**\n  *custom scabbard*\n\n**Слабость — Weakness**\n\nтребует крайне осторожного обращения\n\n*must be handled very carefully*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 269](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=269).",
+    "role": "item"
+  },
+  {
+    "name": "Дробовик Gorts & Jasper 81-V",
+    "name_original": "Gorts & Jasper 81-V Shotgun",
+    "description": "**Gorts & Jasper 81-V Shotgun**\n\nПопулярный короткоствольный дробовик сочетает старомодное ощущение с современными материалами.\n\n**Оригинал описания**\n\n*Designed for an “old-fashioned” feel but constructed using modern materials, this short-barrelled shotgun is incredibly popular.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **дробовик** — основной тег\n  *shotgun*\n- **широкий разброс**\n  *wide spread*\n- **подствольный крюк-кошка**\n  *underbarrel grappling hook*\n- **старомодный**\n  *old-fashioned*\n\n**Слабость — Weakness**\n\nотдача\n\n*recoil*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 269](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=269).",
+    "role": "item"
+  },
+  {
+    "name": "Точная винтовка Gorts & Jasper Kiss Kiss",
+    "name_original": "Gorts & Jasper KS-125 “Kiss Kiss” High-Precision Rifle",
+    "description": "**Gorts & Jasper KS-125 “Kiss Kiss” High-Precision Rifle**\n\nДальнобойная винтовка известна надёжностью и модульной конструкцией.\n\n**Оригинал описания**\n\n*A long-range rifle known for its reliability and modular design.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **высокоточная винтовка** — основной тег\n  *high precision rifle*\n- **большая дальность**\n  *long range*\n- **телескопический тепловизионный прицел**\n  *telescopic thermal sight*\n- **надёжная**\n  *reliable*\n\n**Слабость — Weakness**\n\nтрудно спрятать\n\n*hard to conceal*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  },
+  {
+    "name": "Одноразовый пистолет Happy Hunting P-23",
+    "name_original": "Happy Hunting! P-23 Disposable Sidearm",
+    "description": "**Happy Hunting! P-23 Disposable Sidearm**\n\nДешёвый пластиковый пистолет продаётся в автоматах и рассчитан на скорую поломку после выстрелов.\n\n**Оригинал описания**\n\n*A cheap plastic pistol sold in vending machines, designed to break down shortly after being fired.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **одноразовый пистолет** — основной тег\n  *disposable pistol*\n- **легко скрыть**\n  *easily concealed*\n- **легко избавиться**\n  *easily disposable*\n- **неоново-панковый вид**\n  *neon punk look*\n\n**Слабость — Weakness**\n\nдешёвая сборка\n\n*cheap make*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  },
+  {
+    "name": "Миниган Kikuchi Deep Clean",
+    "name_original": "Kikuchi Corp DS “Deep Clean” Minigun",
+    "description": "**Kikuchi Corp DS “Deep Clean” Minigun**\n\nКрупное переносное оружие на установке с барабанным магазином выпускает тысячи пуль в минуту.\n\n**Оригинал описания**\n\n*A large, portable mounted weapon with a drum magazine, this minigun fires off thousands of rounds every minute.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **миниган** — основной тег\n  *minigun*\n- **пробивать укрытия**\n  *break through cover*\n- **бронебойность**\n  *armor piercing*\n- **пугающе большой**\n  *scary big*\n\n**Слабость — Weakness**\n\nскорее направляют в сторону, чем прицеливаются\n\n*not exactly “aimed”, more like “pointed toward”*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  },
+  {
+    "name": "Огнемёт Kikuchi Bleach",
+    "name_original": "Kikuchi Corp DX “Bleach” Flamethrower",
+    "description": "**Kikuchi Corp DX “Bleach” Flamethrower**\n\nКомпактный огнемёт со шлангом в металлической оболочке и лёгким рюкзаком топливных ячеек.\n\n**Оригинал описания**\n\n*A compact flamethrower with a metal-wrapped feed hose and a lightweight backpack of fuel cells.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **огнемёт** — основной тег\n  *flamethrower*\n- **поджечь горючее**\n  *ignite flammable material*\n- **управлять жаром**\n  *control the heat*\n\n**Слабость — Weakness**\n\nриск взрыва топлива\n\n*fuel explosion risk*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  },
+  {
+    "name": "Парализующий электрошокер UrbanWar",
+    "name_original": "UrbanWar Paralyzing Taser",
+    "description": "**UrbanWar Paralyzing Taser**\n\nКомпактное оружие выпускает пару мощно заряженных дротиков для нелетального обезвреживания и электрического хаоса.\n\n**Оригинал описания**\n\n*A small, compact electroshock weapon that fires paired supercharged barbs, for non-lethal takedowns and electrical mayhem.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **электрошокер** — основной тег\n  *taser*\n- **сбои кибернетики**\n  *cybernetics scrambling*\n- **держать контакт для дополнительного заряда**\n  *maintain contact for extra charge*\n\n**Слабость — Weakness**\n\nзаземлённые цели\n\n*grounded targets*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  },
+  {
+    "name": "Выдвижной посох UrbanWar",
+    "name_original": "UrbanWar Retractable Staff",
+    "description": "**UrbanWar Retractable Staff**\n\nУглеволоконный посох длиной 1,5 м телескопически складывается до карманного размера.\n\n**Оригинал описания**\n\n*A carbon fiber 1.5m staff that telescopes down to a length small enough to fit in your pocket.*\n\n**Теги снаряжения — Loadout Tags**\n\n- **выдвижной посох** — основной тег\n  *retractable staff*\n- **механический рычаг**\n  *mechanical leverage*\n- **углеволоконная конструкция**\n  *carbon fiber construction*\n- **фактор неожиданности**\n  *surprise factor*\n\n**Слабость — Weakness**\n\nнужно место для замаха\n\n*needs room to swing*\n\nКаждый тег набора загружается отдельно; основной — первым. [[compendium_entry@7bf20060939c52fe833cb46251655d4e|otherscape|Правило Loading Up]].\n\nИсточник: [Core Book, с. 270](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=270).",
+    "role": "item"
+  }
+]

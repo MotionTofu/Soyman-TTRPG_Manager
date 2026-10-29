@@ -1,0 +1,278 @@
+[
+  {
+    "name": "Нексус",
+    "name_original": "Nexus",
+    "description": "**Nexus**\n\n**Состав тем:** Присутствуют все три категории: Self, Mythos и Noise.\n\n**Essence Special**\n\nПри следующей замене темы проверьте состав тем после перемены. Если персонаж остаётся Nexus, новая тема сразу становится полной (full theme), а не зарождающейся (nascent theme): она начинает с трёх power tags вместо одного. Условие — сохранить все три категории после замены.\n\n**Оригинал**\n\n*NEXUS (ALL THREE TYPES)*\n\n*You have touched on the full gamut of experiences which living in this age can offer. As such, you adapt to change faster than others. When you next replace a theme, if you’re still a Nexus after the transformation, it starts as a full theme, not a nascent one.*\n\nИсточник: [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135).",
+    "role": "essence"
+  },
+  {
+    "name": "Спиритуалист",
+    "name_original": "Spiritualist",
+    "description": "**Spiritualist**\n\n**Состав тем:** Есть Self и Mythos; тем Noise нет.\n\n**Essence Special**\n\nОдин раз за сессию выберите одно применение Essence Special: добавьте число тем Mythos к Power действия, в основном опирающегося на темы Self; либо число тем Self к действию, в основном опирающемуся на Mythos. Если уже бросаете с Mythos или Self (Rolling With…), можно вместо этого бросить сразу с обеими категориями, получив исходную Power 4. Это одна общая возможность за сессию, а не по одному применению каждого варианта.\n\n**Оригинал**\n\n*SPIRITUALIST (SELF AND MYTHOS)*\n\n*You have shunned technology or at least kept it from encroaching on your soul, valuing above all the human spirit and its connection to the mystery of the mythical. Once per session, you can tap this bond to add your Mythos to the Power of an action that is primarily powered by Self themes, or add your Self to an action that is primarily powered by Mythos themes, or, if you are already rolling with Mythos or with Self, roll with both (Power of 4).*\n\nСвязанное правило: [[compendium_entry@15f52fcb33d05dcf8bd6080ce62be9d3|otherscape|Бросок с Self, Mythos или Noise]].\n\nИсточник: [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135).",
+    "role": "essence"
+  },
+  {
+    "name": "Киборг",
+    "name_original": "Cyborg",
+    "description": "**Cyborg**\n\n**Состав тем:** Есть Self и Noise; тем Mythos нет.\n\n**Essence Special**\n\nПри действии для сопротивления мифическим силам или избавления от них добавьте к Power число своих тем Self либо Noise. Сила должна не проявляться как осязаемый или измеримый эффект: например, проклятие, галлюцинация или ментальное воздействие. Добавку Self можно использовать один раз за сессию, добавку Noise — один раз за сессию; разрешено потратить обе в одном действии.\n\n**Оригинал**\n\n*CYBORG (SELF AND NOISE)*\n\n*You are flesh, wires, and data, celebrating the freedom of the digital universe or moving to gain full control over the material world, paying no heed to this new and incalculable “magic” – a bump on the road of humanity’s nonstop technological progress. You can add your number of Self or Noise to the Power of any action to resist or shake off mythical forces that are not manifested as tangible or measurable effects, such as curses, hallucinations, or mental influences. You may do this once per session with your Self and once per session with your Noise, or you may use both in the same action.*\n\nИсточник: [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135).",
+    "role": "essence"
+  },
+  {
+    "name": "Трансчеловек",
+    "name_original": "Transhuman",
+    "description": "**Transhuman**\n\n**Состав тем:** Есть Mythos и Noise; тем Self нет.\n\n**Essence Special**\n\nОдин раз за сцену, применив в одном действии одновременно мифические и технологические теги, можно заменить промах (miss, 6 или меньше) на смешанный успех (mixed hit, 7–9). Источник этих тегов не имеет значения: правило требует оба вида тегов в одном действии.\n\n**Оригинал**\n\n*TRANSHUMAN (MYTHOS AND NOISE)*\n\n*In your search for the edge of what is possible through magic and tech, you’ve abandoned all semblance of humanity – or perhaps you had none to begin with. Experimenting with the paradoxical marriage of legend and cyber is the ultimate expression of your being. Once per scene, when you invoke both mythical and technological tags in the same action, no matter their source, you can trade a miss (6 or less) outcome with a mixed hit (7-9).*\n\nИсточник: [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135).",
+    "role": "essence"
+  },
+  {
+    "name": "Настоящий",
+    "name_original": "Real",
+    "description": "**Real**\n\n**Состав тем:** Все основные темы относятся к Self.\n\n**Essence Special**\n\nКогда действуете непосредственно ради поддержки или защиты одной из своих Identities, можете бросить с Self (Rolling With Self) вместо подсчёта положительных тегов. Power определяется числом тем Self; отрицательные теги и статусы по-прежнему применяются по общему правилу такого броска.\n\n**Оригинал**\n\n*REAL (ONLY SELF)*\n\n*In a world beleaguered by temptations to become more, you have chosen to remain yourself, eschewing fancy baubles and the pull of past narratives. Whether you did so out of stubbornness, lack of vision, or something far deeper, you are who you are, and no outside force – mythical or technological – can say otherwise. Whenever you take action to directly uphold or protect one of your Identities, you may roll with Self instead of counting positive tags.*\n\nСвязанное правило: [[compendium_entry@15f52fcb33d05dcf8bd6080ce62be9d3|otherscape|Бросок с Self, Mythos или Noise]].\n\nИсточник: [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135).",
+    "role": "essence"
+  },
+  {
+    "name": "Аватар",
+    "name_original": "Avatar",
+    "description": "**Avatar**\n\n**Состав тем:** Все основные темы — Mythos одного и того же Source.\n\n**Essence Special**\n\nВы слились со своим Источником. Приостановите все свои Rituals и выберите вместо них Agenda — обязательный курс действий. Даже одно игнорирование или нарушение Agenda немедленно заставляет заменить все темы. Новые темы не могут включать Mythos утраченного Источника. Пока вы Avatar, можете мгновенно восстанавливать сожжённые power tags. Ограничение раз за сцену или сессию для этого восстановления в правиле не задано.\n\n**Оригинал**\n\n*AVATAR (ONLY MYTHOS, SAME SOURCE)*\n\n*You and your Source have become one. Now, you are a Source unto yourself, a beacon of your legend on earth. Suspend all your Rituals; instead, choose an Agenda, which, if ever ignored (defied even once), would instantly cause you to replace all of your themes (your new themes may not include Mythos themes of your lost Source). While you are an Avatar, you may instantly recover burned power tags.*\n\nИсточник: [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136).",
+    "role": "essence"
+  },
+  {
+    "name": "Проводник",
+    "name_original": "Conduit",
+    "description": "**Conduit**\n\n**Состав тем:** Все основные темы — Mythos, связанные с разными Sources.\n\n**Essence Special**\n\nМожно по своему желанию заменять темы, если новая тема будет Mythos. Любой Source в вашем распоряжении или даже поблизости может стать новой темой Mythos. Такая тема сразу начинается полной (full theme), а не зарождающейся (nascent theme).\n\n**Оригинал**\n\n*CONDUIT (ONLY MYTHOS, DIFFERENT SOURCES)*\n\n*You are no longer a person; you have given yourself up to become a vessel for mythical forces, sacred and unspeakable, harmonizing and clashing within you. You may replace themes at will as long as you replace them with a Mythos theme. Any Source in your possession or even nearby can become your new Mythos theme and it begins as a full theme, not a nascent one.*\n\nИсточник: [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136).",
+    "role": "essence"
+  },
+  {
+    "name": "Сингулярность",
+    "name_original": "Singularity",
+    "description": "**Singularity**\n\n**Состав тем:** Все основные темы относятся к Noise.\n\n**Essence Special**\n\nПсихологические эффекты, а также неосязаемые или неизмеримые мифические эффекты на вас не действуют. Вы можете взаимодействовать с любой информацией независимо от носителя и бросать с Noise (Rolling With Noise), чтобы искать её. Если информация записана, этим же способом можно её изменять. Вторая возможность требует именно записанной информации.\n\n**Оригинал**\n\n*SINGULARITY (ONLY NOISE)*\n\n*You are a new life form. You have left humanity and its blathering stories behind, venturing into an existence of pure informational truth, beyond the illusion of meaning. Psychological effects and intangible or unmeasurable mythical effects do not affect you. You can interface with ALL information, regardless of medium, and may roll with Noise to search it and, if it is recorded information, to manipulate it.*\n\nСвязанное правило: [[compendium_entry@15f52fcb33d05dcf8bd6080ce62be9d3|otherscape|Бросок с Self, Mythos или Noise]].\n\nИсточник: [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136).",
+    "role": "essence"
+  },
+  {
+    "name": "Бросок с категорией тем",
+    "name_original": "Rolling With Self, Mythos, or Noise",
+    "description": "**Rolling With Self, Mythos, or Noise**\n\nЕсли действие в целом связано с человечностью (Self), мифическими силами и духовностью (Mythos) либо технологией и информацией (Noise), с согласия MC можно взять число своих тем соответствующей категории как Power вместо подсчёта положительных тегов. Отрицательные теги и все статусы, положительные и отрицательные, продолжают применяться. При таком броске нельзя сжигать тег ради Power.\n\nНекоторые Essence Specials расширяют применение этого способа. Self, Mythos и Noise в их формулах означают число тем соответствующей категории, а не отдельную характеристику или добавку за каждый тег.\n\nИсточник: [Core Book, с. 122](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=122); [Core Book, с. 123](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=123); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135); [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136).",
+    "role": "rule"
+  },
+  {
+    "name": "Трек улучшений и выбор награды",
+    "name_original": "Upgrade Track / Choosing Upgrades",
+    "description": "**Upgrade Track / Choosing Upgrades**\n\nУ каждой темы свой трек из трёх клеток Upgrade. Когда отмечена третья клетка, немедленно выберите одно улучшение именно для этой темы и очистите все три клетки. Развитие одной темы не заполняет треки остальных.\n\n**Варианты — Choosing Upgrades**\n\n- [[compendium_entry@b166883a49ef554ab6432730b7326064|otherscape|Create a New Power Tag]].\n- [[compendium_entry@63c51bcf423250ce9988720b43e65d65|otherscape|Add, Rewrite, or Remove a Weakness Tag]].\n- [[compendium_entry@f868e143fa0e5a22827b9d6e51f04572|otherscape|Choose a Theme Special]].\n- [[compendium_entry@78f115a02c2e5a618598e9339c74e8ee|otherscape|Reset Decay]].\n- [[compendium_entry@1b2cef24b4b452c9bdc5c894055bee78|otherscape|Mark Evolution]].\n\nИсключение: Veteran Special [[compendium_entry@9b1ae9d6e8575a69863a889489fcb115|otherscape|Slow & Steady]] меняет порог на пять клеток и даёт два улучшения.\n\nИсточник: [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "rule"
+  },
+  {
+    "name": "Как получать отметки улучшения",
+    "name_original": "Marking Upgrade Boxes",
+    "description": "**Marking Upgrade Boxes**\n\nОтмечайте клетку Upgrade подходящей темы при следующих событиях:\n\n- **Invoke weakness tags.** Игрок или MC применяет weakness tag при подсчёте тегов; MC согласен, что слабость применима. Отмечается одна клетка темы, которой принадлежит тег, независимо от результата броска.\n- **Downtime.** Опишите подходящее занятие и выберите одну отметку Upgrade личной либо общей темы вместо пользы 3 Power. Это одна клетка, а не готовое улучшение.\n- **Hard choices.** Персонаж жертвует чем-то важным ради Identity, Ritual или Itch. Можно отметить клетку той темы, ради которой принесена жертва; особенно показателен выбор, одновременно ведущий к Decay другой темы.\n- **Theme accomplishment.** Достигнута значимая сюжетная цель, определяемая мотивацией. MC может предложить клетку Upgrade соответствующей темы как награду.\n- **Specials.** Theme Special или Challenge Special разрешает отметку на своих условиях и указывает соответствующую тему.\n\nДля зарождающейся темы каждое такое событие сначала даёт новый power tag вместо клетки: [[compendium_entry@f8649e7754705a8f8cf52e037d26490b|otherscape|Зарождающаяся тема]].\n\nИсточник: [Core Book, с. 124](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=124); [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138).",
+    "role": "rule"
+  },
+  {
+    "name": "Новый тег силы",
+    "name_original": "Create a New Power Tag",
+    "description": "**Create a New Power Tag**\n\nДобавьте один новый power tag в улучшенную тему. Способ зависит от создания персонажа:\n\n- **Rapid Character Creation:** выберите ещё не взятый power tag из того же Theme Kit.\n- **Custom Character Creation:** ответьте на ещё не использованный Power Tag Question того же Themebook; ответ становится тегом.\n- **Pregens:** отметьте пустую клетку рядом с ещё не выбранным предлагаемым power tag. Теперь он входит в эту тему.\n\nСохраняйте ограничения широты тегов: обычно у персонажа только один broad power tag на все темы. Второй открывается отдельным Moment of Evolution.\n\nИсточник: [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140); [Core Book, с. 192](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=192).",
+    "role": "rule"
+  },
+  {
+    "name": "Изменить тег слабости",
+    "name_original": "Add, Rewrite, or Remove a Weakness Tag",
+    "description": "**Add, Rewrite, or Remove a Weakness Tag**\n\nВыберите один из вариантов для улучшенной темы: добавить один weakness tag; переписать или обновить имеющийся; удалить слабость, от которой персонаж больше не страдает. Добавление слабости даёт больше поводов получать Upgrade, а удаление может замедлить дальнейшее развитие.\n\nДля нового тега при Rapid Character Creation возьмите ещё не выбранную слабость из того же Theme Kit. При Custom Character Creation ответьте на ещё не использованный Weakness Tag Question того же Themebook. У pregens готовые дополнительные слабости не перечислены: придумайте подходящую сами и согласуйте с MC.\n\nИсточник: [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133).",
+    "role": "rule"
+  },
+  {
+    "name": "Выбрать особенность темы",
+    "name_original": "Choose a Theme Special",
+    "description": "**Choose a Theme Special**\n\nВыберите одну доступную Theme Special улучшенной темы. Каждую такую Special можно выбрать только один раз. У каждого типа темы в корнике есть пять базовых Specials; они доступны и персонажу, чья тема создана из Theme Kit. Особенности описаны в разделе «Темы персонажа» у соответствующего Themebook.\n\nНекоторые Theme Kits из дополнений дают дополнительные Specials. Они доступны только темам, основанным на этих конкретных наборах. Выбор набора не выдаёт особенности автоматически.\n\nИсточник: [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 196](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=196).",
+    "role": "rule"
+  },
+  {
+    "name": "Сбросить распад темы",
+    "name_original": "Reset Decay",
+    "description": "**Reset Decay**\n\nПотратьте улучшение, чтобы убрать все отметки Decay с той темы, которая получила улучшение. В истории это означает возвращение к важной части жизни и внимание, которого она заслуживает.\n\nОбычное следование мотивации само по себе не стирает Decay: здесь указан специальный способ его сбросить. Отдельные Specials могут давать собственные способы.\n\nИсточник: [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134).",
+    "role": "rule"
+  },
+  {
+    "name": "Отметить эволюцию",
+    "name_original": "Mark Evolution",
+    "description": "**Mark Evolution**\n\nВместо другого улучшения отметьте одну Evolution point на карточке персонажа. Это накопление будущего крупного изменения, а не немедленная новая способность.\n\nПодробности трека и переноса лишних очков: [[compendium_entry@ed865dc1c2bb5e52a71f46ea1aee4656|otherscape|Очки Evolution]]. Общая тема команды не может покупать этот вариант: команда не получает Evolution points.\n\nИсточник: [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "rule"
+  },
+  {
+    "name": "Улучшения общей темы",
+    "name_original": "Crew Theme Upgrades",
+    "description": "**Crew Theme Upgrades**\n\nОбщая тема получает отметки за применение общей слабости; применение crew relationship tag как слабости; внимание PC к команде в Downtime; жертву ради общей мотивации; достижение крупной цели команды; либо по правилам Special.\n\nУлучшение тратится на обычные варианты личной темы, кроме Mark Evolution: команда не получает Evolution points. Участники выбирают улучшение совместно. Полные правила: [[compendium_entry@e997b14039db5971b89ea543c883ad3a|otherscape|Использование и развитие общей темы]].\n\nИсточник: [Core Book, с. 75](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=75); [Core Book, с. 124](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=124); [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134).",
+    "role": "rule"
+  },
+  {
+    "name": "Улучшения темы снаряжения",
+    "name_original": "Loadout Theme Upgrades",
+    "description": "**Loadout Theme Upgrades**\n\nОбычно клетка Upgrade темы Loadout отмечается при применении одного из её loadout flaw tags. При заполнении трека потратьте улучшение на один из двух вариантов:\n\n- Получить постоянные **+1 Power при Loading Up**.\n- Выбрать новую **Loadout Theme Special**.\n\nКаждый из этих вариантов улучшения можно выбирать неоднократно. Это отдельный список улучшений Loadout; пять стандартных вариантов личной темы к нему не подставляются. Список Loadout Theme Specials находится на странице 253.\n\nИсточник: [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 253](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=253).",
+    "role": "rule"
+  },
+  {
+    "name": "Развитие — выбор игрока",
+    "name_original": "Your Character, Your Choice",
+    "description": "**Your Character, Your Choice**\n\nИгрок ищет ситуации, раскрывающие слабости и мотивации персонажа, и в обычных ситуациях решает, когда его мотивация действительно затронута и когда отмечать Decay. Он может объяснить, почему событие не ставит мотивацию под сомнение, и не ставить отметку. MC знакомится с персонажем и предлагает значимые выборы.\n\nИсключения обсуждают за столом до начала серии: статус за пределом Limit (обычно tier-6) может вести к смерти или глубокой трансформации по решению MC; Going Out In A Blaze передаёт судьбу персонажа кубикам; отдельные Challenge Specials могут прямо предписывать Decay.\n\nUpgrades отражают постепенный рост, замена темы — глубокую перемену, а Evolution накапливает опыт таких перемен. Советы MC по созданию трудных выборов см. на странице 137.\n\nИсточник: [Core Book, с. 131](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=131); [Core Book, с. 132](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=132); [Core Book, с. 137](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=137).",
+    "role": "rule"
+  },
+  {
+    "name": "Когда отмечать распад",
+    "name_original": "Marking Decay",
+    "description": "**Marking Decay**\n\nУ каждой темы есть трек из трёх клеток Decay. Игрок может отметить клетку, когда персонаж действует против мотивации этой темы:\n\n- **Self / Identity:** совершает действие вопреки своей Identity либо не действует, чтобы её поддержать.\n- **Mythos / Ritual:** не выполняет Ritual, связывающий с Source.\n- **Noise / Itch:** подавляет технологический импульс или уклоняется от его удовлетворения.\n\nПричина может быть внутренней или вынужденной. Примеры книги: проигнорировать просьбу своей банды; отказаться от привычной роли лидера; не использовать громкую руку-бензопилу ради скрытности; пропустить общение с Гором на рассвете. Важно значение поступка для конкретной мотивации и решение игрока, а не автоматическая отметка за любое неудобство.\n\nТретья отметка запускает [[compendium_entry@660c8739cea85c579fee43190cab1212|otherscape|замену темы]]. Способ снять все отметки за улучшение: [[compendium_entry@78f115a02c2e5a618598e9339c74e8ee|otherscape|Reset Decay]].\n\nИсточник: [Core Book, с. 132](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=132); [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136); [Core Book, с. 137](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=137); [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138).",
+    "role": "rule"
+  },
+  {
+    "name": "Порядок замены темы",
+    "name_original": "Replacing a Theme",
+    "description": "**Replacing a Theme**\n\nПри третьей отметке Decay прежняя тема удаляется и заменяется новой. Выполните пять шагов:\n\n1. **Lose the Theme.** Уберите все её power tags, weakness tags, Theme Specials, мотивацию и остальные возможности. Даже если предмет или воспоминание остались в истории, получать Power от потерянных тегов больше нельзя.\n2. **Gain Evolution Points.** Посчитайте награду за потерю и вложенные улучшения: [[compendium_entry@eb87a95f1bc653d1911bf5922a45f03d|otherscape|Формула Evolution при замене]].\n3. **Create a New Theme.** Создайте nascent theme, сразу или после времени на осмысление: [[compendium_entry@f8649e7754705a8f8cf52e037d26490b|otherscape|Правила зарождающейся темы]].\n4. **Evolve the Character’s Essence.** Проверьте новый баланс Self–Mythos–Noise и при необходимости смените Essence Special.\n5. **Ghost Memories.** Вместе с MC сыграйте последствия и осмысление перемены.\n\nНовая тема может быть любого типа, в том числе прежнего. Выбор иной категории Self/Mythos/Noise рекомендуется для более резкой трансформации, но не является обязательным запретом.\n\nИсточник: [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138); [Core Book, с. 139](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=139).",
+    "role": "rule"
+  },
+  {
+    "name": "Очки эволюции за потерянную тему",
+    "name_original": "Gain Evolution Points",
+    "description": "**Gain Evolution Points**\n\nПри замене темы получите:\n\n- 1 Evolution point за саму потерю темы;\n- ещё 1 за каждый power tag сверх первых трёх;\n- ещё 1 за каждый weakness tag сверх первого;\n- ещё 1 за каждую Theme Special этой темы.\n\n**Формула:** `1 + max(0, P − 3) + max(0, W − 1) + S`, где P — число power tags, W — weakness tags, S — Theme Specials потерянной темы. Частично заполненный Upgrade track отдельно очков не даёт.\n\nПример Unagi из книги: потеря темы с 4 power tags, 2 weakness tags и без Specials даёт `1 + 1 + 1 + 0 = 3 Evolution`. Пять накопленных очков дают Moment of Evolution; избыток переносится на следующий трек: [[compendium_entry@ed865dc1c2bb5e52a71f46ea1aee4656|otherscape|Evolution Points]].\n\nИсточник: [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "rule"
+  },
+  {
+    "name": "Зарождающаяся тема",
+    "name_original": "Create a New Theme / Nascent Theme",
+    "description": "**Create a New Theme / Nascent Theme**\n\nНовую тему после утраты можно создать способом Rapid или Custom Character Creation. Допустим любой тип, даже тот же самый. Зарождающаяся тема (nascent theme) имеет только **1 power tag — title tag**, а также обычные **1 weakness tag и мотивацию**.\n\nКаждый раз, когда вы должны отметить клетку Upgrade этой темы, вместо клетки выберите ещё один power tag. При достижении трёх power tags тема становится обычной полной темой; последующие события уже заполняют обычный Upgrade track. Для перехода с одного до трёх тегов достаточно двух таких событий, не двух полных треков.\n\nИсключения Essence Specials: [[compendium_entry@f3a338dbb7bf55cf8ee618d721f889dd|otherscape|Nexus]] при сохранении Nexus после замены и [[compendium_entry@cc45853b00c45aafba91754e00ecd4bc|otherscape|Conduit]] при своей замене Mythos получают полную тему сразу. Полное пересоздание Total Reconstitution также использует собственные правила. Создание обычных тем: [[compendium_entry@6b44460105835aca93abc81f9acfcb2e|otherscape|Character Creation]].\n\nИсточник: [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138); [Core Book, с. 174](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=174); [Core Book, с. 177](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=177); [Core Book, с. 190](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=190).",
+    "role": "rule"
+  },
+  {
+    "name": "Смена эссенции после замены",
+    "name_original": "Evolve the Character’s Essence",
+    "description": "**Evolve the Character’s Essence**\n\nПосле замены темы заново определите сочетание Self, Mythos и Noise. Если оно изменило Essence, персонаж теряет прежнюю Essence Special и получает соответствующую новой эссенции. Например, отказавшись от единственной Mythos, Nexus может стать Cyborg; Conduit, снова открывшийся человечности Self, может стать Spiritualist.\n\nПолный список восьми состояний и их правил: [[compendium_entry@bea2dfd301715c03a90ea6913f077a0f|otherscape|Эссенции / Essence]].\n\nИсточник: [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 135](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=135); [Core Book, с. 136](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=136); [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138).",
+    "role": "rule"
+  },
+  {
+    "name": "Отголоски утраченной темы",
+    "name_original": "Ghost Memories",
+    "description": "**Ghost Memories**\n\nЗамена темы — повод дать перемене время на экране. Обсудите с MC последствия утраченной связи, отказа от мечты, потери мифических сил или избавления от зависимости от технологии. Даже мирный разрыв может вызвать ответные события и заставить встретиться с прошлым.\n\nСыграйте сцену о том, что персонаж оставил позади, как теперь понимает себя и что означает для него быть человеком, AI, киборгом или служителем божества. Это завершающий повествовательный шаг замены; отдельная цена в Power или обязательный бросок в этом правиле не указаны.\n\nИсточник: [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138); [Core Book, с. 139](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=139).",
+    "role": "rule"
+  },
+  {
+    "name": "Очки эволюции и перенос избытка",
+    "name_original": "Evolution Points",
+    "description": "**Evolution Points**\n\nНа карточке персонажа трек из **5 Evolution points**. Получайте очки как улучшение Mark Evolution либо при замене темы. Само накопление ещё не меняет внешние возможности персонажа.\n\nЗаполнив все пять кружков, получите один Moment of Evolution и обнулите трек. Оставшиеся полученные очки отметьте уже на новом треке. Пример книги: было 3, получено ещё 3 — заполните трек двумя, выберите Moment и перенесите оставшееся 1 очко.\n\nКаждая клетка списка Moments выбирается один раз. **Gain a Veteran Special** напечатано трижды: это три отдельных однократных выбора, то есть до трёх Veteran Specials за соответствующие Moments. Остальные пять вариантов имеют по одной клетке.\n\nФормула награды за потерю темы: [[compendium_entry@eb87a95f1bc653d1911bf5922a45f03d|otherscape|Gain Evolution Points]]. Улучшение без замены: [[compendium_entry@1b2cef24b4b452c9bdc5c894055bee78|otherscape|Mark Evolution]].\n\nИсточник: [Core Book, с. 134](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=134); [Core Book, с. 138](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=138); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "rule"
+  },
+  {
+    "name": "Создать новую эссенцию",
+    "name_original": "Create a New Type of Essence",
+    "description": "**Create a New Type of Essence**\n\nВместе с MC создайте новый тип Essence, подходящий изменившемуся персонажу и его истории, и собственную Essence Special для него. Можно вдохновляться существующими особенностями.\n\nС этого момента новая эссенция становится частью серии. Её могут выбирать и другие PC, соответствующие условиям: определённому сочетанию Self–Mythos–Noise или оговорённой сюжетной ситуации. Этот Moment выбирается один раз.\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "rule"
+  },
+  {
+    "name": "Создать второй широкий тег силы",
+    "name_original": "Create Another Broad Power Tag",
+    "description": "**Create Another Broad Power Tag**\n\nОбычно на все темы персонажа разрешён только один broad power tag — полезный в широком круге разных ситуаций. Этот Moment позволяет создать **второй** такой тег в одной из тем по обычным правилам получения нового power tag.\n\nЕсли эта тема позже потеряна, можно ответить на один вопрос нового Themebook широким тегом. Таким образом, право на второй broad tag не исчезает вместе с прежней темой. У персонажа никогда не должно быть больше двух broad power tags. Этот Moment выбирается один раз.\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140); [Core Book, с. 192](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=192).",
+    "role": "rule"
+  },
+  {
+    "name": "Получить особенность ветерана",
+    "name_original": "Gain a Veteran Special",
+    "description": "**Gain a Veteran Special**\n\nВыберите одну Veteran Special из списка корника. Этот вариант напечатан на карточке трижды: каждая из трёх клеток расходуется один раз и даёт одну особенность. Для нового выбора нужна следующая пятёрка Evolution points.\n\nПолный каталог из 14 особенностей: [[compendium_entry@d4c2043204b2578d806d7bf3e04c3bd8|otherscape|Особенности ветерана / Veteran Specials]]. Дополнения могут предлагать дополнительные варианты.\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140); [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "rule"
+  },
+  {
+    "name": "Уйти на покой",
+    "name_original": "Ride Off Into the Sunset",
+    "description": "**Ride Off Into the Sunset**\n\nВы сами выбираете, как персонаж покидает серию в качестве главного действующего лица: мирно, трагически, героически или иным подходящим способом. Затем создайте нового PC.\n\nПо вашему желанию и с одобрения MC новый персонаж может начать с тем же числом улучшений и Evolution points, что было у ушедшего. Для такого переноса следуйте процедуре [[compendium_entry@10c99c35ba7e50fd988a129c8746c8c6|otherscape|Total Reconstitution]]. Сам уход не означает обязательную смерть. Этот Moment выбирается один раз.\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "rule"
+  },
+  {
+    "name": "Изменить космологию серии",
+    "name_original": "Sunder the Cosmology",
+    "description": "**Sunder the Cosmology**\n\nСделайте открытие, измените мир или преобразитесь так, чтобы переопределить саму серию. Это может быть открытие внеземной жизни, разоблачение мира как симуляции либо победа, создавшая первый свободный от корпораций Megacity.\n\nОбсудите желаемую перемену с MC и вместе встроите её в серию, включая последствия и новые сложности. Это согласованное повествовательное развитие, а не неограниченная автоматическая власть над миром. Этот Moment выбирается один раз.\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "rule"
+  },
+  {
+    "name": "Полное пересоздание персонажа",
+    "name_original": "Total Reconstitution",
+    "description": "**Total Reconstitution**\n\nЗамените все четыре основные темы одновременно, создав четыре новые темы как для нового персонажа. Это полное пересоздание (Respec), для которого действуют приведённые здесь правила. Дополнительно получите, исходя из старых тем:\n\n- одно бесплатное улучшение за каждый power tag сверх первых трёх **в каждой** теме;\n- одно бесплатное улучшение за каждый weakness tag сверх первого **в каждой** теме;\n- одно бесплатное улучшение за каждую Theme Special в любой из тем;\n- все прежние Evolution points;\n- все прежние Moments of Evolution.\n\nБесплатные улучшения можно распределить по любым новым темам и потратить по Choosing Upgrades. Moments, привязанные к теме (например, второй широкий тег), можно перепривязать к новым темам. Уже использованные Moments сохраняются; список однократных выборов не начинается заново.\n\nВ отличие от обычной потери темы, эта процедура не добавляет по одному Evolution point просто за каждую заменённую тему: корник задаёт отдельный перечень переноса. Этот Moment выбирается один раз.\n\nИсточник: [Core Book, с. 133](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=133); [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140); [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "rule"
+  },
+  {
+    "name": "Ходячий арсенал",
+    "name_original": "Backpack Beast",
+    "description": "**Backpack Beast**\n\nWildcard loadout tag стоит вам 1 Power вместо 2. Благодаря этому можно потратить всю Power от Loading Up на wildcards и активировать loadout tags уже во время задания, когда они понадобятся, вместо предварительного выбора при Loading Up.\n\n**Оригинал правила**\n\n*Wildcard loadout tags costs you 1 Power instead of 2 (in other words, you can spend all your Loading Up Power on wildcards, and activate your loadout tags during the job rather than when Loading Up).*\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "veteran"
+  },
+  {
+    "name": "Резервные клоны",
+    "name_original": "Backup Clones",
+    "description": "**Backup Clones**\n\nПолучив статус, превышающий ваш Limit (обычно это tier-6), вы можете снять его в начале следующей сцены. При втором использовании этой возможности статус снимается в конце следующего Downtime. При третьем — в конце задания (job). После третьего использования удалите эту Special. Это три последовательных использования с разными сроками восстановления, а не бесконечное возрождение в каждой сцене.\n\n**Оригинал правила**\n\n*When you take a status that exceeds your Limit (usually tier-6), you may remove it at the beginning of the next scene. The second time you wish to do so, you may remove it at the end of the next downtime. The third time you wish to do so, you may remove it at the end of the job. Then remove this Special.*\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "veteran"
+  },
+  {
+    "name": "Перенастраиваемое снаряжение",
+    "name_original": "Customizable Gear",
+    "description": "**Customizable Gear**\n\nОдин раз за сцену можно сжечь любой loadout tag и восстановить другой loadout tag.\n\n**Оригинал правила**\n\n*Once per scene, you can burn any loadout tag and recover another.*\n\nИсточник: [Core Book, с. 140](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=140).",
+    "role": "veteran"
+  },
+  {
+    "name": "Эффективность ветерана",
+    "name_original": "Experienced Efficiency",
+    "description": "**Experienced Efficiency**\n\nОдин раз за сессию, выбрав пользу Power во время Downtime, получите 5 Power для траты вместо обычных 3. Выбор отметки Upgrade не даёт одновременно и эти 5 Power.\n\n**Оригинал правила**\n\n*Once per session, if you choose the Power benefit during downtime, you may gain 5 Power to spend instead of 3.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Убийца богов",
+    "name_original": "God-Slayer",
+    "description": "**God-Slayer**\n\nИгнорируйте разрыв Scale до 3 в одном виде взаимодействия: боевом, социальном, магическом или другом. Этот вид вы выбираете вместе с MC при получении Special.\n\nОбщее правило масштаба: [[compendium_entry@17df482611e55036ba14afc919b782ac|otherscape|Scale]].\n\n**Оригинал правила**\n\n*You can ignore a Scale gap of up to 3 in one type of interaction (combat, social, magical, etc.) chosen with the MC when you select this Special.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Интерфейсер",
+    "name_original": "Interfacer",
+    "description": "**Interfacer**\n\nВпервые встретив технологию, немедленно узнайте одну полезную подробность о ней. Позже, столкнувшись с чем-либо, связанным с этой технологией, немедленно распознайте эту связь.\n\n**Оригинал правила**\n\n*Whenever you encounter tech for the first time, you immediately learn one useful detail about it. When you encounter anything related to that tech later, you immediately recognize it.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Больше, чем жизнь",
+    "name_original": "Larger Than Life",
+    "description": "**Larger Than Life**\n\nВо всех действиях можно игнорировать разрыв Scale в 1. Это правило о разнице масштаба; оно не даёт постоянную добавку +1 Power.\n\nОбщее правило масштаба: [[compendium_entry@17df482611e55036ba14afc919b782ac|otherscape|Scale]].\n\n**Оригинал правила**\n\n*You can ignore a Scale gap of 1 in all actions.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Новый уровень игры",
+    "name_original": "Level Up Your Game",
+    "description": "**Level Up Your Game**\n\nВыберите всего 7 улучшений и распределите их между своими темами. Это семь улучшений на все темы вместе, а не семь на каждую. Используйте обычные варианты Choosing Upgrades.\n\n[[compendium_entry@bc4d81c16fa758809fb07a17ac1e0267|otherscape|Улучшения тем / Upgrades]].\n\n**Оригинал правила**\n\n*Choose 7 upgrades across all your themes.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Не впервой",
+    "name_original": "Not My First Rodeo",
+    "description": "**Not My First Rodeo**\n\nОдин раз за сессию можно заменить промах (miss, 6 или меньше) на смешанный успех (mixed hit, 7–9), если на кубиках не выпали две единицы (snake eyes). Исключение для snake eyes сохраняется в тексте этой Special.\n\n**Оригинал правила**\n\n*Once per session, you can trade a miss (6 or less) for a mixed hit (7-9), as long as you didn’t roll snake eyes.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Предвидел это",
+    "name_original": "Saw That Coming",
+    "description": "**Saw That Coming**\n\nОдин раз за сессию, когда MC назначает Consequences или активирует Special испытания (Challenge), можно считать это угрозой (Threat). Затем возьмите spotlight и совершите одно дополнительное действие: оно может отреагировать на угрозу или даже полностью её устранить. Само объявление способности не отменяет угрозу автоматически.\n\n**Оригинал правила**\n\n*Once per session, when the MC delivers Consequences or activates a Challenge’s Special, you may treat them as a Threat and then take the spotlight and take a single (additional) action, which can address or even nullify that Threat.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Медленно, но верно",
+    "name_original": "Slow & Steady",
+    "description": "**Slow & Steady**\n\nС этого момента трек Upgrade всех ваших тем содержит 5 клеток вместо 3. Отмечая пятую клетку темы, получите два улучшения и обнулите её трек. Правило заменяет обычный порог получения улучшения; третья клетка теперь не завершает трек.\n\n**Оригинал правила**\n\n*From now on, the upgrade track on all of your themes has 5 boxes instead of 3. Whenever you mark the 5th upgrade box on a theme, you gain two upgrades and reset your upgrade track.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Чутьё на Источники",
+    "name_original": "Source-Sensitive",
+    "description": "**Source-Sensitive**\n\nВпервые встретив Source, немедленно узнайте одну полезную подробность о его Mythos. Позже, встретив что-либо, связанное с этим Mythos, немедленно распознайте связь.\n\n**Оригинал правила**\n\n*Whenever you encounter a Source for the first time, you immediately learn one useful detail about its Mythos. When you encounter anything related to that Mythos later, you immediately recognize it.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Чем больнее падение",
+    "name_original": "The Harder You Fall",
+    "description": "**The Harder You Fall**\n\nКогда применяется один из ваших weakness tags, независимо от того, кто его применил, можно потерять 2 Power вместо 1 и отметить 2 клетки Upgrade. Отметки относятся к теме применённой слабости по обычному правилу.\n\n**Оригинал правила**\n\n*When one of your weakness tags is invoked (regardless of who invoked it), you may choose to lose 2 Power instead of one and mark 2 upgrade boxes.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  },
+  {
+    "name": "Воля сильнее случая",
+    "name_original": "Willpower Over Chance",
+    "description": "**Willpower Over Chance**\n\nДве единицы (snake eyes) больше не означают для вас автоматический промах. Остальные правила определения результата броска продолжают действовать: эта Special сама по себе не гарантирует успех.\n\n**Оригинал правила**\n\n*You no longer automatically miss when you roll snake eyes.*\n\nИсточник: [Core Book, с. 141](soyman:resource/323df0dc-1d4a-40ef-a35f-8603b6a9ceaf#page=141).",
+    "role": "veteran"
+  }
+]
