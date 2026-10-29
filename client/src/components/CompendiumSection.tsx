@@ -823,6 +823,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     });
   }, [searchVisible]);
 
+  // Подклассы лежат в том же разделе потомками класса — для строки под картой.
+  const subclassCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const e of entries) if (e.kind === "subclass" && e.parent_id != null) counts[e.parent_id] = (counts[e.parent_id] ?? 0) + 1;
+    return counts;
+  }, [entries]);
   const effectiveChildrenOf = searchVisible
     ? (parentId: number | null) => childrenOf(parentId).filter((e) => searchVisible.visible.has(e.id))
     : childrenOf;
@@ -1705,6 +1711,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         ) : isClassSection && viewMode === "grid" ? (
           <ClassTileGrid
             entries={filteredTopLevel}
+            subclassCounts={subclassCounts}
             grouping={sortMode === "alpha" ? "alpha" : "category"}
             sortDir={sortDir}
             sectionId={section.id}

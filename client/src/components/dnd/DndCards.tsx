@@ -83,6 +83,7 @@ export function CardTile({
   selected,
   dim,
   note,
+  caption,
   small,
   onClick,
 }: {
@@ -92,6 +93,8 @@ export function CardTile({
   selected?: boolean;
   dim?: boolean;
   note?: string;
+  /** Строка-досье под именем (справочник классов, макет «Д»). */
+  caption?: string;
   small?: boolean;
   onClick: () => void;
 }) {
@@ -145,6 +148,7 @@ export function CardTile({
         {/* Имя простым текстом (владелец, 2026-09-18): надпись на самой карте
             мелкая, а в ленте её не разобрать вовсе. */}
         <span className="dc-tile-name">{option.name}</span>
+        {caption && <span className="dc-tile-caption">{caption}</span>}
       </button>
       {menu && createPortal(
         <ContextMenu
@@ -197,6 +201,7 @@ export function CardGrid({
   collapsed,
   noteFor,
   dimFor,
+  captionFor,
   onPick,
   trailing,
 }: {
@@ -205,6 +210,7 @@ export function CardGrid({
   collapsed?: boolean;
   noteFor?: (o: CardOption) => string | undefined;
   dimFor?: (o: CardOption) => boolean;
+  captionFor?: (o: CardOption) => string | undefined;
   onPick: (o: CardOption) => void;
   /** Последняя плитка сверх списка («Свой вариант» у видов). */
   trailing?: ReactNode;
@@ -227,6 +233,7 @@ export function CardGrid({
           selected={o.id === selectedId}
           dim={dimFor?.(o)}
           note={noteFor?.(o)}
+          caption={captionFor?.(o)}
           onClick={() => onPick(o)}
         />
       ))}

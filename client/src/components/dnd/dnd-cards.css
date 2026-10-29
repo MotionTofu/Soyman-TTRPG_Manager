@@ -80,6 +80,25 @@
   text-align: center;
   color: var(--ink);
 }
+/* Справочник классов (макет «Д» Roll-Classes): имя Oswald слева, под ним
+   строка-досье машинописью. В визарде подписи нет — там своя раскладка. */
+.class-catalog .dc-tile { text-align: left; }
+.class-catalog .dc-tile-name {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+.dc-tile-caption {
+  display: block;
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .dc-tile--small .dc-tile-name {
   font-size: var(--fs-micro, 11px);
   display: -webkit-box;
