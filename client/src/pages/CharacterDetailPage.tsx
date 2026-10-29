@@ -248,3 +248,5 @@ function CampaignRequestModal({ onClose, onPick }: { onClose: () => void; onPick
     </Modal>
   );
 }
+
+// каркас в обход намеренно — лист персонажа во весь экран, без навигации и правой панели (docs/design-system.md §6.1)
