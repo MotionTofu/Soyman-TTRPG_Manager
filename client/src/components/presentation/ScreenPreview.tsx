@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ScreenView } from "./ScreenView";
 import { cameraOf, loadLastScreenId, loadScreenMemory, saveScreenMemory, type ScreenCamera } from "./screens";
 import type { ShowDisplay, ShowState } from "../../types";
@@ -25,6 +26,7 @@ export function ScreenPreview({
   adjustable,
   fill,
   onDisplay,
+  toolsTarget,
   children,
 }: {
   show: ShowState | null;
@@ -33,6 +35,8 @@ export function ScreenPreview({
   /** Карта: вписывается сама, только поворот. */
   fill: boolean;
   onDisplay: (patch: Partial<ShowDisplay>) => Promise<void>;
+  /** Куда вынести ⟲ ⟳ и «Вписать | Заполнить» (строка монитора Пульта). */
+  toolsTarget?: HTMLElement | null;
   children: ReactNode;
 }) {
   const [draft, setDraft] = useState<Partial<ScreenCamera> | null>(null);
@@ -121,6 +125,30 @@ export function ScreenPreview({
   const turn = (by: number) => setMonitor({ rotation: (((camera.rotation + by) % 360) + 360) % 360 as ScreenCamera["rotation"] });
   const reset = () => adjust({ zoom: 1, pan_x: 0, pan_y: 0 });
 
+  const tools = (
+    <span className="pres-tools">
+      <button type="button" className="d-btn d-btn--sm pres-turn" title="Повернуть против часовой" onClick={() => turn(-90)}>
+        ⟲
+      </button>
+      <button type="button" className="d-btn d-btn--sm pres-turn" title="Повернуть по часовой" onClick={() => turn(90)}>
+        ⟳
+      </button>
+      <span className="d-seg" role="group" aria-label="Кадр на экране" title={fill ? "Карта вписывается сама" : undefined}>
+        <button type="button" disabled={fill} className={camera.fit === "contain" ? "active" : undefined} onClick={() => setMonitor({ fit: "contain" })}>
+          Вписать
+        </button>
+        <button type="button" disabled={fill} className={camera.fit === "cover" ? "active" : undefined} onClick={() => setMonitor({ fit: "cover" })}>
+          Заполнить
+        </button>
+      </span>
+      {adjustable && moved && (
+        <button type="button" className="d-btn d-btn--sm" onClick={reset}>
+          Сброс
+        </button>
+      )}
+    </span>
+  );
+
   return (
     <div className="stack" style={{ gap: 6 }}>
       <div
@@ -171,27 +199,7 @@ export function ScreenPreview({
           {children}
         </ScreenView>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        <button type="button" className="pres-turn" title="Повернуть против часовой" onClick={() => turn(-90)}>
-          ⟲
-        </button>
-        <button type="button" className="pres-turn" title="Повернуть по часовой" onClick={() => turn(90)}>
-          ⟳
-        </button>
-        <span className="row" style={{ gap: 0 }} title={fill ? "Карта вписывается сама" : undefined}>
-          <button type="button" disabled={fill} className={camera.fit === "contain" ? "primary" : undefined} onClick={() => setMonitor({ fit: "contain" })}>
-            Вписать
-          </button>
-          <button type="button" disabled={fill} className={camera.fit === "cover" ? "primary" : undefined} onClick={() => setMonitor({ fit: "cover" })}>
-            Заполнить
-          </button>
-        </span>
-        {adjustable && moved && (
-          <button type="button" onClick={reset}>
-            Сброс
-          </button>
-        )}
-      </div>
+      {toolsTarget ? createPortal(tools, toolsTarget) : tools}
     </div>
   );
 }

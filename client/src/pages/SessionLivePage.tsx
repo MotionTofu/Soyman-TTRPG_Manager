@@ -212,12 +212,11 @@ export function SessionLivePage() {
         <>
           <SceneSwitcher sessionId={sessionId} />
 
-          <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
-
           {/* Блоки контента — на сетке GridStack (таскаются за шапку, раскладка
               запоминается): задумка/события + 8 панелей. Время, сцены и показ
               выше — вне сетки, статично. */}
           <PultGrid
+            presentation={<PresentationPanel sessionId={sessionId} campaignId={campaign.id} />}
             panelProps={panelProps}
             ideaCard={
               <EditableTextCard

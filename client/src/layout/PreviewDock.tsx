@@ -59,6 +59,7 @@ export function PreviewDock({ open }: { open?: boolean }) {
     ...(floatModes.scenes === "dock"
       ? [{ id: "scenes" as PultWidgetId, title: "Сцены", subtitle: stage?.current?.name ?? "—" }]
       : []),
+    { id: "presentation", title: "Экран игроков" },
     { id: "idea", title: "Задумка" },
     { id: "plot", title: SESSION_PANEL_TITLES.plotCharacters },
     { id: "locations", title: SESSION_PANEL_TITLES.locations },

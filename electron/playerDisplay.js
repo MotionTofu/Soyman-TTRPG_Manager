@@ -65,6 +65,12 @@ function installPlayerDisplay({ BrowserWindow, ipcMain, origin, icon, preload, g
     if (!trusted(event)) return [];
     return getDisplays();
   });
+  // Открыто ли окно игроков: Пульт держит по этому главную кнопку
+  // («Открыть окно игрокам» или «Показать»).
+  ipcMain.handle("player-display-status", event => {
+    const open = trusted(event) && !!managed && !managed.isDestroyed();
+    return { open, windowId: open ? String(managed.id) : null };
+  });
   ipcMain.handle("player-display-close", (event, windowId) => {
     if (!trusted(event) || !managed || managed.isDestroyed() || String(managed.id) !== windowId) return false;
     managed.close(); managed = null; return true;

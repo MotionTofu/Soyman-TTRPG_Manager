@@ -41,6 +41,26 @@ export async function openPlayerDisplayWindow(screen: ScreenChoice | null): Prom
   }
 }
 
+/** Открыто ли окно игроков сейчас. В браузере видно только окно, открытое
+ *  из этой вкладки. */
+export async function playerDisplayStatus(): Promise<{ open: boolean; windowId: string | null }> {
+  if (window.electronAPI?.playerDisplayStatus) return window.electronAPI.playerDisplayStatus();
+  if (!managed || managed.closed) return { open: false, windowId: null };
+  try {
+    return { open: true, windowId: new URL(managed.location.href).searchParams.get("windowId") };
+  } catch {
+    return { open: true, windowId: null };
+  }
+}
+
+/** Закрыть окно игроков по кнопке Мастера, кто бы его ни открыл. */
+export async function closePlayerDisplayNow(): Promise<void> {
+  const { open, windowId } = await playerDisplayStatus();
+  if (!open) return;
+  if (window.electronAPI?.closePlayerDisplay && windowId) await window.electronAPI.closePlayerDisplay(windowId);
+  else if (managed && !managed.closed) { managed.close(); managed = null; }
+}
+
 /** Runtime decides Q65; this guard cannot close an older or subsequently reopened window. */
 export async function closePlayerDisplayWindow(opened: PlayerDisplayOpenResult): Promise<boolean> {
   if (!opened.ok || !opened.openedByCall) return false;

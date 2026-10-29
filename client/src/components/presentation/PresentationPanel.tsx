@@ -7,12 +7,12 @@ import { readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
 import { sessionPaths } from "../../data/sessions";
 import { CutsceneBindings } from "../cutscenes/CutsceneBindings";
-import { ContextMenu } from "../ContextMenu";
+import { LazyDetails } from "../LazyDetails";
 import { PresentationStage } from "./PresentationStage";
 import { PlayerMapStage } from "./PlayerMapStage";
 import { ScreenPreview } from "./ScreenPreview";
-import { getScreens, loadLastScreenId, loadScreenMemory, type ScreenChoice } from "./screens";
-import { openPlayerDisplayWindow } from "./playerDisplayWindow";
+import { getScreens, loadLastScreenId, loadScreenMemory, saveLastScreenId, type ScreenChoice } from "./screens";
+import { closePlayerDisplayNow, openPlayerDisplayWindow, playerDisplayStatus } from "./playerDisplayWindow";
 import { playerDisplayChanged, readPlayerDisplay, selectSessionDisplay } from "./playerDisplay";
 import type { CampaignCover, ScenePresentation, SessionStage, ShowDisplay, ShowState, StorySceneDetail } from "../../types";
 
@@ -102,12 +102,29 @@ export function PresentationPanel({
   // ▾ — смена монитора.
   // На новом мониторе — его поворот и вписывание из памяти (Q2), размер —
   // догадкой по монитору, пока окно не сообщит свой.
-  const [screens, setScreens] = useState<ScreenChoice[] | null>(null);
+  // Монитор на виду (Q2 2026-10-29): выбор — до показа, а главная кнопка
+  // держится за то, открыто ли окно игроков. Состояние окна спрашиваем раз в
+  // 2 с: закрыть его могут крестиком, и Пульт должен это увидеть.
+  const [screens, setScreens] = useState<ScreenChoice[]>([]);
+  const [screenId, setScreenId] = useState(loadLastScreenId);
+  const [windowOpen, setWindowOpen] = useState(false);
+  const loadScreens = () => void getScreens().then(setScreens);
+  useEffect(() => {
+    // В браузере список мониторов спрашивает разрешение — только по щелчку.
+    if (window.electronAPI) loadScreens();
+    let alive = true;
+    const poll = () => void playerDisplayStatus().then((s) => alive && setWindowOpen(s.open));
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
   async function openWindow(screen?: ScreenChoice) {
     let target: ScreenChoice | null;
     if (screen) {
       target = screen;
-      setScreens(null);
     } else {
       const list = await getScreens();
       const last = loadLastScreenId();
@@ -115,6 +132,7 @@ export function PresentationPanel({
     }
     const opened = await openPlayerDisplayWindow(target);
     if (!opened.ok) { showSaveError(opened.reason); return; }
+    setWindowOpen(true);
     try {
       const state = await readPlayerDisplay();
       if (state.owner) return; // Reuse a runtime-owned screen without replacing its frame.
@@ -192,8 +210,7 @@ export function PresentationPanel({
 
   const [mapPick, setMapPick] = useState(false);
   const [cutscenesOpen, setCutscenesOpen] = useState(false);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-  const moreRef = useRef<HTMLButtonElement>(null);
+  const [toolsEl, setToolsEl] = useState<HTMLSpanElement | null>(null);
 
   const buttonLayers = (screenPres?.layers ?? [])
     .filter((l) => l.has_button === 1)
@@ -221,178 +238,191 @@ export function PresentationPanel({
           ? `Кадр из: ${shownName || "…"}`
           : `${stage?.current?.name ?? "…"} · картинка`
     : "Экран чёрный";
-  const picture = showing && show?.mode !== "map";
   const onMap = showing && show?.mode === "map";
 
+  const fallbackLabel = screenId?.startsWith("screen-") ? screenId.slice(7) : "Основной экран";
+  function pickScreen(value: string) {
+    if (value === "__close") {
+      void closePlayerDisplayNow().then(() => setWindowOpen(false));
+      return;
+    }
+    setScreenId(value);
+    saveLastScreenId(value);
+    const screen = screens.find((s) => s.id === value);
+    // Открытое окно переезжает на выбранный монитор сразу.
+    if (windowOpen && screen) void openWindow(screen);
+  }
+
   return (
-    <section className="pp-strip" aria-label="На экране игроков">
-      {screens && (
-        <div className="pp-strip__screens">
-          <span className="d-note">ЭКРАН:</span>
-          {screens.map((s) => (
-            <button key={s.id} type="button" className="d-btn d-btn--sm" onClick={() => void openWindow(s)}>
-              {s.label}
-            </button>
-          ))}
-          <button type="button" className="d-btn d-btn--sm" onClick={() => setScreens(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-      <div className="pp-strip__row">
-        <div className="pp-strip__pv">
-          <ScreenPreview
-            show={show}
-            adjustable={showing && show?.mode !== "map"}
-            fill={show?.mode === "map" && showing}
-            onDisplay={(display) => putShow({ display })}
-          >
-            {show?.mode === "map" && show.map_id != null && showing ? (
-              <PlayerMapStage mapId={show.map_id} />
-            ) : screenPres && showing ? (
-              <PresentationStage
-                backgroundUrl={screenPres.background_url}
-                layers={screenPres.layers}
-                visibleIds={show?.visible_layer_ids ?? []}
-                fadeMs={screenPres.fade_ms}
-                transition={screenPres.transition}
-                transitionMs={screenPres.transition_ms}
-                title={screenPres.title}
-                titleSecs={screenPres.title_secs}
-                playKey={`${show?.mode}:${show?.scene_id ?? "cover"}`}
-                waitingLabel="Показ не запущен"
-                skipTitleSignal={skipSignal}
-                onTitleVisibility={(v) => {
-                  titleVisibleRef.current = v;
-                }}
-              />
-            ) : (
-              <PresentationStage
-                backgroundUrl={null}
-                layers={[]}
-                visibleIds={[]}
-                fadeMs={0}
-                transition="cut"
-                transitionMs={0}
-                title=""
-                titleSecs={0}
-                playKey="blank"
-                waitingLabel={show && !show.shown ? "Показ остановлен" : "Показ не запущен"}
-              />
+    <LazyDetails title="Экран игроков" summaryClassName="pult-drag-handle" className="card stack" defaultOpen>
+      <div className="pp">
+        <div className="pp-strip">
+          <div className="pp-strip__pv">
+            <ScreenPreview
+              show={show}
+              adjustable={showing && show?.mode !== "map"}
+              fill={show?.mode === "map" && showing}
+              onDisplay={(display) => putShow({ display })}
+              toolsTarget={toolsEl}
+            >
+              {show?.mode === "map" && show.map_id != null && showing ? (
+                <PlayerMapStage mapId={show.map_id} />
+              ) : screenPres && showing ? (
+                <PresentationStage
+                  backgroundUrl={screenPres.background_url}
+                  layers={screenPres.layers}
+                  visibleIds={show?.visible_layer_ids ?? []}
+                  fadeMs={screenPres.fade_ms}
+                  transition={screenPres.transition}
+                  transitionMs={screenPres.transition_ms}
+                  title={screenPres.title}
+                  titleSecs={screenPres.title_secs}
+                  playKey={`${show?.mode}:${show?.scene_id ?? "cover"}`}
+                  waitingLabel="Показ не запущен"
+                  skipTitleSignal={skipSignal}
+                  onTitleVisibility={(v) => {
+                    titleVisibleRef.current = v;
+                  }}
+                />
+              ) : (
+                <PresentationStage
+                  backgroundUrl={null}
+                  layers={[]}
+                  visibleIds={[]}
+                  fadeMs={0}
+                  transition="cut"
+                  transitionMs={0}
+                  title=""
+                  titleSecs={0}
+                  playKey="blank"
+                  waitingLabel={show && !show.shown ? "Показ остановлен" : "Показ не запущен"}
+                />
+              )}
+            </ScreenPreview>
+          </div>
+          <div className="pp-strip__ctl">
+            <div className="pp-strip__tx">
+              <small>На экране игроков{windowOpen ? "" : " · окно не открыто"}</small>
+              <b>{onScreen}</b>
+            </div>
+            {/* Монитор и его настройки: поворот и вписывание — свойства
+                монитора (2026-10-23, Q10), поэтому в этой же строке. */}
+            <div className="pp-strip__line">
+              <label className="pp-strip__screen">
+                <span className="d-note">Экран</span>
+                <select value={screenId ?? ""} onFocus={() => screens.length === 0 && loadScreens()} onChange={(e) => pickScreen(e.target.value)}>
+                  {screens.length === 0 && <option value={screenId ?? ""}>{fallbackLabel}</option>}
+                  {screens.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                      {s.primary ? " (основной)" : ""}
+                    </option>
+                  ))}
+                  {windowOpen && <option value="__close">Закрыть окно игрокам</option>}
+                </select>
+              </label>
+              <span ref={setToolsEl} className="pp-strip__tools" />
+            </div>
+            <div className="pp-strip__line">
+              <span className="d-seg" role="group" aria-label="Что показать">
+                <button
+                  type="button"
+                  className={showing && show?.mode === "scene" ? "active" : undefined}
+                  disabled={!currentHas}
+                  onClick={showScene}
+                >
+                  Картинка
+                </button>
+                <button
+                  type="button"
+                  className={onMap || mapPick ? "active" : undefined}
+                  disabled={currentMaps.length === 0}
+                  onClick={() => (currentMaps.length === 1 ? showMap(currentMaps[0].id) : setMapPick((v) => !v))}
+                >
+                  Карта
+                </button>
+                <button type="button" className={cutscenesOpen ? "active" : undefined} onClick={() => setCutscenesOpen((v) => !v)}>
+                  Катсцена
+                </button>
+                <button
+                  type="button"
+                  className={showing && show?.mode === "cover" ? "active" : undefined}
+                  disabled={!coverHas}
+                  onClick={showCover}
+                >
+                  Заглавное
+                </button>
+              </span>
+              {/* Без окна показывать некуда: главная кнопка сначала открывает его. */}
+              {!windowOpen ? (
+                <button
+                  type="button"
+                  className="d-btn d-btn--sm is-on"
+                  onClick={() => void openWindow(screens.find((s) => s.id === screenId))}
+                >
+                  Открыть окно игрокам
+                </button>
+              ) : showing ? (
+                <button type="button" className="d-btn d-btn--sm" onClick={() => void putShow({ shown: 0 })}>
+                  Погасить
+                </button>
+              ) : (show?.mode === "map" && show.map_id != null && shownMap) || (show?.mode === "scene" && show.scene_id != null) ? (
+                <button type="button" className="d-btn d-btn--sm is-on" onClick={() => void putShow({ shown: 1 })}>
+                  Показать
+                </button>
+              ) : currentHas ? (
+                <button type="button" className="d-btn d-btn--sm is-on" onClick={showScene}>
+                  Показать сцену
+                </button>
+              ) : coverHas ? (
+                <button type="button" className="d-btn d-btn--sm is-on" onClick={showCover}>
+                  Показать заглавное
+                </button>
+              ) : null}
+            </div>
+            {mapPick && currentMaps.length > 1 && (
+              <div className="pp-strip__line">
+                {currentMaps.map((map) => (
+                  <button
+                    key={map.id}
+                    type="button"
+                    className={`d-btn d-btn--sm${onMap && show?.map_id === map.id ? " is-on" : ""}`}
+                    onClick={() => {
+                      showMap(map.id);
+                      setMapPick(false);
+                    }}
+                  >
+                    {map.name}
+                  </button>
+                ))}
+              </div>
             )}
-          </ScreenPreview>
+            {/* Слои — только когда есть: их жмут посреди сцены (клавиши 1–9). */}
+            {showing && buttonLayers.length > 0 && (
+              <div className="pp-strip__line">
+                {buttonLayers.map((l, i) => {
+                  const on = visibleSet.has(l.id);
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      className={`d-btn d-btn--sm${on ? " is-on" : ""}`}
+                      title={i < 9 ? `Горячая клавиша ${i + 1}` : undefined}
+                      onClick={() => void toggleLayer(l.id)}
+                    >
+                      {i < 9 ? `${i + 1} · ` : ""}
+                      {on ? "◉ " : "◎ "}
+                      {l.name || "Слой"}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="pp-strip__tx">
-          <small>На экране игроков</small>
-          <b>{onScreen}</b>
-        </div>
-        <div className="pp-strip__acts">
-          {/* Что показать: картинка сцены (или заглавное), карта, катсцена. */}
-          <span className="d-seg" role="group" aria-label="Что показать">
-            <button
-              type="button"
-              className={picture ? "active" : undefined}
-              disabled={!currentHas && !coverHas}
-              onClick={() => (currentHas ? showScene() : showCover())}
-            >
-              Картинка
-            </button>
-            <button
-              type="button"
-              className={onMap || mapPick ? "active" : undefined}
-              disabled={currentMaps.length === 0}
-              onClick={() => (currentMaps.length === 1 ? showMap(currentMaps[0].id) : setMapPick((v) => !v))}
-            >
-              Карта
-            </button>
-            <button type="button" className={cutscenesOpen ? "active" : undefined} onClick={() => setCutscenesOpen((v) => !v)}>
-              Катсцена
-            </button>
-          </span>
-          {showing ? (
-            <button type="button" className="d-btn d-btn--sm" onClick={() => void putShow({ shown: 0 })}>
-              Погасить
-            </button>
-          ) : (show?.mode === "map" && show.map_id != null && shownMap) || (show?.mode === "scene" && show.scene_id != null) ? (
-            <button type="button" className="d-btn d-btn--sm" onClick={() => void putShow({ shown: 1 })}>
-              Показать
-            </button>
-          ) : currentHas ? (
-            <button type="button" className="d-btn d-btn--sm" onClick={showScene}>
-              Показать сцену
-            </button>
-          ) : coverHas ? (
-            <button type="button" className="d-btn d-btn--sm" onClick={showCover}>
-              Показать заглавное
-            </button>
-          ) : null}
-          <button
-            ref={moreRef}
-            type="button"
-            className="d-btn d-btn--sm"
-            aria-label="Ещё о показе"
-            aria-haspopup="menu"
-            onClick={() => {
-              const r = moreRef.current?.getBoundingClientRect();
-              if (r) setMenuAt({ x: r.right, y: r.bottom });
-            }}
-          >
-            …
-          </button>
-        </div>
+        {cutscenesOpen && <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} mode="launch" />}
       </div>
-      {menuAt && (
-        <ContextMenu
-          x={menuAt.x}
-          y={menuAt.y}
-          items={[
-            { label: "Окно игрокам", onClick: () => void openWindow() },
-            { label: "Выбрать монитор", onClick: () => void getScreens().then((list) => setScreens(list)) },
-            ...(coverHas && !(show?.mode === "cover" && showing) ? [{ label: "Заглавное", onClick: showCover }] : []),
-          ]}
-          onClose={() => setMenuAt(null)}
-        />
-      )}
-      {mapPick && currentMaps.length > 1 && (
-        <div className="pp-strip__line">
-          {currentMaps.map((map) => (
-            <button
-              key={map.id}
-              type="button"
-              className={`d-btn d-btn--sm${onMap && show?.map_id === map.id ? " is-on" : ""}`}
-              onClick={() => {
-                showMap(map.id);
-                setMapPick(false);
-              }}
-            >
-              {map.name}
-            </button>
-          ))}
-        </div>
-      )}
-      {/* Слои — второй строкой, только когда есть: их жмут посреди сцены
-          (клавиши 1–9). */}
-      {showing && buttonLayers.length > 0 && (
-        <div className="pp-strip__line">
-          {buttonLayers.map((l, i) => {
-            const on = visibleSet.has(l.id);
-            return (
-              <button
-                key={l.id}
-                type="button"
-                className={`d-btn d-btn--sm${on ? " is-on" : ""}`}
-                title={i < 9 ? `Горячая клавиша ${i + 1}` : undefined}
-                onClick={() => void toggleLayer(l.id)}
-              >
-                {i < 9 ? `${i + 1} · ` : ""}
-                {on ? "◉ " : "◎ "}
-                {l.name || "Слой"}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {cutscenesOpen && <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} mode="launch" />}
-    </section>
+    </LazyDetails>
   );
 }
+

@@ -18,6 +18,7 @@ export interface ElectronAPI {
   openWindow: (route: string) => void;
   openPlayerDisplay?: (screen: import("./components/presentation/screens").ScreenChoice | null) => Promise<import("@shared/playerDisplay").PlayerDisplayOpenResult>;
   closePlayerDisplay?: (windowId: string) => Promise<boolean>;
+  playerDisplayStatus?: () => Promise<{ open: boolean; windowId: string | null }>;
   playerDisplayScreens?: () => Promise<import("./components/presentation/screens").ScreenChoice[]>;
   /** Открыть внешний URL в браузере пользователя по умолчанию (shell.openExternal). */
   openExternal: (url: string) => void;

@@ -32,9 +32,8 @@ import {
   SESSION_PANEL_TITLES,
 } from "./sessionLivePanels";
 
-// Сетка блоков пульта: 10 виджетов (2 текстовые карточки + 8 панелей), которые
-// Мастер таскает за шапку и тянет за угол. Остальное (время, сцены, показ) —
-// вне сетки, статично.
+// Сетка блоков пульта: «Экран игроков», задумка и панели, которые Мастер
+// таскает за шапку и тянет за угол. Время и сцены — вне сетки, статично.
 //
 // Позиции живут в движке GridStack после монтирования: React задаёт их один
 // раз (старт), дальше только запоминает (change → localStorage) и сбрасывает
@@ -54,9 +53,9 @@ interface SavedCell {
   h: number;
 }
 
-// .v2 — раскладка «Д» (Q14 2026-10-29): сохранённая до рестайла сбрасывается
-// один раз, дальше запоминается как прежде.
-const KEY = "rpgManagerPultGrid.v2";
+// .v3 — раскладка «Д» (Q14 2026-10-29) с «Экраном игроков» в сетке: сохранённая
+// раньше сбрасывается один раз, дальше запоминается как прежде.
+const KEY = "rpgManagerPultGrid.v3";
 
 interface WidgetDef extends SavedCell {
   minW: number;
@@ -64,20 +63,22 @@ interface WidgetDef extends SavedCell {
   maxW: number;
 }
 
-// Дефолт — макет Roll-Pult (Q14): шесть панелей в три колонки (задумка,
-// сюжетные персонажи, препятствия; напоминания, тайны, лут), под ними
-// свёрнутыми локации, компендиум, персонажи игроков и выводы.
+// Дефолт — макет Roll-Pult (Q14): «Экран игроков» на всю ширину, под ним
+// шесть панелей в три колонки (задумка, сюжетные персонажи, препятствия;
+// напоминания, тайны, лут), ниже свёрнутыми локации, компендиум, персонажи
+// игроков и выводы.
 const DEFAULTS: WidgetDef[] = [
-  { id: "idea", x: 0, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
-  { id: "plot", x: 4, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
-  { id: "obstacles", x: 8, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
-  { id: "reminders", x: 0, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "secrets", x: 4, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "loot", x: 8, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "locations", x: 0, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
-  { id: "compendium", x: 4, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
-  { id: "roster", x: 8, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
-  { id: "reveals", x: 0, y: 27, w: 12, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "presentation", x: 0, y: 0, w: 12, h: 8, minW: 3, minH: 3, maxW: 12 },
+  { id: "idea", x: 0, y: 8, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "plot", x: 4, y: 8, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "obstacles", x: 8, y: 8, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "reminders", x: 0, y: 20, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "secrets", x: 4, y: 20, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "loot", x: 8, y: 20, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "locations", x: 0, y: 30, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "compendium", x: 4, y: 30, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "roster", x: 8, y: 30, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "reveals", x: 0, y: 35, w: 12, h: 5, minW: 3, minH: 3, maxW: 12 },
 ];
 
 function validCell(v: Partial<SavedCell> | null | undefined): v is SavedCell {
@@ -225,11 +226,12 @@ export interface PultPanelProps {
 }
 
 interface PultGridProps {
+  presentation: ReactNode;
   ideaCard: ReactNode;
   panelProps: PultPanelProps;
 }
 
-export function PultGrid({ ideaCard, panelProps }: PultGridProps) {
+export function PultGrid({ presentation, ideaCard, panelProps }: PultGridProps) {
   // На узких — обычная стопка, как была: таскать пальцем нечего, сетка там
   // только мешала бы. Тот же порог 860, что у остального пульта.
   const narrow = useMediaQuery("(max-width: 860px)");
@@ -254,6 +256,7 @@ export function PultGrid({ ideaCard, panelProps }: PultGridProps) {
   }
 
   const widgets: { id: PultWidgetId; title: string; node: ReactNode }[] = [
+    { id: "presentation", title: "Экран игроков", node: presentation },
     { id: "idea", title: "Задумка на сессию", node: ideaCard },
     { id: "plot", title: SESSION_PANEL_TITLES.plotCharacters, node: <PlotCharactersPanel {...panelProps} /> },
     { id: "locations", title: SESSION_PANEL_TITLES.locations, node: <LocationsPanel {...panelProps} /> },

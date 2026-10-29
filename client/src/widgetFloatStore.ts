@@ -11,6 +11,7 @@ export type WidgetFloatMode = "grid" | "float" | "dock";
 
 export type PultWidgetId =
   | "scenes"
+  | "presentation"
   | "idea"
   | "plot"
   | "locations"

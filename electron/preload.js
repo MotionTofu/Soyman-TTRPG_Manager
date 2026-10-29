@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openPlayerDisplay: (screen) => ipcRenderer.invoke("player-display-open", screen),
   playerDisplayScreens: () => ipcRenderer.invoke("player-display-screens"),
   closePlayerDisplay: (windowId) => ipcRenderer.invoke("player-display-close", windowId),
+  playerDisplayStatus: () => ipcRenderer.invoke("player-display-status"),
   // Открыть внешний URL в браузере пользователя по умолчанию
   // (shell.openExternal) — сам рендерер открывать его не должен, иначе ссылка
   // уйдёт в новое окно Electron, а не в браузер. См. ipcMain "open-external".
