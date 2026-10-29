@@ -53,6 +53,8 @@
   --skin-ink-surface: url("/ui/fantasy-punk/textures/ink-surface.webp");
   /* Reserved washes (not used yet): */
   --skin-acid-wash: url("/ui/fantasy-punk/textures/acid-yellow.webp");
+  /* Рваный край главной кнопки «Д» (docs/design-system.md §6.5). */
+  --skin-torn-mask: url("/ui/wizard/torn-edge-mask.png");
   --skin-magenta-wash: url("/ui/fantasy-punk/textures/punk-magenta.webp");
   /* Знаки типов сущностей — маски (цвет = currentColor), typeGlyphs.ts. */
   --skin-glyph-being: url("/ui/fantasy-punk/semantic/type-glyphs/being.webp");

@@ -379,6 +379,7 @@ const LIGHT_THEME = skinTheme("light", "Светлая", "light", {
     "--mark": "#C2105A", "--on-mark": "#FFFFFF",
     "--danger-bg": "#C2105A", "--danger-bg-hover": "#D8236C", "--danger-text": "#FFFFFF",
     "--nav": "#151515", "--nav-ink": "#EEECE6", "--nav-muted": "#9C988F",
+    "--nav-edge": "transparent", "--nav-blend": "normal",
     "--tab": "#D8D4CA", "--field": "#FFFFFF", "--ph": "#E9E6DE",
   },
 });
@@ -401,6 +402,7 @@ const DARK_THEME = skinTheme("dark", "Тёмная", "dark", {
     "--mark": "#FF5FA2", "--on-mark": "#092328",
     "--danger-bg": "#FF5FA2", "--danger-bg-hover": "#FF7DB4", "--danger-text": "#092328",
     "--nav": "#051619", "--nav-ink": "#DCE6DF", "--nav-muted": "#7FA592",
+    "--nav-edge": "#12544F", "--nav-blend": "multiply",
     "--tab": "#0A262B", "--field": "#0A262B", "--ph": "#0A262B",
   },
 });

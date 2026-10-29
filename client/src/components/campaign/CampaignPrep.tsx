@@ -6,6 +6,7 @@ import type { Affect } from "../../data/entities";
 import { useUndoDelete } from "../../hooks/useUndoDelete";
 import { plural } from "../../sceneKinds";
 import { sessionLabel } from "../../sessionLabel";
+import { formatDateKeyRu } from "../../utils/date";
 import { SESSION_OUTCOME_FIELDS, SESSION_PASSPORT_FIELDS } from "../sessionPaperFields";
 import { NavIcon } from "../NavIcons";
 import type { CampaignDebt, SessionDetail, SessionSummary } from "../../types";
@@ -14,19 +15,20 @@ import type { CampaignDebt, SessionDetail, SessionSummary } from "../../types";
 // Мастер готовится — что уже есть к ближайшей сессии, чем кончилась прошлая и
 // кто должен. Таблица фактов отсюда ушла в строку шапки.
 
-/** «К сессии №N»: пункты паспорта вечера, заполнено или пусто; ниже — итог прошлой. */
-export function NextSessionPrep({ next, last, oneshot }: { next: SessionSummary | undefined; last: SessionSummary | undefined; oneshot: boolean }) {
+/**
+ * «К сессии №N»: пункты паспорта вечера, заполнено или пусто. Главный блок
+ * «Обзора» (дизайн-система v2, §5: тушь-рамка у главного блока).
+ */
+export function NextSessionPrep({ next, oneshot }: { next: SessionSummary | undefined; oneshot: boolean }) {
   const detail = useEntity<SessionDetail>("session", next?.id ?? null).data;
-  const lastDetail = useEntity<SessionDetail>("session", last?.id ?? null).data;
-  if (!next && !last) return null;
+  if (!next) return null;
   const values: Record<string, string> = detail ? { ...(detail.passport ?? {}), idea_notes: detail.idea_notes ?? "" } : {};
-  const outcomes = lastDetail?.outcomes ?? {};
-  const summary = SESSION_OUTCOME_FIELDS.map((f) => outcomes[f.key]?.trim()).find(Boolean)?.split("\n")[0];
   return (
-    <section className="campaign-prep" aria-label="К ближайшей сессии">
-      {next && (
-        <>
-          <h3 className="paper-label"><NavIcon name="flag" />{oneshot ? "К прогону" : `К сессии №${next.session_number ?? ""}`}</h3>
+    <section className="campaign-prep d-focal" aria-label="К ближайшей сессии">
+          <div className="d-plate-row">
+            <h3 className="d-plate">{oneshot ? "К прогону" : `К сессии №${next.session_number ?? ""}`}</h3>
+            <span className="d-note">{formatDateKeyRu(next.date)}</span>
+          </div>
           <Link className="campaign-prep__list" to={`/sessions/${next.id}`}>
             {SESSION_PASSPORT_FIELDS.map((f) => {
               const done = !!values[f.key]?.trim();
@@ -39,15 +41,24 @@ export function NextSessionPrep({ next, last, oneshot }: { next: SessionSummary 
               );
             })}
           </Link>
-        </>
-      )}
-      {last && (
-        <p className="campaign-prep__last">
-          <span className="paper-label"><NavIcon name="book" />Итог: {sessionLabel(last)}</span>{" "}
-          {summary ? <Link to={`/sessions/${last.id}`}>{summary}</Link> : (
-            <Link to={`/sessions/${last.id}`} className="muted">«Что изменилось» не заполнено ›</Link>
-          )}
-        </p>
+    </section>
+  );
+}
+
+/** «Итог»: чем кончилась прошлая сессия — первая заполненная строка итогов. */
+export function LastSessionResult({ last }: { last: SessionSummary | undefined }) {
+  const lastDetail = useEntity<SessionDetail>("session", last?.id ?? null).data;
+  if (!last) return null;
+  const outcomes = lastDetail?.outcomes ?? {};
+  const summary = SESSION_OUTCOME_FIELDS.map((f) => outcomes[f.key]?.trim()).find(Boolean)?.split("\n")[0];
+  return (
+    <section className="campaign-prep__last d-block" aria-label="Итог прошлой сессии">
+      <div className="d-plate-row">
+        <h3 className="d-plate">Итог</h3>
+        <span className="d-note">{sessionLabel(last)}</span>
+      </div>
+      {summary ? <Link to={`/sessions/${last.id}`}>{summary}</Link> : (
+        <Link to={`/sessions/${last.id}`} className="muted">«Что изменилось» не заполнено ›</Link>
       )}
     </section>
   );
@@ -93,8 +104,8 @@ export function CampaignDebtors({ campaignId, currency }: { campaignId: number; 
   if (!debts?.length) return null;
 
   return (
-    <section className="campaign-debtors" aria-label="Должники">
-      <h3 className="paper-label"><NavIcon name="loot" />Должники</h3>
+    <section className="campaign-debtors d-block" aria-label="Должники">
+      <h3 className="d-plate">Должники</h3>
       <ul>
         {debts.map((d) => (
           <li key={d.player_id}>

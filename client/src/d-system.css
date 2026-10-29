@@ -1,0 +1,127 @@
+/* Детали дизайн-системы v2 «Д» (docs/design-system.md §6). Экраны берут их
+   классами, а не повторяют у себя: плашка, блок, главный блок с тушь-рамкой,
+   штамп, кнопки. Цвета — только токены тем (themes.ts §2.1). */
+
+/* Плашка-заголовок блока (§6.4): чёрная плашка, Label-капс. */
+.d-plate {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.d-plate-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-5);
+}
+.d-plate-row > .d-plate {
+  margin: 0;
+}
+.d-plate-row > .d-end {
+  margin-left: auto;
+}
+
+/* Мета машинописью (§3.1): пояснение к плашке, строка-досье. */
+.d-note,
+.d-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.d-note {
+  font-size: var(--fs-micro);
+}
+.d-mono {
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+}
+
+/* Блок — линия 1px; главный блок — тушь-рамка (§4.2, §5: одна на экран). */
+.d-block {
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  background: var(--sheet);
+}
+.d-focal {
+  padding: var(--sp-7);
+  border: var(--edge-width) solid var(--edge);
+  outline: 1px solid var(--edge);
+  outline-offset: -8px;
+  background: var(--sheet);
+}
+.d-focal .d-plate {
+  font-size: var(--fs-lead);
+  font-weight: 600;
+}
+
+/* Штамп статуса (§6.7): один на экран, малиновый, с наклоном. */
+.d-stamp {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--sp-2) var(--sp-5);
+  border: var(--edge-width) solid var(--mark);
+  color: var(--mark);
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  transform: rotate(-5deg);
+}
+
+/* Кнопки (§6.5). Главная — кислота с фактурой и рваным краем, одна на экран. */
+.d-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  height: 40px;
+  padding: 0 var(--sp-6);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.d-btn:hover {
+  background: var(--tab);
+  color: var(--ink);
+  text-decoration: none;
+}
+.d-btn--primary,
+.d-btn--primary:hover {
+  height: 48px;
+  padding: 0 var(--sp-7);
+  border: 0;
+  background: var(--acid) var(--skin-acid-wash) center / 360px;
+  color: var(--acid-text);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  -webkit-mask-box-image: var(--skin-torn-mask) 48 / 5px round;
+}
+.d-btn--primary:hover {
+  filter: brightness(1.05);
+}
+.d-btn--sm {
+  height: 30px;
+  padding: 0 var(--sp-5);
+  font-size: var(--fs-meta);
+}

@@ -13,19 +13,27 @@
 
    Ассеты — только переменными из fantasy-punk-skin.css. */
 
-/* Меню каркаса («…», «Ещё») стоят вне листа, но получают ту же палитру.
-   Не переносим paper-scope на весь профиль: стол и диалоги живут в теме. */
+/* Лист профиля — «Д» (docs/design-system.md §6.3, холст v30): плоский лист
+   темы (--sheet) в тушь-рамке, без растровой бумаги. Палитра бумаги теперь —
+   токены темы: в тёмной лист тёмный, как на одобренных тёмных макетах (это
+   пересмотр решения «тёмная бумагу не отменяет», реестр О-8).
+
+   Имена --paper-* остаются: ими говорят ChapterList, поля правки и прочие
+   куски листа. Чернила, линия, плашки и акцент внутри листа — те же, что в
+   теме, поэтому scope их больше не переопределяет.
+
+   Меню каркаса («…», «Ещё») стоят вне листа, но получают ту же палитру. */
 .paper-scope,
 .entity-page--paper .context-menu {
-  --paper-base: #eee7d6;
-  --paper-ink: #1f1a14;
-  --paper-ink-soft: #3a332a;
-  --paper-muted: #6b6253;
-  --paper-rule: rgb(31 26 20 / 0.22);
-  --paper-acid: #e2f25a;
-  --paper-wash: rgb(255 253 245 / 0.42);
+  --paper-base: var(--sheet);
+  --paper-ink: var(--ink);
+  --paper-ink-soft: var(--ink-2);
+  --paper-muted: var(--muted);
+  --paper-rule: var(--line);
+  --paper-acid: var(--acid);
+  --paper-wash: color-mix(in srgb, var(--field) 55%, transparent);
   /* Красный тушью: разбитый пост корабля, корпус на нуле. */
-  --paper-alarm: #a3241b;
+  --paper-alarm: var(--danger);
 
   --paper: var(--paper-base);
   --paper-2: var(--paper-base);
@@ -33,38 +41,12 @@
   /* Поднятые поверхности (меню, списки, диалоги) перекрывают содержимое.
      Полупрозрачный paper-wash применяется только к полям и подсветке. */
   --bg-elevated: var(--paper-base);
-  --ink: var(--paper-ink);
-  --ink-2: var(--paper-ink-soft);
-  --text: var(--paper-ink);
-  --text-bright: var(--paper-ink);
-  --muted: var(--paper-muted);
-  --line: rgb(31 26 20 / 0.35);
-  --surface: var(--paper-ink);
-  --on-surface: var(--paper-base);
-  --on-surface-muted: #cfc6b0;
-  --accent: var(--paper-ink);
-  --accent-2: var(--paper-ink);
-  --accent-text: var(--paper-base);
-  --accent-soft: rgb(31 26 20 / 0.12);
-  --primary-bg: var(--paper-ink);
-  --primary-text: var(--paper-base);
   --card-body-texture: none;
   /* Поверхность объявляет свою пару толщин (check-spacing.mjs): главный
-     блок листа — «За столом» — обведён толще остального. */
+     блок листа обведён кромкой. */
   --card-border-width: 1px;
-  --card-border-width-strong: 2px;
+  --card-border-width-strong: var(--edge-width);
   color: var(--paper-ink);
-}
-
-[data-theme-mode="dark"] .paper-scope,
-[data-theme-mode="dark"] .entity-page--paper .context-menu {
-  --paper-base: #c4bca8;
-  --paper-ink-soft: #2e2820;
-  --paper-muted: #3f382e;
-  --paper-alarm: #8a1d15;
-  --paper-rule: rgb(31 26 20 / 0.3);
-  --paper-wash: rgb(255 253 245 / 0.22);
-  --on-surface-muted: #b9b19d;
 }
 
 /* Папка профиля (фактуры, 2026-10-23: пилот на кампании, потом на все
@@ -74,41 +56,35 @@
    fixed-меню внутри листа. --sheet-edge — толщина края: от неё отступают
    язычки соседей, позиционированные от области внутри рамки. */
 .entity-page--paper > .paper-sheet {
-  --sheet-edge: 40px;
-  background: none;
-  border: var(--sheet-edge) solid transparent;
-  border-image: var(--skin-dossier-folder) 90 fill / var(--sheet-edge) round;
+  --sheet-edge: 0px;
+  background: var(--sheet);
+  border: var(--edge-width) solid var(--edge);
+  outline: 1px solid var(--edge);
+  outline-offset: -8px;
   border-radius: 0;
-  padding: var(--sp-4) var(--sp-6);
+  padding: var(--sp-7) var(--sp-8) var(--sp-8);
   box-shadow: none;
 }
-/* Блоки досье — на светлой подложке, как в концепте. */
+/* Блоки досье — линия 1px (§4.2), рабочие зоны ровные (§5). */
 .entity-page--paper :is(.dossier__aside, .campaign-passport, .setting-passport) {
-  border: 16px solid transparent;
-  border-image: var(--skin-dossier-block) 40 fill / 16px round;
-  padding: var(--sp-2) var(--sp-4);
-  box-shadow: 0 2px 8px rgb(31 26 20 / 0.16);
+  border: 1px solid var(--line);
+  padding: var(--sp-6);
+  background: var(--sheet);
+  box-shadow: none;
 }
 /* Карточка полей паспорта — своя бумага; на подложке она лишняя плашка. */
 .entity-page--paper .campaign-passport .creature-card {
   background: none;
 }
 /* Язычки светлее (владелец: «как в концепте, чуть светлее нынешних»). */
-.entity-page--paper > .tabs button {
-  --paper-tab: #e3d8bd;
-}
-[data-theme-mode="dark"] .entity-page--paper > .tabs button {
-  --paper-tab: #cdc2a5;
-}
 
 /* Один вид меню для папочного профиля и любых отдельных бумажных карточек.
    paper-wash — прозрачная заливка полей, для всплывающего листка не годится. */
 :is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) {
-  background: var(--paper-base) var(--skin-paper-tile) repeat;
-  background-blend-mode: multiply;
-  border-color: var(--paper-rule);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 rgb(0 0 0 / 0.12), 0 6px 14px rgb(0 0 0 / 0.3);
+  background: var(--paper-base);
+  border-color: var(--edge);
+  border-radius: 0;
+  box-shadow: none;
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
 }
@@ -131,16 +107,15 @@
 /* Лист и карточка — одна бумага: тайл под цветом, перемножением. */
 .paper-sheet,
 .creature-card.paper-scope {
-  background: var(--paper-base) var(--skin-paper-tile) repeat;
-  background-blend-mode: multiply;
+  background: var(--paper-base);
 }
 
 .paper-sheet {
   position: relative;
   z-index: 1;
   padding: var(--sp-8) var(--sp-9);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 rgb(0 0 0 / 0.12), 0 18px 40px rgb(0 0 0 / 0.35);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Карточки внутри листа — не рамки, а разделы: лист уже рамка (одна рамка
@@ -184,34 +159,43 @@
   margin-top: var(--sp-2);
 }
 .entity-page.entity-page--paper .entity-page__title-row h1::after { display: none; }
+/* Ярлыки «Д» (§6.2): скос справа, внахлёст; активный — цвета листа, ниже
+   остальных на кромку и с кислотной полосой сверху. */
 .entity-page--paper > .tabs {
-  /* Вкладка на всю высоту (карта) не должна сплющивать язычки. */
+  /* Вкладка на всю высоту (карта) не должна сплющивать ярлыки. */
   flex-shrink: 0;
-  gap: var(--sp-2);
-  margin: 0 0 calc(-1 * var(--stack-gap, var(--sp-6)));
-  padding: 0 var(--sp-6);
+  gap: 0;
+  margin: 0 0 calc(-1 * var(--stack-gap, var(--sp-6)) - var(--edge-width));
+  padding: 0;
   box-shadow: none;
   align-items: flex-end;
+  position: relative;
+  z-index: 2;
 }
 .entity-page--paper > .tabs button {
+  margin-right: calc(-1 * var(--sp-5));
+  padding: var(--sp-4) var(--sp-7) var(--sp-4) var(--sp-5);
   border: 0;
-  border-radius: 9px 7px 0 0;
-  padding: var(--sp-4) var(--sp-7) var(--sp-5);
-  background: var(--paper-tab, #d9d0bc) var(--skin-paper-tile) repeat;
-  background-blend-mode: multiply;
-  color: #2e2820;
-  font-size: var(--fs-data);
-  letter-spacing: 0.04em;
-  text-transform: none;
-  text-align: center;
-  filter: brightness(0.9);
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 100%, 0 100%);
+  background: var(--tab);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.entity-page--paper > .tabs button:hover {
+  color: var(--ink);
 }
 .entity-page--paper > .tabs button.active {
-  filter: none;
-  background: var(--paper-acid, #e2f25a);
-  color: #141414;
-  padding-bottom: var(--sp-6);
-  box-shadow: 0 -2px 6px rgb(0 0 0 / 0.25);
+  z-index: 1;
+  padding-top: var(--sp-5);
+  border-top-color: transparent;
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: inset 0 4px 0 var(--acid);
 }
 
 /* «…» — правый край полосы язычков, а имя — первая строка листа. */
@@ -1986,9 +1970,21 @@
 .campaign-passport__source {
   margin: 0;
 }
-.campaign-passport__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
-.campaign-passport__heading { margin: 0; font-family: var(--font-ui); font-size: var(--fs-h2); text-transform: uppercase; }
-.campaign-passport__head .creature-card__edit { font-size: var(--fs-data); }
+/* Шапка паспорта — плашка «Д» и малая кнопка (§6.4–§6.5). */
+.campaign-passport__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-5); }
+.campaign-passport__heading.d-plate { margin: 0; }
+.campaign-passport__head .creature-card__edit {
+  height: 30px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .campaign-passport .editable-card-field { gap: var(--sp-1); }
 .campaign-passport > .creature-card:has(> .paper-fields-rows) { padding-block: 0; }
 .campaign-passport .paper-fields-rows { padding-block: var(--sp-4); }
@@ -2002,97 +1998,171 @@
   .campaign-passport .paper-fields-rows > div { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 }
 
-/* Ближайшая сессия справа от названия кампании. */
-/* Шапка кампании (гриллинг 2026-10-23, Q2): строка фактов слева, два
-   действия справа; переносится целиком, а не по словам. */
-.campaign-now {
+/* Шапка кампании — «Д» (docs/design-system.md §6.7–§6.8): строка-досье
+   машинописью над названием, штамп статуса, факты столбцом, главная кнопка
+   кислотой. Порядок задаётся order: имя рендерит каркас, строку — шапка. */
+.paper-sheet > .entity-page__ident:has(.campaign-now) {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  color: var(--paper-ink);
+  align-items: flex-start;
 }
-.campaign-now__row {
+.paper-sheet > .entity-page__ident:has(.campaign-now) :is(.entity-page__meta, .campaign-now) {
+  display: contents;
+}
+.campaign-now__file {
+  order: -1;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4) var(--sp-7);
+  gap: 0 var(--sp-4);
+  margin: 0 0 var(--sp-4);
+}
+.campaign-now__file > span + span::before {
+  content: "·";
+  margin-right: var(--sp-4);
+}
+.campaign-now__status {
+  margin: var(--sp-4) 0 var(--sp-6) var(--sp-2);
 }
 .campaign-now__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 var(--sp-6);
+  margin: 0;
+  font-size: var(--fs-data);
+}
+.campaign-now__facts > div {
+  display: contents;
+}
+.campaign-now__facts :is(dt, dd) {
+  margin: 0;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.campaign-now__facts dt {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.campaign-now__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--font-ui);
-  font-size: var(--fs-data);
-}
-.campaign-now__facts > li + li::before {
-  content: "·";
-  margin: 0 var(--sp-4);
-  color: var(--paper-muted);
-}
-.campaign-now__status::before {
-  content: "";
-  display: inline-block;
-  width: 0.7em;
-  height: 0.7em;
-  margin-right: var(--sp-2);
-  border-radius: 50%;
-  background: #8a8378;
-  vertical-align: 0.05em;
-}
-.campaign-now__status[data-status="active"]::before { background: #3a8a3f; }
-.campaign-now__status[data-status="paused"]::before { background: #c08a1e; }
-.campaign-now__actions {
-  display: flex;
-  gap: var(--sp-3);
-}
-:is(.campaign-now__go, .campaign-now__edit) {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-6);
-  border: var(--card-border-width) solid var(--paper-ink);
-  font-family: var(--font-ui);
-  font-size: var(--fs-data);
-  font-weight: 600;
-  color: var(--paper-ink);
-  text-decoration: none;
-  cursor: pointer;
-}
-.campaign-now__go {
-  background: var(--paper-acid);
-  box-shadow: 2px 2px 0 var(--paper-ink);
-}
-.campaign-now__edit {
-  background: var(--paper-wash);
-}
-:is(.campaign-now__go, .campaign-now__edit):hover {
-  text-decoration: none;
-  filter: brightness(1.05);
+  gap: var(--sp-5);
+  margin-top: var(--sp-7);
 }
 .campaign-now__drafts {
-  margin: 0;
+  margin: var(--sp-4) 0 0;
   font-size: var(--fs-meta);
 }
 
-/* Левая колонка «Обзора»: к ближайшей сессии, должники, группы (Q4). */
-:is(.campaign-prep, .campaign-debtors, .campaign-overview__groups-block) {
+/* «Обзор»: герой «блок слева — обложка справа» (Z-паттерн, §6.8), ниже две
+   колонки. Обложка лежит внутри вкладки, поэтому сетка — у листа, а
+   обёртка вкладки растворяется (display: contents). */
+.paper-sheet:has(> .campaign-overview) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: var(--sp-8) var(--sp-8);
+  align-items: start;
+}
+.paper-sheet:has(> .campaign-overview) > *,
+.campaign-overview.dossier > :not(.campaign-overview__cover) {
+  grid-column: 1 / -1;
+}
+.paper-sheet:has(> .campaign-overview) > .entity-page__ident {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+}
+.campaign-overview.dossier {
+  display: contents;
+}
+.campaign-overview__cover {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  margin: 0;
+  border: var(--edge-width) solid var(--edge);
+  min-height: 340px;
+  background: var(--ph);
+}
+.campaign-overview__cover > button {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.campaign-overview__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.campaign-overview__cover-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.campaign-overview__cover figcaption {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: var(--sp-2) var(--sp-5);
+  background: var(--edge);
+  color: var(--sheet);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.campaign-overview__cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-7);
+  align-items: start;
+}
+.campaign-overview__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .paper-sheet:has(> .campaign-overview),
+  .campaign-overview__cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .campaign-overview__cover {
+    grid-column: 1;
+    grid-row: auto;
+    min-height: 200px;
+  }
+}
+
+/* Блоки «Обзора». */
+:is(.campaign-prep, .campaign-debtors, .campaign-overview__groups-block, .campaign-prep__last) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
 }
-:is(.campaign-prep, .campaign-debtors, .campaign-overview__groups-block) > h3 {
-  margin: 0;
+:is(.campaign-debtors, .campaign-overview__groups-block) > .d-plate {
+  align-self: flex-start;
 }
 .campaign-prep__list {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  color: var(--paper-ink);
+  color: var(--ink);
   text-decoration: none;
 }
 .campaign-prep__list:hover {
@@ -2100,26 +2170,29 @@
 }
 .campaign-prep__item {
   display: flex;
-  gap: var(--sp-3);
-  color: var(--paper-muted);
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
 }
-.campaign-prep__item.is-done {
-  color: var(--paper-ink);
+.campaign-prep__item:not(.is-done)::after {
+  content: "— пусто";
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 .campaign-prep__mark {
   width: 1em;
   text-align: center;
+  color: var(--muted);
 }
-.campaign-prep__last {
-  margin: var(--sp-2) 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+.campaign-prep__item.is-done .campaign-prep__mark {
+  color: var(--ink);
 }
 .campaign-debtors ul {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2127,13 +2200,19 @@
 .campaign-debtors li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0 var(--sp-3);
+  gap: 0 var(--sp-5);
   align-items: center;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.campaign-debtors li a {
+  font-weight: 600;
 }
 .campaign-debtors__sum {
   grid-column: 1;
-  font-size: var(--fs-meta);
-  color: var(--paper-alarm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 .campaign-debtors__paid {
   grid-column: 2;
@@ -2141,11 +2220,16 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-4);
-  border: var(--card-border-width) solid var(--paper-rule);
-  background: var(--paper-wash);
-  color: var(--paper-ink);
+  height: 30px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
   font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 .campaign-debtors__paid .nav-icon {

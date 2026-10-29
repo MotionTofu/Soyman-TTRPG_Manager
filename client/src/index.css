@@ -160,6 +160,8 @@
   --nav: #151515;
   --nav-ink: #EEECE6;
   --nav-muted: #9C988F;
+  --nav-edge: transparent;
+  --nav-blend: normal;
   --tab: #D8D4CA;
   --field: #FFFFFF;
   --ph: #E9E6DE;
@@ -3585,10 +3587,24 @@ body.live-hide-search.live-hide-dock .app-content {
   max-width: none;
 }
 
+/* Навигация — тушь в обеих темах (docs/design-system.md §6.1): фактура
+   туши, светлые чернила. Токены темы переопределены внутри, поэтому нижние
+   пункты, узкий режим и мобильная шторка берут те же цвета без своих правил.
+   Активный пункт — кислота (§2.2). */
 .app-nav {
+  --ink: var(--nav-ink);
+  --ink-2: var(--nav-ink);
+  --text-bright: var(--nav-ink);
+  --muted: var(--nav-muted);
+  --accent: var(--nav-ink);
+  --line: color-mix(in srgb, var(--nav-ink) 18%, transparent);
+  --bg-elevated: color-mix(in srgb, var(--nav-ink) 10%, transparent);
+  --paper-2: var(--nav);
   position: relative;
-  background: var(--paper-2);
-  border-right: var(--card-border-width, 1px) solid var(--line);
+  color: var(--nav-ink);
+  background: var(--nav) var(--skin-ink-surface) center / 640px;
+  background-blend-mode: var(--nav-blend);
+  border-right: 1px solid var(--nav-edge);
   padding: var(--sp-6) var(--sp-4);
   display: flex;
   flex-direction: column;
@@ -3847,8 +3863,8 @@ body.live-hide-search.live-hide-dock .app-content {
   text-decoration: none;
 }
 .app-nav a.active {
-  background: var(--bg-elevated);
-  color: var(--accent);
+  background: var(--acid);
+  color: var(--acid-text);
   font-weight: 600;
 }
 

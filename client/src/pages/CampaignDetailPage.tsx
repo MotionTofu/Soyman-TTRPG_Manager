@@ -102,7 +102,7 @@ import { CampaignDossierFiles, useCharacterSheets } from "../components/campaign
 import { statusOf, useSetCharacterStatus } from "../characterStatus";
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
-import { CampaignDebtors, NextSessionPrep, useSettleDebt } from "../components/campaign/CampaignPrep";
+import { CampaignDebtors, LastSessionResult, NextSessionPrep, useSettleDebt } from "../components/campaign/CampaignPrep";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
 import { CampaignWorldTab, type CampaignWorld } from "../components/campaign/CampaignWorldTab";
@@ -2432,25 +2432,32 @@ function OverviewTab({
   );
 
   return (
+    // Макет «Д» (docs/design-system.md §6.8): обложка — справа от названия
+    // (в paper.css сетка листа ставит её во вторую колонку героя), ниже две
+    // колонки: главный блок и паспорт слева, итог, должники, группы справа.
     <div className="dossier campaign-overview">
-      <aside className="dossier__aside">
-        {/* Обложка меняется щелчком по изображению. */}
-        <button
-          type="button"
-          className="dossier__portrait dossier__portrait--cover"
-          title="Сменить обложку"
-          onClick={() => thumbInput.current?.click()}
-        >
-          {coverSrc ? <img src={coverSrc} alt={`Обложка: ${campaign.name}`} /> : <span className="dossier__portrait-empty">Обложка</span>}
-          <span className="dossier__portrait-hint">Сменить обложку</span>
+      {/* Обложка меняется щелчком по изображению. */}
+      <figure className="campaign-overview__cover">
+        <button type="button" title="Сменить обложку" onClick={() => thumbInput.current?.click()}>
+          {coverSrc ? <img src={coverSrc} alt={`Обложка: ${campaign.name}`} /> : <span className="campaign-overview__cover-empty">{campaign.system_name || "Обложка"}</span>}
         </button>
-        <input ref={thumbInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
-        {thumbCrop.modal}
-        <NextSessionPrep next={nextSession} last={lastSession} oneshot={oneshot} />
+        <figcaption>Обложка · сменить</figcaption>
+      </figure>
+      <input ref={thumbInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
+      {thumbCrop.modal}
+      {editing === "main" && <div className="campaign-overview__form">{mainForm}</div>}
+      <div className="campaign-overview__cols">
+      <div className="campaign-overview__col">
+        <NextSessionPrep next={nextSession} oneshot={oneshot} />
+        <CampaignPassport campaign={campaign} />
+        <OldNotesFold campaignId={campaignId} settingId={campaign.setting_id} />
+      </div>
+      <div className="campaign-overview__col">
+        <LastSessionResult last={lastSession} />
         {!hideFinance && <CampaignDebtors campaignId={campaignId} currency={campaign.currency} />}
         {allGroups.length > 0 && (
-          <section className="campaign-overview__groups-block" aria-label="Группы">
-            <h3 className="paper-label"><NavIcon name="players" />Группы</h3>
+          <section className="campaign-overview__groups-block d-block" aria-label="Группы">
+            <h3 className="d-plate">Группы</h3>
             <div className="campaign-overview__groups">
               {allGroups.map((g) => {
                 const isIn = campaignGroupIds.includes(g.id);
@@ -2464,15 +2471,6 @@ function OverviewTab({
             </div>
           </section>
         )}
-      </aside>
-
-      <div className="dossier__main">
-        {editing === "main" && mainForm}
-        <CampaignPassport campaign={campaign} />
-
-
-        <OldNotesFold campaignId={campaignId} settingId={campaign.setting_id} />
-
         {/* Автолинковка — сразу своим свёрнутым блоком: уровень «Связать
             имена» над ним был лишней обёрткой (гриллинг 2026-10-23, Q6). */}
         <CrossLinksWizard
@@ -2480,6 +2478,7 @@ function OverviewTab({
           ownerId={campaignId}
           help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
         />
+      </div>
       </div>
     </div>
   );

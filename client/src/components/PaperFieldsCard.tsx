@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import { MentionText } from "./mentions/MentionText";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { plural } from "../sceneKinds";
-import { NavIcon, type NavIconName } from "./NavIcons";
 
 // Карточка «подпись — значение» на бумаге: досье приключения (доска 36) и
 // «В кампании» досье персонажа (доска 37).
@@ -25,7 +24,6 @@ export function PaperFieldsCard({
   rows,
   mentionSettingId,
   externalHeading = false,
-  icon,
 }: {
   label: string;
   fields: readonly PaperField[];
@@ -45,8 +43,6 @@ export function PaperFieldsCard({
   /** Упоминания в полях: «@» в правке открывает выбор, просмотр — ссылками. */
   mentionSettingId?: number | null;
   externalHeading?: boolean;
-  /** Знак перед заголовком (вынесенным). */
-  icon?: NavIconName;
 }) {
   const mentions = mentionSettingId !== undefined;
   const [editing, setEditing] = useState(false);
@@ -73,7 +69,7 @@ export function PaperFieldsCard({
   if (editing) {
     return (
       <>
-      {externalHeading && <h2 className="campaign-passport__heading">{icon && <NavIcon name={icon} />}{label}</h2>}
+      {externalHeading && <h2 className="campaign-passport__heading d-plate">{label}</h2>}
       <div className="creature-card-editor is-inline">
         <div className="card stack">
           {!externalHeading && <span className="editable-card-field-label">{label}</span>}
@@ -118,7 +114,7 @@ export function PaperFieldsCard({
     <>
     {externalHeading && (
       <header className="campaign-passport__head">
-        <h2 className="campaign-passport__heading">{icon && <NavIcon name={icon} />}{label}</h2>
+        <h2 className="campaign-passport__heading d-plate">{label}</h2>
         <button type="button" className="creature-card__edit" onClick={start}>Править</button>
       </header>
     )}

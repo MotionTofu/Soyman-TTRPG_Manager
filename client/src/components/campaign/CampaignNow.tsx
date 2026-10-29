@@ -6,14 +6,14 @@ import { plural } from "../../sceneKinds";
 import { sessionLabel } from "../../sessionLabel";
 import { toLocalDateKey, formatDateKeyRu } from "../../utils/date";
 import { CAMPAIGN_STATUS_LABELS, type CampaignStatus } from "../../paymentTypes";
-import { NavIcon } from "../NavIcons";
 import type { EntityRecord } from "../../entityRecords";
 import type { CampaignDetail, SessionSummary } from "../../types";
 
-// Шапка кампании под названием (гриллинг 2026-10-23, Q2): одна строка фактов
-// и два действия. Каждый факт — один раз: статус, система и счёт сессий
-// раньше повторялись в колонке слева, ближайшая сессия — трижды. Под строкой
-// — неразобранные черновики записей (слой кампании, задача 08).
+// Шапка кампании под названием (гриллинг 2026-10-23, Q2; вид — «Д»,
+// docs/design-system.md §6.7–§6.8): строка-досье моноширинным, штамп статуса,
+// факты и два действия. Каждый факт — один раз: статус, система и счёт сессий
+// раньше повторялись в колонке слева, ближайшая сессия — трижды. Ниже —
+// неразобранные черновики записей (слой кампании, задача 08).
 export function CampaignNow({
   campaign,
   sessions,
@@ -38,44 +38,37 @@ export function CampaignNow({
   const drafts = useResource<{ records: EntityRecord[] }>(`${campaignPaths.records(campaign.id)}?status=draft`).data?.records;
   const unsorted = useMemo(() => unsortedDrafts(drafts ?? [], sessions), [drafts, sessions]);
   const status = campaign.status as CampaignStatus;
+  const first = sessions.reduce<string | null>((min, s) => (min == null || s.date < min ? s.date : min), null);
   return (
     <section className="campaign-now" aria-label="Кампания коротко">
-      <div className="campaign-now__row">
-        <ul className="campaign-now__facts">
-          {oneshot && <li><span className="badge tag">Ваншот</span></li>}
-          <li className="campaign-now__status" data-status={status}>{CAMPAIGN_STATUS_LABELS[status] ?? status}</li>
-          {campaign.system_name && <li><NavIcon name="die" />{campaign.system_name}</li>}
-          {campaign.setting_id != null && (
-            <li><NavIcon name="globe" /><Link to={`/settings/${campaign.setting_id}`}>{campaign.setting_name || "Сеттинг"}</Link></li>
-          )}
-          <li>
-            <NavIcon name="archive" />
-            сыграно {held} · впереди {planned}
-          </li>
-          {next && (
-            <li>
-              <NavIcon name="calendar" />
-              {oneshot ? "следующий" : "следующая"}: {formatDateKeyRu(next.date)} — {sessionLabel(next)}
-            </li>
-          )}
-        </ul>
-        <div className="campaign-now__actions">
-          {next ? (
-            <Link className="campaign-now__go" to={`/sessions/${next.id}`}>
-              <NavIcon name="play" />
-              {oneshot ? "Готовить прогон" : `Готовить сессию №${next.session_number ?? ""}`}
-            </Link>
-          ) : (
-            <button type="button" className="campaign-now__go" onClick={onSchedule}>
-              <NavIcon name="calendar" />
-              Запланировать
-            </button>
-          )}
-          <button type="button" className="campaign-now__edit" onClick={onEdit}>
-            <NavIcon name="edit" />
-            Редактировать
+      <p className="campaign-now__file d-mono">
+        <span>{oneshot ? "Ваншот" : "Кампания"}</span>
+        {campaign.system_name && <span>{campaign.system_name}</span>}
+        {first && <span>с {formatDateKeyRu(first)}</span>}
+      </p>
+      <span className="campaign-now__status d-stamp" data-status={status}>{CAMPAIGN_STATUS_LABELS[status] ?? status}</span>
+      <dl className="campaign-now__facts">
+        {campaign.setting_id != null && (
+          <div><dt>Сеттинг</dt><dd><Link to={`/settings/${campaign.setting_id}`}>{campaign.setting_name || "Сеттинг"}</Link></dd></div>
+        )}
+        <div><dt>Сессии</dt><dd>сыграно {held} · впереди {planned}</dd></div>
+        {next && (
+          <div><dt>{oneshot ? "Следующий" : "Следующая"}</dt><dd>{formatDateKeyRu(next.date)} — {sessionLabel(next)}</dd></div>
+        )}
+      </dl>
+      <div className="campaign-now__actions">
+        {next ? (
+          <Link className="campaign-now__go d-btn d-btn--primary" to={`/sessions/${next.id}`}>
+            {oneshot ? "Готовить прогон" : `Готовить сессию №${next.session_number ?? ""}`}
+          </Link>
+        ) : (
+          <button type="button" className="campaign-now__go d-btn d-btn--primary" onClick={onSchedule}>
+            Запланировать
           </button>
-        </div>
+        )}
+        <button type="button" className="campaign-now__edit d-btn" onClick={onEdit}>
+          Редактировать
+        </button>
       </div>
       {unsorted && (
         <p className="campaign-now__drafts">
