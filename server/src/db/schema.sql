@@ -2306,6 +2306,20 @@ CREATE TABLE IF NOT EXISTS cutscene_media_holds (
 );
 CREATE INDEX IF NOT EXISTS idx_cutscene_media_holds_file ON cutscene_media_holds(media_id);
 
+-- Папки аудиотеки: удаление папки сохраняет звуки.
+
+CREATE TABLE IF NOT EXISTS sound_folders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  role TEXT NOT NULL CHECK (role IN ('background', 'ambient', 'weather', 'stinger')),
+  name TEXT NOT NULL CHECK (length(trim(name)) > 0)
+);
+CREATE TABLE IF NOT EXISTS sound_folder_items (
+  resource_id INTEGER PRIMARY KEY REFERENCES resources(id) ON DELETE CASCADE,
+  folder_id INTEGER NOT NULL REFERENCES sound_folders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_sound_folders_role ON sound_folders(role);
+CREATE INDEX IF NOT EXISTS idx_sound_folder_items_folder ON sound_folder_items(folder_id);
+
 -- Unified player display, including shows launched without a session.
 CREATE TABLE IF NOT EXISTS player_display_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),

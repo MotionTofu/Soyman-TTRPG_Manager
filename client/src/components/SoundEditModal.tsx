@@ -3,7 +3,8 @@ import { deleteFileWithChoice } from "../api/client";
 import { useResource } from "../data/hooks";
 import { Modal } from "./Modal";
 import { SoundIcon, SOUND_ICON_NAMES } from "../sound/SoundIcon";
-import type { AudioRole, SoundButton } from "../sound/types";
+import type { AudioRole, SoundButton, SoundFolder } from "../sound/types";
+import type { SoundPreview } from "../sound/useSoundPreview";
 
 interface Usage {
   sets: { id: number; name: string }[];
@@ -13,11 +14,13 @@ interface Usage {
 // Правка одного звука: имя, роль, иконка, «постоянный стингер», удаление.
 //
 // Отдельным окном, а не прямо на плитке: в библиотеке полсотни звуков, и
-// выпадающий список на каждом делает раздел неразборчивым. Сюда же вынесена
-// прослушка — иначе понять, тот ли это «Хруст ветки», можно только на игре.
+// выпадающий список на каждом делает раздел неразборчивым. Прослушка здесь
+// использует тот же канал и громкость, что и Play в списке.
 export function SoundEditModal({
   sound,
   roles,
+  folders,
+  preview,
   onPatch,
   onRelink,
   onDeleted,
@@ -25,6 +28,8 @@ export function SoundEditModal({
 }: {
   sound: SoundButton;
   roles: { role: AudioRole; title: string }[];
+  folders: SoundFolder[];
+  preview: SoundPreview;
   onPatch: (body: Record<string, unknown>) => void;
   onRelink: () => void;
   onDeleted: () => void;
@@ -77,7 +82,9 @@ export function SoundEditModal({
             </button>
           </div>
         ) : sound.src ? (
-          <audio controls preload="none" src={sound.src} />
+          <audio controls preload="none" src={sound.src} ref={preview.audioRef}
+            onPlay={() => preview.onPlay(sound)} onPause={preview.onPause}
+            onEnded={preview.onEnded} onError={preview.onError} onVolumeChange={preview.onVolumeChange} />
         ) : null}
 
         <div className="sl-edit-field">
@@ -120,6 +127,18 @@ export function SoundEditModal({
             ))}
           </div>
         </div>
+
+        <label className="sl-edit-field">
+          <span>Папка</span>
+          <select aria-label="Папка звука" value={sound.folder_id ?? ""}
+            onChange={(event) => onPatch({ folder_id: event.target.value ? Number(event.target.value) : null })}>
+            <option value="">Без папки</option>
+            {folders.filter((folder) => folder.role === sound.role).map((folder) => (
+              <option key={folder.id} value={folder.id}>{folder.name}</option>
+            ))}
+          </select>
+          <span className="ss-note">При смене роли звук возвращается в корень нового раздела.</span>
+        </label>
 
         <div className="sl-edit-field">
           <span>Иконка</span>

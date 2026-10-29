@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { migrateSoundFolders } from "./soundFolders";
 import { migrateCutscenes } from "./cutscenes";
 import { migrateCutsceneMedia } from "./cutsceneMedia";
 import { migratePlayerDisplay } from "./playerDisplay";
@@ -7549,6 +7550,8 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // Независимые версии файлов катсцен и удержания оригиналами/снимками (тикет 03).
   migrateCutsceneMedia(database);
 
+  // Папки аудиотеки: последний шаг после миграций ресурсов.
+  migrateSoundFolders(database);
 
   // Единый экран игроков без обязательной сессии (катсцены, тикет 04).
   migratePlayerDisplay(database);
