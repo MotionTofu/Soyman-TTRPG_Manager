@@ -160,6 +160,10 @@ body.sheet-fullscreen :is(.dnd-card-face, .dnd-card-back) {
   --text-bright: #171717;
   --text-muted: #56534f;
   --label: #56534f;
+  /* --sb-* считаются на :root от темы — у предмета свои. */
+  --sb-paper: #e8e4da;
+  --sb-ink: #171717;
+  --sb-muted: #56534f;
 }
 .oneshot-sheet,
 body.sheet-fullscreen :is(.dnd-card-face, .dnd-card-back),

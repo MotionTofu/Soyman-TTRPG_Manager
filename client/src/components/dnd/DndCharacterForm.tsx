@@ -1404,7 +1404,9 @@ export function DndCharacterView({
             ему только что отказали. */}
         {/* ОТДЫХ — на обороте (макет 2026-09-25): его нажимают раз за
             сцену, а на лицевой жетон спорил с рамкой карты. */}
-        {onQuickUpdate && !appShell && (
+        {/* В основном SoyMan на ПК отдых — в шапке страницы (Q3 листа «Д»);
+            на телефоне шапке не до кнопок, и отдых остаётся здесь. */}
+        {onQuickUpdate && !(appShell && showDesktopFace) && (
           <section className="dnd-back-plate" aria-label="Отдых">
             <h4 className="dnd-back-plate-title">Отдых</h4>
             <div className="dnd-back-plate-row">
