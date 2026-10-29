@@ -4966,7 +4966,8 @@ th, td {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--ink) 50%, transparent);
+  /* Почти чёрная в обеих темах: от --ink в тёмной теме пелена светлела. */
+  background: rgba(6, 9, 9, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4977,14 +4978,110 @@ th, td {
   box-sizing: border-box;
 }
 .modal {
-  background: var(--paper-2);
-  border: var(--card-border-width) solid var(--line);
-  border-radius: var(--card-radius);
-  padding: var(--sp-6);
+  position: relative;
+  background: var(--sheet);
+  color: var(--ink);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: var(--sp-7);
   width: 420px;
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
+}
+:root[data-theme-mode="dark"] .modal {
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.6);
+}
+
+/* Каркас окна «Д» (гриллинг окон 2026-10-30): заголовок окна, ✕, подвал.
+   Окна не переписаны — стиль ловит первый h2/h3 и .modal-footer. :where
+   держит вес на уровне одного класса, чтобы свои стили окон перебивали. */
+.modal > :where(:is(h2, h3):first-child, :first-child > :is(h2, h3):first-child) {
+  margin: 0 calc(-1 * var(--sp-7)) var(--sp-5);
+  padding: 0 calc(var(--sp-7) + 32px) var(--sp-5) var(--sp-7);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.modal-x {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-5);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+}
+.modal-x:hover,
+.modal-x:focus-visible {
+  background: var(--ink);
+  color: var(--sheet);
+}
+/* Своё «Закрыть» у окна — второй крестик не нужен. */
+.modal:has([aria-label="Закрыть"]:not(.modal-x)) > .modal-x {
+  display: none;
+}
+/* Окно без заголовка: полоса сверху под ✕, чтобы он не лёг на содержимое. */
+.modal:where(:not(:has(> :is(h2, h3):first-child, > :first-child > :is(h2, h3):first-child, [aria-label="Закрыть"]:not(.modal-x)))) {
+  padding-top: calc(var(--sp-5) + 40px);
+}
+.modal .modal-footer {
+  justify-content: flex-end;
+  gap: var(--sp-5);
+  margin: var(--sp-3) calc(-1 * var(--sp-7)) 0;
+  padding: var(--sp-6) var(--sp-7) 0;
+  border-top: 1px solid var(--line);
+}
+/* Главное действие окна — кислота (§6.5), опасное — малиновое (общий button.danger). */
+.modal button.primary {
+  height: 40px;
+  padding: 0 var(--sp-7);
+  border: 0;
+  background: var(--acid) var(--skin-acid-wash) center / 360px;
+  color: var(--acid-text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.modal button.primary:hover {
+  filter: brightness(1.05);
+}
+/* Телефон: подтверждение, ввод и сообщение — шторкой снизу, кнопки под палец. */
+@media (pointer: coarse) {
+  .modal-backdrop:has(> .modal-sheet) {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal.modal-sheet {
+    width: 100%;
+    max-width: none;
+    border-width: var(--edge-width) 0 0;
+    padding-bottom: var(--sp-7);
+  }
+  .modal-sheet .modal-x {
+    width: 44px;
+    height: 44px;
+    top: var(--sp-3);
+  }
+  .modal-sheet .modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .modal-sheet .modal-footer button {
+    height: 48px;
+    font-size: var(--fs-data);
+  }
 }
 /* Подбор пачкой с телефона (этап 6): широкое окно — на телефоне почти весь
    экран, на десктопе просторная колонка. Футер с кнопкой «Добавить» липкий. */
@@ -5017,7 +5114,7 @@ th, td {
 .modal-wide .picker-footer {
   position: sticky;
   bottom: 0;
-  background: var(--paper-2);
+  background: var(--sheet);
   padding-top: var(--sp-4);
 }
 

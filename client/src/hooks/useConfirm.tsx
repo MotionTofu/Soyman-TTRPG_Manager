@@ -39,15 +39,15 @@ export function useConfirm() {
   );
 
   const dialog = pending ? (
-    <Modal onClose={() => onClose(false)}>
+    <Modal onClose={() => onClose(false)} className="modal-sheet" ariaLabel={pending.opts.title}>
       <div className="stack">
-        {pending.opts.title && <h3 style={{ margin: 0 }}>{pending.opts.title}</h3>}
+        {pending.opts.title && <h2>{pending.opts.title}</h2>}
         <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{pending.opts.message}</p>
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+        <div className="row modal-footer">
           {!pending.opts.hideCancel && (
-            <button onClick={() => onClose(false)}>{pending.opts.cancelLabel ?? "Отмена"}</button>
+            <button className="d-btn" onClick={() => onClose(false)}>{pending.opts.cancelLabel ?? "Отмена"}</button>
           )}
-          <button className={pending.opts.danger ? "danger" : "primary"} onClick={() => onClose(true)}>
+          <button className={pending.opts.danger ? "d-btn danger" : "d-btn primary"} onClick={() => onClose(true)}>
             {pending.opts.confirmLabel ?? "Подтвердить"}
           </button>
         </div>
@@ -117,7 +117,7 @@ export function usePrompt() {
   );
 
   const dialog = pending ? (
-    <Modal onClose={() => finish(null)}>
+    <Modal onClose={() => finish(null)} className="modal-sheet" ariaLabel={pending.opts.title}>
       <form
         className="stack"
         onSubmit={(e) => {
@@ -125,7 +125,7 @@ export function usePrompt() {
           finish(pending.opts.readOnly ? null : value);
         }}
       >
-        {pending.opts.title && <h3 style={{ margin: 0 }}>{pending.opts.title}</h3>}
+        {pending.opts.title && <h2>{pending.opts.title}</h2>}
         <label className="stack" style={{ gap: 4 }}>
           <span style={{ whiteSpace: "pre-wrap" }}>{pending.opts.message}</span>
           <input
@@ -136,12 +136,12 @@ export function usePrompt() {
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
-        <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={() => finish(null)}>
+        <div className="row modal-footer">
+          <button type="button" className="d-btn" onClick={() => finish(null)}>
             {pending.opts.cancelLabel ?? (pending.opts.readOnly ? "Закрыть" : "Отмена")}
           </button>
           {!pending.opts.readOnly && (
-            <button type="submit" className="primary">
+            <button type="submit" className="d-btn primary">
               {pending.opts.confirmLabel ?? "Сохранить"}
             </button>
           )}
@@ -159,11 +159,11 @@ export function useAlert() {
     setMsg(message);
   }, []);
   const dialog = msg ? (
-    <Modal onClose={() => setMsg(null)}>
+    <Modal onClose={() => setMsg(null)} className="modal-sheet">
       <div className="stack">
         <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{msg}</p>
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button className="primary" onClick={() => setMsg(null)}>
+        <div className="row modal-footer">
+          <button className="d-btn primary" onClick={() => setMsg(null)}>
             OK
           </button>
         </div>

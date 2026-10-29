@@ -117,6 +117,12 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
     >
       <div className={`modal${wide ? " modal-wide" : ""}${className ? ` ${className}` : ""}`} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
         {children}
+        {/* ✕ каркаса (гриллинг окон Q6): на телефоне нет Esc, а по фону
+            закрываются не все окна. Последний в DOM — автофокус и Tab
+            начинают с содержимого; окна со своим «Закрыть» прячут его в CSS. */}
+        <button type="button" className="modal-x" aria-label="Закрыть окно" title="Закрыть" onClick={onClose}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
     </div>,
     document.body
