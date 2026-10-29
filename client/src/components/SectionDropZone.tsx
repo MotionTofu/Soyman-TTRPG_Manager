@@ -276,6 +276,7 @@ export const SectionDropZone = memo(function SectionDropZone({
           <div
             className="resource-row row"
             data-type={entry.type}
+            data-initial={entry.label.trim().charAt(0).toUpperCase()}
             style={{
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,

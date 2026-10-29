@@ -470,7 +470,7 @@ export const SESSION_PANEL_CONTENT: Record<SessionPanelKey, (props: PanelProps) 
 
 export function LocationsPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.locations} summaryClassName="pult-drag-handle" className="card stack sp-card--location" defaultOpen>
+    <LazyDetails title={SESSION_PANEL_TITLES.locations} summaryClassName="pult-drag-handle" className="card stack sp-card--location">
       <LocationsContent {...props} />
     </LazyDetails>
   );
@@ -490,7 +490,7 @@ export function PlotCharactersPanel(props: PanelProps) {
 
 export function ObstaclesPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.obstacles} summaryClassName="pult-drag-handle" className="card stack sp-card--enemies">
+    <LazyDetails title={SESSION_PANEL_TITLES.obstacles} summaryClassName="pult-drag-handle" className="card stack sp-card--enemies" defaultOpen>
       <ObstaclesContent {...props} />
     </LazyDetails>
   );
@@ -498,7 +498,7 @@ export function ObstaclesPanel(props: PanelProps) {
 
 export function LootPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.loot} summaryClassName="pult-drag-handle" className="card stack sp-card--loot">
+    <LazyDetails title={SESSION_PANEL_TITLES.loot} summaryClassName="pult-drag-handle" className="card stack sp-card--loot" defaultOpen>
       <LootContent {...props} />
     </LazyDetails>
   );
@@ -522,7 +522,7 @@ export function SecretsPanel(props: PanelProps) {
 
 export function RevealsPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.reveals} summaryClassName="pult-drag-handle" defaultOpen>
+    <LazyDetails title={SESSION_PANEL_TITLES.reveals} summaryClassName="pult-drag-handle">
       <RevealsContent {...props} />
     </LazyDetails>
   );
@@ -530,7 +530,7 @@ export function RevealsPanel(props: PanelProps) {
 
 export function RemindersPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.reminders} summaryClassName="pult-drag-handle">
+    <LazyDetails title={SESSION_PANEL_TITLES.reminders} summaryClassName="pult-drag-handle" defaultOpen>
       <RemindersContent {...props} />
     </LazyDetails>
   );

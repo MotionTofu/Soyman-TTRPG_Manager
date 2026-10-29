@@ -54,7 +54,9 @@ interface SavedCell {
   h: number;
 }
 
-const KEY = "rpgManagerPultGrid";
+// .v2 — раскладка «Д» (Q14 2026-10-29): сохранённая до рестайла сбрасывается
+// один раз, дальше запоминается как прежде.
+const KEY = "rpgManagerPultGrid.v2";
 
 interface WidgetDef extends SavedCell {
   minW: number;
@@ -62,22 +64,20 @@ interface WidgetDef extends SavedCell {
   maxW: number;
 }
 
-// Дефолт повторяет старую вёрстку: пары по полряда.
+// Дефолт — макет Roll-Pult (Q14): шесть панелей в три колонки (задумка,
+// сюжетные персонажи, препятствия; напоминания, тайны, лут), под ними
+// свёрнутыми локации, компендиум, персонажи игроков и выводы.
 const DEFAULTS: WidgetDef[] = [
-  // «Основные события» ушли лентой в правую панель (2026-09-28) — задумка
-  // одна на ряд.
-  { id: "idea", x: 0, y: 0, w: 12, h: 8, minW: 3, minH: 3, maxW: 12 },
-  { id: "plot", x: 0, y: 8, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "locations", x: 6, y: 8, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "obstacles", x: 0, y: 18, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "loot", x: 6, y: 18, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "reminders", x: 0, y: 28, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "compendium", x: 6, y: 28, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "roster", x: 0, y: 38, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  { id: "secrets", x: 6, y: 38, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
-  // Список выводов (узловой дизайн) — новый виджет встаёт под остальными и в
-  // сохранённой раскладке ничего не сдвигает; поднять его можно за шапку.
-  { id: "reveals", x: 0, y: 48, w: 12, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "idea", x: 0, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "plot", x: 4, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "obstacles", x: 8, y: 0, w: 4, h: 12, minW: 3, minH: 3, maxW: 12 },
+  { id: "reminders", x: 0, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "secrets", x: 4, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "loot", x: 8, y: 12, w: 4, h: 10, minW: 3, minH: 3, maxW: 12 },
+  { id: "locations", x: 0, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "compendium", x: 4, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "roster", x: 8, y: 22, w: 4, h: 5, minW: 3, minH: 3, maxW: 12 },
+  { id: "reveals", x: 0, y: 27, w: 12, h: 5, minW: 3, minH: 3, maxW: 12 },
 ];
 
 function validCell(v: Partial<SavedCell> | null | undefined): v is SavedCell {

@@ -79,3 +79,45 @@
   bottom: var(--sp-1);
   background: var(--ink);
 }
+
+/* Строка панели «Д» (макет Roll-Pult, Q15): квадрат с буквой и уголком
+   цвета типа, имя, под ним мелкая строка — откуда пришёл или статы, справа
+   кнопка. Цвет типа — палитра Полотна (canvasPalette.ts). */
+:is(.pult-grid, .pult-stack) .drop-zone:not(.drop-zone--pills) .resource-row::before {
+  content: attr(data-initial);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--edge);
+  background: linear-gradient(135deg, var(--type-dot, var(--muted)) 0 7px, transparent 7px);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  color: var(--ink);
+}
+:is(.pult-grid, .pult-stack) .resource-row[data-type="being"] { --type-dot: var(--cv-node-being); }
+:is(.pult-grid, .pult-stack) .resource-row[data-type="character"] { --type-dot: var(--cv-node-character); }
+:is(.pult-grid, .pult-stack) .resource-row[data-type="location"] { --type-dot: var(--cv-node-location); }
+:is(.pult-grid, .pult-stack) .resource-row[data-type="artifact"] { --type-dot: var(--cv-node-artifact); }
+:is(.pult-grid, .pult-stack) .resource-row[data-type="community"] { --type-dot: var(--cv-node-community); }
+:is(.pult-grid, .pult-stack) .resource-row[data-type="compendium_entry"] { --type-dot: var(--cv-node-compendium_entry); }
+:is(.pult-grid, .pult-stack) .drop-zone:not(.drop-zone--pills) .resource-row > .row {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+:is(.pult-grid, .pult-stack) .drop-zone:not(.drop-zone--pills) .resource-row > .row > .muted:not(.qty-chip) {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+}
+.drop-zone__stats {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}

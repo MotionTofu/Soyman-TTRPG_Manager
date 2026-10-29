@@ -131,6 +131,32 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
     return [...rows, ...union];
   }, [rows, unionRows]);
 
+  // Строка статов у существ — КЗ и хиты из статблока (рестайл «Д», Q15).
+  // Одним чтением на существо; слой данных кэширует, повторов нет.
+  const [stats, setStats] = useState<Record<string, string>>({});
+  const beingKeys = entries.filter((e) => e.type === "being").map((e) => e.id).join(",");
+  useEffect(() => {
+    if (pills || !beingKeys) return;
+    let cancelled = false;
+    void Promise.all(
+      beingKeys.split(",").map(async (id) => {
+        try {
+          const being = await readResource<SettingBeing>(`/setting-beings/${id}`);
+          const meta = being.creature_meta;
+          const line = [meta?.ac != null ? `КЗ ${meta.ac}` : null, meta?.hp ? `${meta.hp} хитов` : null].filter(Boolean).join(" · ");
+          return [`being:${id}`, line] as const;
+        } catch {
+          return [`being:${id}`, ""] as const;
+        }
+      })
+    ).then((pairs) => {
+      if (!cancelled) setStats(Object.fromEntries(pairs.filter(([, line]) => line)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [beingKeys, pills]);
+
   // Добавить препятствие. Без повтора на плашке: ответ мог потеряться после
   // того, как связь уже легла, и повтор завёл бы вторую.
   async function addLink(result: SearchResult): Promise<boolean> {
@@ -204,6 +230,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
             key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}
             className="resource-row row"
             data-type={entry.type}
+            data-initial={entry.label.trim().charAt(0).toUpperCase()}
             style={{
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
@@ -245,6 +272,9 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
                   а не счётчик: «1к6» Мастер кинет настоящим кубиком за столом,
                   и приложение за него этого не делает. */}
               {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
+              {!pills && stats[`${entry.type}:${entry.id}`] && (
+                <span className="drop-zone__stats">{stats[`${entry.type}:${entry.id}`]}</span>
+              )}
               {!pills && entry.inScene && <span className="in-scene-chip">в сцене</span>}
               {!pills && entry.fromScenes && !entry.inScene && (
                 <span className="muted" style={{ opacity: 0.5, fontSize: "var(--fs-micro)" }} title={entry.fromScenes.join(", ")}>
