@@ -13,6 +13,8 @@ export interface MiniEvent {
   campaignName?: string;
   startTime?: string | null;
   campaignRole?: string;
+  /** Дата прошла, разбора не было — малиновой рамкой. */
+  overdue?: boolean;
 }
 
 interface Props {
@@ -274,6 +276,7 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
                 c.key === todayKey ? "today" : "",
                 one ? "has-one" : "",
                 one ? `st-${dayEvents[0].status}` : "",
+                one && dayEvents[0].overdue ? "st-overdue" : "",
                 many ? "has-many" : "",
                 popover?.key === c.key ? "day-open" : "",
               ]

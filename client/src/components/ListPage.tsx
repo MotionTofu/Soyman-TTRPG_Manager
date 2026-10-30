@@ -64,7 +64,7 @@ export interface ListPageProps {
    *  групп» там, где группы настоящие (есть `groupsEndpoint`). */
   ungroupedLabel?: string | null;
   /** Неизменяемые вкладки между «Все» и группами: «Я мастер» / «Я игрок». */
-  extraTabs?: readonly { id: string; label: string }[];
+  extraTabs?: readonly { id: string; label: string; count?: number }[];
   /** Группы или разделы (у Архива — «Сущности» и «Файлы», у Ресурсов —
    *  «Звук», «Аудио-наборы», «Шаблоны»). Нет ни одной вкладки — нет и полосы
    *  (Карты). */
@@ -99,6 +99,10 @@ export interface ListPageProps {
   hideToolbar?: boolean;
   /** Содержимое: сетка плиток, строки, рабочий экран — что угодно (Q50). */
   children: ReactNode;
+  /** Вид «Д» (макет Camp-List): кислотная кнопка, лист в рамке тушью, группы
+   *  сегментом с «+ Группа» и счётчиком справа; поиска нет — он в колонке.
+   *  Пока только у «Кампаний»: остальные списки переводят свои блоки. */
+  ds?: boolean;
 }
 
 type GroupMenu =
@@ -134,6 +138,7 @@ export function ListPage({
   toolbarLabel,
   hideToolbar,
   children,
+  ds = false,
 }: ListPageProps) {
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -206,8 +211,8 @@ export function ListPage({
   const groupIds = new Set(groups.map((g) => g.id));
 
   const tabs: ListPageGroup[] = [
-    ...(allLabel != null ? [{ id: "all", label: allLabel }] : []),
-    ...(extraTabs ?? []).map((t) => ({ id: t.id, label: t.label })),
+    ...(allLabel != null ? [{ id: "all", label: allLabel, count: ds ? totalCount : undefined }] : []),
+    ...(extraTabs ?? []).map((t) => ({ id: t.id, label: t.label, count: t.count })),
     ...groups,
     ...(showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
   ];
@@ -224,8 +229,81 @@ export function ListPage({
 
   const resetVisible = showReset ?? search.trim() !== "";
 
+  function dBar() {
+    return (
+      <div className="list-page__dbar">
+        {tabs.length > 0 && (
+          <div className="d-seg d-seg--scroll" role="tablist" aria-label={typeof title === "string" ? title : undefined}>
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={current === t.id}
+                className={current === t.id ? "active" : ""}
+                onClick={() => onGroupChange(t.id === "all" ? null : t.id)}
+                onContextMenu={(e) => openTabMenu(e, t.id)}
+              >
+                {renaming?.id === t.id ? (
+                  <input
+                    ref={renameInputRef}
+                    className="setting-group-tab-rename-input"
+                    value={renaming.name}
+                    aria-label="Новое имя группы"
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onBlur={() => void handleRenameGroup()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleRenameGroup();
+                      if (e.key === "Escape") setRenaming(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <>
+                    {t.label}
+                    {t.count != null && <b>{t.count}</b>}
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {groupsEndpoint &&
+          (creatingGroup ? (
+            <div className="list-page__group-new">
+              <input
+                ref={createInputRef}
+                className="d-input"
+                placeholder="Название группы…"
+                aria-label="Название новой группы"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleCreateGroup();
+                  if (e.key === "Escape") setCreatingGroup(false);
+                }}
+              />
+              <button type="button" className="d-btn d-btn--sm" onClick={() => void handleCreateGroup()} disabled={!newGroupName.trim()}>
+                Создать
+              </button>
+              <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => setCreatingGroup(false)}>
+                Отмена
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => { setCreatingGroup(true); setNewGroupName(""); }}>
+              + Группа
+            </button>
+          ))}
+        <span className="d-mono list-page__count">
+          {filteredCount} / {totalCount}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="stack list-page">
+    <div className={`stack list-page${ds ? " list-page--d" : ""}`}>
       <PageHead
         section={headingSection}
         title={title}
@@ -234,7 +312,7 @@ export function ListPage({
             <>
               {actions}
               {onCreate && (
-                <button className="primary" onClick={onCreate}>
+                <button className={ds ? "d-btn d-btn--primary" : "primary"} onClick={onCreate}>
                   {createLabel ?? "Создать"}
                 </button>
               )}
@@ -243,7 +321,9 @@ export function ListPage({
         }
       />
 
-      {tabs.length > 0 && (
+      {ds && <div className="list-page__sheet">{dBar()}<div className="list-page__content">{children}</div></div>}
+
+      {!ds && tabs.length > 0 && (
         <div className="tabs" role="tablist" aria-label={typeof title === "string" ? title : undefined}>
           {tabs.map((t) => (
             <button
@@ -317,7 +397,7 @@ export function ListPage({
         </div>
       )}
 
-      {!hideToolbar && (
+      {!ds && !hideToolbar && (
         <div className="res-toolbar" aria-label={toolbarLabel ?? "Поиск и фильтры"}>
           <input
             className="res-toolbar__search"
@@ -338,7 +418,7 @@ export function ListPage({
         </div>
       )}
 
-      <div className="list-page__content">{children}</div>
+      {!ds && <div className="list-page__content">{children}</div>}
 
       {groupMenu && (
         <ContextMenu

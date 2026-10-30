@@ -5,6 +5,7 @@ import type { ReactNode, SVGProps } from "react";
 
 export type NavIconName =
   | "home"
+  | "bell"
   | "campaigns"
   | "settings"
   | "systems"
@@ -607,6 +608,12 @@ const PATHS: Record<NavIconName, ReactNode> = {
     </>
   ),
   // Часы — «ещё не время»: приглушённая строка резюме до конца вечера.
+  bell: (
+    <>
+      <path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
+    </>
+  ),
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />

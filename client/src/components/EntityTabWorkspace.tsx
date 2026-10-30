@@ -16,8 +16,9 @@
 // - выбранный объект подсвечен инверсией;
 // - независимый скролл: навигация sticky со своим overflow, на мобильном
 //   панели складываются в одну колонку.
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { NavIcon, type NavIconName } from "./NavIcons";
+import { DSeg } from "./DSeg";
 
 export interface WorkspaceNavItem {
   id: string;
@@ -42,6 +43,8 @@ export interface WorkspaceSection {
   items?: WorkspaceNavItem[];
   /** Подзаголовок над категорией; повторяется у соседних — пишется один раз. */
   group?: string;
+  /** Под пунктами категории — её действие («+ Приключение»). */
+  footer?: ReactNode;
 }
 
 export interface WorkspaceSelection {
@@ -58,6 +61,8 @@ export function EntityTabWorkspace({
   workspaceKey,
   sectionOverview = false,
   phoneSelect = false,
+  seg = false,
+  plates = false,
 }: {
   sections: WorkspaceSection[];
   selection: WorkspaceSelection;
@@ -72,6 +77,13 @@ export function EntityTabWorkspace({
   sectionOverview?: boolean;
   /** На телефоне навигация — один выпадающий список над рабочей областью. */
   phoneSelect?: boolean;
+  /** Вид «Д»: разделы без пунктов — сегментом тушью над рабочей областью,
+   *  без колонки слева (блок «Кампании», Q3). */
+  seg?: boolean;
+  /** Вид «Д» колонки (макеты Camp-Story/World): категория с пунктами и
+   *  подзаголовок группы — плашками, пункты раскрыты всегда, выбранный —
+   *  кромкой слева. */
+  plates?: boolean;
 }) {
   // Раскрытые категории. По умолчанию раскрыта та, где лежит выбор, —
   // остальное свернуто, чтобы панель оставалась компактной при десятках
@@ -100,8 +112,20 @@ export function EntityTabWorkspace({
     onSelect({ section: sectionId, item: itemId });
   }
 
+  if (seg) {
+    return (
+      <div className="entity-tab-workspace--seg" key={workspaceKey}>
+        <DSeg label="Разделы вкладки" items={sections} value={selection.section} onChange={(id) => pick(id)} />
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className={`entity-tab-workspace${phoneSelect ? " entity-tab-workspace--phone-select" : ""}`} key={workspaceKey}>
+    <div
+      className={`entity-tab-workspace${phoneSelect ? " entity-tab-workspace--phone-select" : ""}${plates ? " entity-tab-workspace--plates" : ""}`}
+      key={workspaceKey}
+    >
       <nav className="entity-tab-workspace__nav card" aria-label="Навигация внутри таба">
         {phoneSelect && (
           <select
@@ -133,6 +157,13 @@ export function EntityTabWorkspace({
             )}
           </select>
         )}
+        {/* На телефоне список свёрнут в выбор — кнопки под разделами
+            («+ Приключение») встают рядом с ним (макет Camp-Story-Phone). */}
+        {phoneSelect && sections.some((s) => s.footer) && (
+          <div className="etw-nav-phone-acts">
+            {sections.map((s) => s.footer && <Fragment key={s.id}>{s.footer}</Fragment>)}
+          </div>
+        )}
         <div className="etw-nav-list">
           {sections.map((s, i) => {
             const groupTitle = s.group && s.group !== sections[i - 1]?.group ? s.group : null;
@@ -140,7 +171,13 @@ export function EntityTabWorkspace({
             const isOpen = s.items ? expanded.has(s.id) : false;
             return (
               <div key={s.id} className="etw-nav-section">
-                {groupTitle && <span className="etw-nav-group">{groupTitle}</span>}
+                {groupTitle && <span className={plates ? "d-plate" : "etw-nav-group"}>{groupTitle}</span>}
+                {plates && s.items ? (
+                  <h3 className="d-plate">
+                    {s.label}
+                    {!!s.count && <span className="etw-plate-count">{s.count}</span>}
+                  </h3>
+                ) : (
                 <button
                   type="button"
                   className={`etw-nav-header${isActiveSection ? " is-selected" : ""}`}
@@ -162,7 +199,8 @@ export function EntityTabWorkspace({
                     </span>
                   )}
                 </button>
-                {s.items && isOpen && (
+                )}
+                {s.items && (isOpen || plates) && (
                   <div className="etw-nav-items">
                     {s.items.length === 0 && <span className="muted etw-nav-empty">Пока пусто</span>}
                     {s.items.map((item) => {
@@ -184,6 +222,7 @@ export function EntityTabWorkspace({
                     })}
                   </div>
                 )}
+                {s.footer && <div className="etw-nav-sfooter">{s.footer}</div>}
               </div>
             );
           })}

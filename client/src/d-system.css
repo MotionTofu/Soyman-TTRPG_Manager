@@ -268,3 +268,268 @@
   text-transform: uppercase;
 }
 .d-mark.active { background: var(--mark); color: var(--on-mark); }
+
+/* Счётчик в сегменте — машинописью. На узком экране сегмент не переносится,
+   а прокручивается вбок (блок «Кампании», Q3). */
+.d-seg button b {
+  margin-left: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  opacity: 0.75;
+}
+.d-seg--scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.d-seg--scroll button { flex: none; }
+
+/* Тихая кнопка (§6.5): без кромки и фона. */
+.d-btn--quiet,
+.d-btn--quiet:hover {
+  border-color: transparent;
+  background: transparent;
+}
+.d-btn--quiet:hover { text-decoration: underline; }
+
+/* «⋯» строки: без кромки, по месту. */
+.d-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-h3);
+  line-height: 1;
+  cursor: pointer;
+}
+.d-dots:hover { color: var(--ink); background: var(--tab); }
+
+/* Строка «Нет папки» (блок «Кампании», Q5): тонкая линия, малиновая метка,
+   кнопка контуром. */
+.d-nofold {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+}
+.d-nofold p { flex: 1; min-width: 0; margin: 0; }
+.d-nofold .d-mark { flex: none; }
+@media (max-width: 700px) {
+  .d-nofold { flex-wrap: wrap; }
+  .d-nofold p { flex-basis: 100%; }
+  .d-nofold .d-btn { margin-left: auto; }
+}
+
+/* Голова раздела во вкладке: заголовок 26 с пояснением, действия справа. */
+.d-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-5) var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+.d-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.d-head__sub {
+  margin-top: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-label);
+}
+.d-head__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+}
+
+/* Голова группы строк: плашка, мета, действие справа, под ней кромка. */
+.d-gh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  margin: var(--sp-7) 0 0;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--edge-width) solid var(--edge);
+}
+.d-gh:first-child { margin-top: 0; }
+.d-gh > .d-plate { flex: none; margin: 0; white-space: nowrap; }
+.d-gh > .d-end {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+}
+
+/* Полоса фактов: подпись машинописью над значением Oswald. */
+.d-strip {
+  display: flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid var(--line);
+}
+.d-strip > div {
+  padding: var(--sp-3) var(--sp-6);
+  border-right: 1px solid var(--line);
+}
+.d-strip > div:last-child { border-right: 0; }
+.d-strip small {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.d-strip b {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Колонка разделов «Д» (EntityTabWorkspace plates, макеты Camp-Story/World):
+   без карточки, категории и группы — плашками, выбранный пункт — кромкой
+   слева и тенью чернил. */
+.entity-tab-workspace--plates .entity-tab-workspace__nav {
+  flex-basis: 210px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.etw-nav-phone-acts { display: none; }
+@media (max-width: 900px) {
+  .entity-tab-workspace--plates .entity-tab-workspace__nav { flex: none; }
+}
+@media (max-width: 700px) {
+  .entity-tab-workspace--plates.entity-tab-workspace--phone-select .entity-tab-workspace__nav { display: flex; gap: var(--sp-4); }
+  .entity-tab-workspace--plates .etw-nav-select { flex: 1; min-width: 0; height: 44px; border: var(--edge-width) solid var(--edge); border-radius: 0; background: var(--field); }
+  .entity-tab-workspace--phone-select .etw-nav-phone-acts { display: flex; flex: none; gap: var(--sp-3); }
+  .etw-nav-phone-acts .d-btn { width: 48px; height: 44px; padding: 0; justify-content: center; }
+  .etw-nav-phone-acts .etw-phone-hide { display: none; }
+}
+.entity-tab-workspace--plates .etw-nav-list { gap: 0; }
+.entity-tab-workspace--plates .d-plate { margin: 0 0 var(--sp-3); }
+.entity-tab-workspace--plates .etw-nav-section + .etw-nav-section > .d-plate:first-child {
+  margin-top: var(--sp-6);
+  padding-top: 0;
+}
+.etw-plate-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+.entity-tab-workspace--plates .etw-nav-items { margin: 0; gap: 0; }
+.entity-tab-workspace--plates :is(.etw-nav-header, .etw-nav-item) {
+  min-height: 32px;
+  padding: var(--sp-2) var(--sp-4);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-data);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.entity-tab-workspace--plates :is(.etw-nav-header, .etw-nav-item) .nav-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-2);
+}
+.entity-tab-workspace--plates :is(.etw-nav-header, .etw-nav-item):hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.entity-tab-workspace--plates :is(.etw-nav-header, .etw-nav-item).is-selected {
+  border-left-color: var(--edge);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+}
+.entity-tab-workspace--plates .etw-nav-item-label { white-space: normal; }
+.entity-tab-workspace--plates :is(.etw-nav-count, .etw-nav-item-count) {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+}
+.entity-tab-workspace--plates .is-selected :is(.etw-nav-count, .etw-nav-item-count) { color: var(--ink); }
+/* «Мы здесь» — квадратик кислоты в кромке (макет Camp-Story). */
+.entity-tab-workspace--plates .etw-nav-dot,
+.entity-tab-workspace--plates .is-selected .etw-nav-dot {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  background: var(--acid);
+}
+.entity-tab-workspace--plates .etw-nav-sfooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--line);
+}
+.entity-tab-workspace--plates .etw-nav-footer { border-top: 0; }
+.entity-tab-workspace--seg > .d-seg { margin-bottom: var(--sp-6); }
+
+/* Поле ввода «Д» (§6.6) без обёртки: кромка 2 px, фон поля. */
+.d-input {
+  height: 36px;
+  min-width: 0;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--ink);
+  font-size: var(--fs-data);
+}
+/* Галочка «Д»: квадрат с кромкой, отмеченная — заливка чернилами. */
+.d-check {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.d-check:checked { background: var(--ink); border-color: var(--ink); }
+.d-check:checked::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  margin-top: -3px;
+  border: solid var(--sheet);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+.d-check:focus-visible { outline: var(--edge-width) solid var(--edge); outline-offset: 2px; }

@@ -1,0 +1,47 @@
+/* «Кампании» в «Д» (макет Camp-List): лист в рамке тушью, сегмент групп со
+   счётчиком справа; активные — плитки 4 в ряд с плашкой системы на обложке,
+   прочие — строки: имя Oswald, система, сыграно, месяц последней игры. */
+.list-page--d .list-page__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  padding: var(--sp-7) var(--sp-8) var(--sp-8);
+  border: var(--edge-width) solid var(--edge);
+  outline: 1px solid var(--edge);
+  outline-offset: -8px;
+  background: var(--sheet);
+  container-type: inline-size;
+}
+.list-page--d .list-page__content { display: flex; flex-direction: column; gap: var(--sp-7); }
+.list-page__dbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
+.list-page__dbar .d-seg button { height: 40px; }
+.list-page__group-new { display: flex; gap: var(--sp-3); }
+.list-page__count { margin-left: auto; font-size: var(--fs-meta); }
+
+.campaign-dtiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-5); }
+.campaign-dtile { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); text-decoration: none; }
+.campaign-dtile:hover { border-color: var(--edge); }
+.campaign-dtile__cover { position: relative; display: block; aspect-ratio: 16 / 10; border-top: 4px solid var(--edge); background: var(--ph) center / cover no-repeat; }
+.campaign-dtile__cover.is-empty { background-image: radial-gradient(circle, var(--ink) 1.4px, transparent 1.6px); background-size: 7px 7px; background-color: var(--ph); }
+.campaign-dtile__cover .d-plate { position: absolute; top: var(--sp-4); left: var(--sp-4); margin: 0; }
+.campaign-dtile__body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5) var(--sp-5) var(--sp-6); }
+.campaign-dtile__body b { font: 500 var(--fs-h3)/1.2 var(--font-display); }
+.campaign-dtile__body .d-mono { font-size: var(--fs-micro); }
+.campaign-dtiles__add { align-self: flex-start; }
+
+.campaign-drows { margin: 0; padding: 0; border-top: var(--edge-width) solid var(--edge); list-style: none; }
+.campaign-drows li { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-5); align-items: center; padding: var(--sp-4) var(--sp-3); border-bottom: 1px solid var(--line); }
+.campaign-drows a { overflow: hidden; color: var(--ink); font: 500 var(--fs-h3)/1.2 var(--font-display); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-drows a:hover { text-decoration: underline; }
+.campaign-drows .d-mono { font-size: var(--fs-micro); }
+
+@container (max-width: 620px) { .campaign-dtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 400px) {
+  .campaign-drows li { grid-template-columns: minmax(0, 1fr) auto; }
+  .campaign-drows li > .d-mono:nth-of-type(1) { grid-column: 1; }
+  .campaign-drows li > .d-mono:nth-of-type(3) { display: none; }
+  .list-page__count { margin-left: 0; }
+}
+@media (max-width: 700px) {
+  .list-page--d .list-page__sheet { padding: var(--sp-6) var(--sp-5); outline-offset: -6px; }
+}
