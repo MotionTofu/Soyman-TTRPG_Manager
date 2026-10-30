@@ -1,0 +1,25 @@
+/* Записи кампании в «Д» (макет Camp-Player-Notes): сегмент и поиск одной
+   полосой, карточки 1 px в две колонки — дата машинописью, «⋯», заголовок
+   Oswald, текст телом; упоминания — маркером типа (MentionText). */
+.entry-cards { display: flex; flex-direction: column; gap: var(--sp-6); container-type: inline-size; }
+.entry-cards > .d-head { margin-bottom: 0; }
+.entry-cards__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
+.entry-cards__search { width: 260px; height: 40px; margin-left: auto; }
+.entry-cards__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5); align-items: start; }
+.entry-cards__empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-5); padding: var(--sp-7); border: 1px dashed var(--line); }
+.entry-cards__empty p { margin: 0; max-width: 62ch; }
+.entry-cards__add { align-self: flex-start; }
+
+.entry-card { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; padding: var(--sp-5) var(--sp-6) var(--sp-6); border: 1px solid var(--line); background: var(--sheet); }
+.entry-card > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.entry-card > header .d-mono { font-size: var(--fs-micro); }
+.entry-card h3 { margin: 0; color: var(--ink); font: 500 var(--fs-h3)/1.25 var(--font-display); overflow-wrap: anywhere; }
+.entry-card__text { color: var(--ink-2); font: 400 var(--fs-data)/1.5 var(--font-body); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.entry-card__text.is-open { display: block; }
+.entry-card.is-editing { grid-column: 1 / -1; border-color: var(--edge); }
+.entry-card__acts { display: flex; gap: var(--sp-4); }
+
+@container (max-width: 640px) {
+  .entry-cards__grid { grid-template-columns: minmax(0, 1fr); }
+  .entry-cards__search { width: 100%; margin-left: 0; }
+}

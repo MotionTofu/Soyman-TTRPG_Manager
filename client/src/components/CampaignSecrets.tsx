@@ -5,7 +5,6 @@ import { dataKeys } from "../data/entities";
 import { campaignPaths, secretAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
-import { RowDeleteButton } from "./RowIconButtons";
 import "./campaign-secrets.css";
 import type { CampaignGrouped, StorySecret } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
@@ -95,7 +94,7 @@ export function CampaignSecrets({
   const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
 
   return (
-    <div className="stack">
+    <div className="campaign-check-groups">
       {showOwn && (
         <SecretGroup
           title="Тайны кампании"
@@ -161,20 +160,24 @@ const SecretGroup = memo(function SecretGroup({
 
   const revealed = items.filter((s) => s.state?.revealed === 1).length;
 
+  // По образцу вех (макет Camp-Story-Milestones): своих досок у тайн нет.
+  const [adding, setAdding] = useState(items.length === 0);
   return (
-    <section className="card res-group campaign-secret-group">
+    <section className="campaign-check-group">
       {confirmDialog}
-      <header className="res-group__band">
-        <span className="res-group__title">{title}</span>
-        <span className="res-group__count">раскрыто {revealed} из {items.length}</span>
-      </header>
-      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
-        {items.map((s) => (
-          <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
-        ))}
-        {/* §1.11a — как и у вех: приглашение здесь уже есть, это форма ниже. */}
-        <AddSecretForm arcId={arcId} campaignId={campaignId} />
+      <div className="d-gh">
+        <h3 className="d-plate">{title}</h3>
+        <span className="d-note">раскрыто {revealed} из {items.length}</span>
+        <span className="d-end">
+          <button type="button" className={`d-btn d-btn--sm${arcId == null ? "" : " d-btn--quiet"}`} onClick={() => setAdding((v) => !v)}>
+            + Своя запись
+          </button>
+        </span>
       </div>
+      {items.map((s) => (
+        <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
+      ))}
+      {adding && <AddSecretForm arcId={arcId} campaignId={campaignId} />}
     </section>
   );
 });
@@ -190,28 +193,28 @@ const SecretRow = memo(function SecretRow({
   onToggle: (s: StorySecret, revealed: boolean) => void;
   onRemove: (s: StorySecret) => void;
 }) {
+  const done = secret.state?.revealed === 1;
   return (
-    <div className="campaign-secret-row">
-      <div>
-        <input
-          type="checkbox"
-          checked={secret.state?.revealed === 1}
-          onChange={(e) => onToggle(secret, e.target.checked)}
-        />{" "}
-        <strong>{secret.title}</strong>
-        <span className="muted"> · {SECRET_KIND_LABELS[secret.kind] ?? secret.kind}</span>
-        {secret.campaign_id && <span className="badge tag"> запись кампании</span>}
-        {secret.content && (
-          <div className="muted reading-text">
-            <MentionText text={secret.content} />
-          </div>
-        )}
+    <div className={`campaign-check-row${done ? " is-done" : ""}`}>
+      <input
+        type="checkbox"
+        className="d-check"
+        checked={done}
+        aria-label={`«${secret.title}» раскрыта`}
+        onChange={(e) => onToggle(secret, e.target.checked)}
+      />
+      <div className="campaign-check-row__text">
+        <b>{secret.title}</b>
+        {secret.content && <MentionText text={secret.content} />}
       </div>
+      <span className="d-mono">{SECRET_KIND_LABELS[secret.kind] ?? secret.kind}</span>
       {/* Тайна приключения принадлежит сеттингу — её видят все его кампании,
           поэтому удалять её отсюда нельзя. */}
-      {!!secret.campaign_id && (
-        <RowDeleteButton label={`Удалить «${secret.title}»`} onClick={() => onRemove(secret)} />
-      )}
+      {secret.campaign_id ? (
+        <button type="button" className="d-dots" aria-label={`Удалить «${secret.title}»`} onClick={() => onRemove(secret)}>
+          ✕
+        </button>
+      ) : <span />}
     </div>
   );
 });
@@ -243,19 +246,19 @@ const AddSecretForm = memo(function AddSecretForm({
   }
 
   return (
-    <div className="row">
-      <select value={kind} onChange={(e) => setKind(e.target.value)}>
+    <form className="campaign-check-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <select className="d-select" value={kind} onChange={(e) => setKind(e.target.value)}>
         {SECRET_KINDS.map((k) => (
           <option key={k.key} value={k.key}>
             {k.label}
           </option>
         ))}
       </select>
-      <input placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <input placeholder="Содержание" value={content} onChange={(e) => setContent(e.target.value)} />
-      <button className="primary" onClick={add}>
-        + Своя запись
+      <input className="d-input" placeholder="Название" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className="d-input" placeholder="Содержание" value={content} onChange={(e) => setContent(e.target.value)} />
+      <button type="submit" className="d-btn d-btn--sm" disabled={!title.trim()}>
+        Добавить
       </button>
-    </div>
+    </form>
   );
 });

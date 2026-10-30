@@ -46,25 +46,33 @@ export function ExtraPayments({ campaignId, roster, currency }: { campaignId: nu
   }
 
   return (
-    <section className="paper-list-group">
-      <h3 className="paper-group__head">
-        Сверх сессий <span className="paper-group__count">· {rows.length}</span>
-      </h3>
+    // Макет Camp-More («Оплата»): плашка с числом и «+ Сверх сессий» справа,
+    // строки — дата машинописью, за что, от кого, сумма числом Oswald.
+    <section className="extra-payments">
+      <div className="d-gh">
+        <h3 className="d-plate">Сверх сессий</h3>
+        <span className="d-note">{rows.length}</span>
+        {!adding && (
+          <span className="d-end">
+            <button type="button" className="d-btn d-btn--sm" onClick={() => setAdding(true)}>
+              + Сверх сессий
+            </button>
+          </span>
+        )}
+      </div>
       {rows.length > 0 && (
-        <ul className="paper-rows">
+        <ul className="extra-payments__rows">
           {rows.map((r) => (
             <li key={r.id}>
-              <span className="paper-rows__main">
-                {formatDateKeyRu(r.date)}
-                {r.player_name ? ` · ${r.player_name}` : ""}
-                {r.comment ? ` — ${r.comment}` : ""}
-              </span>
-              <span className="paper-rows__sub">
+              <span className="d-mono">{formatDateKeyRu(r.date)}</span>
+              <span>{r.comment || "—"}</span>
+              <span>{r.player_name ?? ""}</span>
+              <b>
                 {r.amount} {currency}
-              </span>
+              </b>
               <button
                 type="button"
-                className="comp-mini"
+                className="d-dots"
                 title="Убрать запись"
                 onClick={() => void run(labelled("Сверх сессий", () => write.del(`/campaigns/extra-payments/${r.id}`)), { affects })}
               >
@@ -101,11 +109,7 @@ export function ExtraPayments({ campaignId, roster, currency }: { campaignId: nu
             Отмена
           </button>
         </div>
-      ) : (
-        <button type="button" className="editable-card-add" onClick={() => setAdding(true)}>
-          + Сверх сессий
-        </button>
-      )}
+      ) : null}
     </section>
   );
 }

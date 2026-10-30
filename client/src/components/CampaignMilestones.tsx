@@ -90,7 +90,7 @@ export function CampaignMilestones({
   const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
 
   return (
-    <div className="stack">
+    <div className="campaign-check-groups">
       {showOwn && (
         <MilestoneGroup
           title="Вехи кампании"
@@ -154,23 +154,26 @@ const MilestoneGroup = memo(function MilestoneGroup({
 
   const achieved = items.filter((m) => m.state?.achieved === 1).length;
 
+  // Группа «Д» (макет Camp-Story-Milestones): плашка, «N из M», справа
+  // «+ Новая веха»; форма раскрывается по ней, а у пустой группы открыта сразу
+  // (§1.11a: тело пустой секции создания — приглашение).
+  const [adding, setAdding] = useState(items.length === 0);
   return (
-    <section className="card res-group campaign-milestone-group">
+    <section className="campaign-check-group">
       {confirmDialog}
-      <header className="res-group__band">
-        <span className="res-group__title">{title}</span>
-        <span className="res-group__count">{achieved} из {items.length}</span>
-      </header>
-      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
-        {items.map((m) => (
-          <MilestoneRow key={m.id} milestone={m} onToggle={toggle} onRemove={remove} />
-        ))}
-        {/* §1.11a: пустое тело секции создания — это приглашение к действию, а
-            не строка «пока пусто». Приглашение здесь уже есть — форма ниже с
-            кнопкой «+ Своя веха»; отдельный EmptyState был бы вторым зовом
-            рядом с первым, а приглушённая строка не звала вовсе. */}
-        <AddMilestoneForm arcId={arcId} campaignId={campaignId} />
+      <div className="d-gh">
+        <h3 className="d-plate">{title}</h3>
+        <span className="d-note">{achieved} из {items.length}</span>
+        <span className="d-end">
+          <button type="button" className={`d-btn d-btn--sm${arcId == null ? "" : " d-btn--quiet"}`} onClick={() => setAdding((v) => !v)}>
+            {arcId == null ? "+ Новая веха" : "+ Веха приключения"}
+          </button>
+        </span>
       </div>
+      {items.map((m) => (
+        <MilestoneRow key={m.id} milestone={m} onToggle={toggle} onRemove={remove} />
+      ))}
+      {adding && <AddMilestoneForm arcId={arcId} campaignId={campaignId} />}
     </section>
   );
 });
@@ -185,30 +188,28 @@ const MilestoneRow = memo(function MilestoneRow({
   onRemove: (m: StoryMilestone) => void;
 }) {
   const m = milestone;
+  const done = m.state?.achieved === 1;
   return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <span>
-        <input
-          type="checkbox"
-          checked={m.state?.achieved === 1}
-          onChange={(e) => onToggle(m, e.target.checked)}
-        />{" "}
-        <strong>{m.title}</strong>
-        {m.campaign_id && <span className="badge tag"> веха кампании</span>}
-        {m.scene_name && <span className="muted"> · сцена «{m.scene_name}»</span>}
-        {m.description && (
-          <div className="muted reading-text">
-            <MentionText text={m.description} />
-          </div>
-        )}
-      </span>
+    <div className={`campaign-check-row${done ? " is-done" : ""}`}>
+      <input
+        type="checkbox"
+        className="d-check"
+        checked={done}
+        aria-label={`Веха «${m.title}» достигнута`}
+        onChange={(e) => onToggle(m, e.target.checked)}
+      />
+      <div className="campaign-check-row__text">
+        <b>{m.title}</b>
+        {m.description && <MentionText text={m.description} />}
+      </div>
+      <span className="d-mono">{m.scene_name ? `сцена «${m.scene_name}»` : ""}</span>
       {/* Веху приключения удалять отсюда нельзя: она принадлежит сеттингу и
           видна всем его кампаниям. */}
-      {!!m.campaign_id && (
-        <button className="danger" onClick={() => onRemove(m)}>
+      {m.campaign_id ? (
+        <button type="button" className="d-dots" aria-label={`Удалить веху «${m.title}»`} onClick={() => onRemove(m)}>
           ✕
         </button>
-      )}
+      ) : <span />}
     </div>
   );
 });
@@ -239,16 +240,12 @@ const AddMilestoneForm = memo(function AddMilestoneForm({
   }
 
   return (
-    <div className="row">
-      <input placeholder="Название вехи" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <input
-        placeholder="Описание"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-      />
-      <button className="primary" onClick={add}>
-        + Своя веха
+    <form className="campaign-check-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <input className="d-input" placeholder="Название вехи" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className="d-input" placeholder="Описание" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <button type="submit" className="d-btn d-btn--sm" disabled={!title.trim()}>
+        Добавить
       </button>
-    </div>
+    </form>
   );
 });

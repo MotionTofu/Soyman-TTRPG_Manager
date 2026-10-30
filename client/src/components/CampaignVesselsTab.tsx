@@ -25,9 +25,20 @@ export function CampaignVesselsTab({ campaignId }: { campaignId: number }) {
 
   return (
     <section className="vessels-tab">
-      <h2 className="paper-group__head">
-        Транспорт <span className="paper-group__count">· {active.length}</span>
-      </h2>
+      {/* Голова «Д» по общим правилам блока: заголовок, число, кислотная кнопка. */}
+      <div className="d-head">
+        <div>
+          <h2>Транспорт</h2>
+          <div className="d-head__sub">{active.length ? `${active.length} в строю` : "корабли партии"}</div>
+        </div>
+        {!adding && (
+          <div className="d-head__acts">
+            <button type="button" className="d-btn d-btn--primary" onClick={() => setAdding(true)}>
+              + Корабль
+            </button>
+          </div>
+        )}
+      </div>
       {list.data && active.length === 0 && !adding && (
         <EmptyState title="Кораблей пока нет" hint="Корабль кампании заводится на основе судна из компендиума: посты и чертёж — его, экипаж и груз — свои." />
       )}
@@ -38,13 +49,7 @@ export function CampaignVesselsTab({ campaignId }: { campaignId: number }) {
           ))}
         </ul>
       )}
-      {adding ? (
-        <AddVessel campaignId={campaignId} onDone={() => setAdding(false)} />
-      ) : (
-        <button type="button" className="editable-card-add" onClick={() => setAdding(true)}>
-          + Корабль
-        </button>
-      )}
+      {adding && <AddVessel campaignId={campaignId} onDone={() => setAdding(false)} />}
       {archived.length > 0 && (
         <details className="paper-fold">
           <summary>
