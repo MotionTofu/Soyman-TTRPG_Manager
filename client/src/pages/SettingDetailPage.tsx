@@ -13,12 +13,10 @@ import {
   settingPagePaths,
   timelineAffects,
 } from "../data/settingPage";
-import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { GeographyRegistry } from "../components/setting/GeographyRegistry";
 import { LocationRootGraph } from "../components/LocationRootGraph";
 import { LocationMiller } from "../components/LocationMiller";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
-import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
 import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
 import { ImportantDatesSection } from "../components/ImportantDatesSection";
 import { EntityPage } from "../components/EntityPage";
@@ -26,7 +24,6 @@ import { useTabState } from "../hooks/useTabState";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
-import type { InworldDatedItem } from "../components/InworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { Timeline } from "../components/Timeline";
 import { SettingCycles } from "../components/SettingCycles";
@@ -59,6 +56,13 @@ import { SettingWorldTab } from "../components/setting/SettingWorldTab";
 import { SettingGalleryTab } from "../components/setting/SettingGalleryTab";
 import { SettingLibraryTab } from "../components/setting/SettingLibraryTab";
 import { SettingAudioTab } from "../components/setting/SettingAudioTab";
+import { Chronicle, ChronicleEra, ChronicleNowLine, ChronicleToneChips } from "../components/chronicle/Chronicle";
+import { ChronicleRow } from "../components/chronicle/ChronicleRow";
+import { ChronicleMonthStrip } from "../components/chronicle/ChronicleMonthStrip";
+import { seasonAt, timeTone, type TimeTone } from "../components/chronicle/time";
+import { importSettingFile } from "../components/setting/importSetting";
+import { plural } from "../sceneKinds";
+import { loadSideLayout, SIDE_NARROW_EVENT } from "../layout/sideLayout";
 import type { InstanceSummary } from "../components/workbooks/model";
 import "./setting-profile.css";
 
@@ -130,6 +134,19 @@ export function SettingDetailPage() {
   // заливаются сразу по выбору файла — не откладываются до «Сохранить» рядом с
   // именем, как было раньше.
   const [tab, selectTab] = useTabState(TABS, "Обзор", TAB_ALIASES);
+  // Хронике (ось и полоса месяцев) нужна ширина — правая панель приложения
+  // свёрнута, пока вкладка открыта; уходя, возвращаем как было.
+  const wideTab = tab === "Хроника";
+  useEffect(() => {
+    if (!wideTab || loadSideLayout().narrow) return;
+    // Такт отсрочки: при открытии страницы сразу на Хронике панель ещё не
+    // подписалась на событие.
+    const t = setTimeout(() => window.dispatchEvent(new CustomEvent(SIDE_NARROW_EVENT, { detail: true })));
+    return () => {
+      clearTimeout(t);
+      window.dispatchEvent(new CustomEvent(SIDE_NARROW_EVENT, { detail: false }));
+    };
+  }, [wideTab]);
   const [showExport, setShowExport] = useState(false);
   // Редкие действия «Обзора» переехали под «…» (Q2): окна по пунктам меню.
   const [dialog, setDialog] = useState<"name" | "groups" | "links" | null>(null);
@@ -147,17 +164,24 @@ export function SettingDetailPage() {
   const settingGroupIds = settingGroups.map((g) => g.id);
 
   const calendar = useSettingCalendar(settingId);
+  const pinnedYear = settingState.data?.pinned_calendar_year ?? null;
+  const pinnedMonth = settingState.data?.pinned_calendar_month ?? null;
+  // «Сейчас» сеттинга — закреплённый месяц (дня нет).
+  const pinnedNow = useMemo(() => (pinnedYear != null && pinnedMonth != null ? { year: pinnedYear, month: pinnedMonth } : null), [pinnedYear, pinnedMonth]);
   const calendarEvents = useResource<SettingCalendarEvent[]>(onChronicle ? chroniclePaths.events(settingId) : null).data ?? NO_EVENTS;
   const cycles = useResource<SettingCycle[]>(onChronicle ? chroniclePaths.cycles(settingId) : null).data ?? NO_CYCLES;
   const importantDates = useResource<ImportantDate[]>(onChronicle ? chroniclePaths.importantDates(settingId) : null).data ?? NO_DATES;
   const eras = useResource<SettingCalendarEra[]>(onChronicle ? chroniclePaths.eras(settingId) : null).data ?? NO_ERAS;
   const timelines = useResource<SettingCalendarTimeline[]>(onChronicle ? chroniclePaths.timelines(settingId) : null).data ?? NO_TIMELINES;
   const [chronicleTab, setChronicleTab] = useState<"Хронология" | "Повторяющиеся" | "Циклы" | "Календарь">("Хронология");
-  const [chronicleFilter, setChronicleFilter] = useState<"all" | "important" | "upcoming" | "cancelled" | "visible">("all");
+  // Тона времени (макет Set-Chronicle): отменённые по умолчанию свёрнуты.
+  const [chronicleTones, setChronicleTones] = useState<Set<TimeTone>>(() => new Set<TimeTone>(["past", "on", "up"]));
+  const [onlyImportant, setOnlyImportant] = useState(false);
+  const [onlyVisible, setOnlyVisible] = useState(false);
+  const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
   const [chronicleSort, setChronicleSort] = useState<"chronological" | "important-first">("chronological");
   // Порядок дат (просьба владельца 2026-10-02): старые сверху или новые сверху.
   const [chronicleNewestFirst, setChronicleNewestFirst] = useState(false);
-  const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
   );
@@ -212,11 +236,9 @@ export function SettingDetailPage() {
     return calendarEvents.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
   }, [calendarEvents, worldFilter]);
   const sortedFilteredEvents = useMemo(() => {
-    let events = filteredCalendarEvents;
-    if (chronicleFilter === "important") events = events.filter((e) => e.important);
-    else if (chronicleFilter === "upcoming") events = events.filter((e) => e.status === "upcoming");
-    else if (chronicleFilter === "cancelled") events = events.filter((e) => e.status === "cancelled");
-    else if (chronicleFilter === "visible") events = events.filter((e) => e.visible_to_players);
+    let events = filteredCalendarEvents.filter((e) => chronicleTones.has(timeTone(e, pinnedNow)));
+    if (onlyImportant) events = events.filter((e) => e.important);
+    if (onlyVisible) events = events.filter((e) => e.visible_to_players);
     if (selectedEraId != null) {
       const era = eras.find((e) => e.id === selectedEraId);
       if (era) {
@@ -232,7 +254,7 @@ export function SettingDetailPage() {
     if (chronicleSort === "important-first") sorted.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || byDate(a, b));
     else sorted.sort(byDate);
     return sorted;
-  }, [filteredCalendarEvents, chronicleFilter, chronicleSort, chronicleNewestFirst, selectedEraId, eras]);
+  }, [filteredCalendarEvents, chronicleTones, onlyImportant, onlyVisible, pinnedNow, chronicleSort, chronicleNewestFirst, selectedEraId, eras]);
   // Эпохи текущего таймлайна (общий — timeline_id = null). Раньше фильтр по
   // эпохам появлялся только у отдельного таймлайна, и эпохи общего было не выбрать.
   const timelineEras = useMemo(
@@ -243,7 +265,7 @@ export function SettingDetailPage() {
   const axisRef = useRef<HTMLDivElement>(null);
   // Скрытое файловое поле импорта — его щёлкает пункт «Импорт» из меню «…».
   const importInputRef = useRef<HTMLInputElement>(null);
-  const calendarRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
 
   async function createTimeline() {
@@ -336,26 +358,7 @@ export function SettingDetailPage() {
   }
 
   async function importSetting(file: File) {
-    const data = JSON.parse(await file.text());
-    // Файл может нести сотни мегабайт картинок. Спрашиваем один раз здесь, а
-    // не гоняем флаг через маршрут молча: раскладывать их по хранилищу человек
-    // не обязан, а всё остальное содержимое приезжает в любом случае.
-    const heavy = file.size > 5 * 1024 * 1024;
-    let withImages = true;
-    if (heavy) {
-      const ok = await confirm({
-        title: "Импорт с изображениями?",
-        message: `Файл весит ${(file.size / 1024 / 1024).toFixed(0)} МБ — похоже, в нём есть изображения.\n\nОК — поставить вместе с картинками.\nОтмена — только тексты и связи, без картинок.`,
-        confirmLabel: "С картинками",
-        cancelLabel: "Без картинок",
-      });
-      withImages = ok;
-    }
-    // Повтор импорта поставил бы второй сеттинг — поэтому без «Повторить».
-    const created = await run(() => write.post<Setting>(`/settings/import${withImages ? "" : "?images=0"}`, data), {
-      affects: [{ kind: "setting" }],
-      retry: false,
-    });
+    const created = await importSettingFile(file, confirm, run);
     if (created) navigate(`/settings/${created.id}`);
   }
 
@@ -423,16 +426,6 @@ export function SettingDetailPage() {
     );
     if (!done && previous) queryClient.setQueryData(key, previous);
   }
-
-  const calendarItems: InworldDatedItem[] = calendarEvents.map((e) => ({
-    id: `event-${e.id}`,
-    year: e.inworld_year,
-    month: e.inworld_month,
-    day: e.inworld_day,
-    label: e.title,
-    kind: "event",
-    important: !!e.important,
-  }));
 
   function openCreateEventModal(year: number, month: number, day: number) {
     setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "", recurrence: "none" });
@@ -594,36 +587,6 @@ export function SettingDetailPage() {
           { affects: chronicleEventAffects(settingId), retry: false }
         );
     if (done) setEventModal(null);
-  }
-
-  function handleCalendarDayContextMenu(year: number, month: number, day: number, x: number, y: number) {
-    setCalendarMenu({
-      x,
-      y,
-      items: [{ label: "Создать событие", onClick: () => openCreateEventModal(year, month, day) }],
-    });
-  }
-
-  function handleCalendarItemContextMenu(item: InworldDatedItem, x: number, y: number) {
-    const ev = calendarEvents.find((e) => `event-${e.id}` === item.id);
-    if (!ev) return;
-    setCalendarMenu({
-      x,
-      y,
-      items: [
-        { label: "Редактировать", onClick: () => openEditEventModal(ev) },
-        { label: "Удалить", danger: true, onClick: () => deleteCalendarEvent(ev.id) },
-      ],
-    });
-  }
-
-  function toggleEventExpanded(eventId: number) {
-    setExpandedEvents((prev) => {
-      const next = new Set(prev);
-      if (next.has(eventId)) next.delete(eventId);
-      else next.add(eventId);
-      return next;
-    });
   }
 
   // C-P0-2: гвард для background — аналог SettingsListPage (safeBackgroundImage + isSafeImageUrl)
@@ -805,201 +768,262 @@ export function SettingDetailPage() {
       {tab === "Сокровищница" && <ArtifactsTab settingId={settingId} />}
       {tab === "Граф связей" && <SettingGraphTab settingId={settingId} />}
 
-      {tab === "Хроника" && (
-        <div className="stack">
-          {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) ? (
-            <div ref={axisRef} className="card stack">
-            <Timeline
-              focusDate={timelineFocus}
-              events={filteredCalendarEvents.map((e) => ({
-                id: e.id, title: e.title,
-                year: e.inworld_year, month: e.inworld_month, day: e.inworld_day,
-                precision: e.date_precision,
-                year_end: e.inworld_year_end, month_end: e.inworld_month_end, day_end: e.inworld_day_end,
-                status: e.status, important: e.important === 1,
-              }))}
-              months={calendar?.months ?? []}
-              era={calendar?.era ?? ""}
-              eras={eras}
-              selectedTimelineId={selectedTimelineId}
-              now={
-                setting.pinned_calendar_year != null && setting.pinned_calendar_month != null
-                  ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
-                  : null
-              }
-              below={(view) => (
-                <SettingCyclePanel
-                  settingId={settingId}
-                  cycles={cycles}
-                  view={view}
-                  onAddCycle={() => setChronicleTab("Циклы")}
-                  onDayMenu={(day, x, y) => {
-                    const date = dateFromElapsed(day, calendar?.months ?? []);
+      {tab === "Хроника" && (() => {
+        const hasAny = calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0;
+        const months = calendar?.months ?? [];
+        const toned = calendarEvents.map((e) => ({ ev: e, tone: timeTone(e, pinnedNow) }));
+        const nearest = toned
+          .filter((x) => x.tone === "up")
+          .map((x) => x.ev)
+          .sort((a, b) => a.inworld_year - b.inworld_year || a.inworld_month - b.inworld_month || a.inworld_day - b.inworld_day)[0];
+        const offCount = calendarEvents.filter((e) => e.status === "cancelled").length;
+        const shown = sortedFilteredEvents.length;
+        return (
+          <Chronicle
+            nowLine={
+              <ChronicleNowLine
+                now={pinnedNow}
+                months={months}
+                source="закреплённый месяц"
+                season={pinnedNow ? seasonAt(cycles, months, pinnedNow.year, pinnedNow.month) : null}
+                ongoing={toned.filter((x) => x.tone === "on").length}
+                nearest={pinnedNow && nearest ? { title: nearest.title, year: nearest.inworld_year, month: nearest.inworld_month, day: nearest.inworld_day } : null}
+                empty="«Сейчас» не закреплено — закрепите месяц в календаре внизу."
+              />
+            }
+            actions={
+              <>
+                <button type="button" className="d-btn" onClick={() => setChronicleTab("Календарь")}>
+                  + Эпоха
+                </button>
+                <button type="button" className="d-btn d-btn--primary" onClick={() => setCreatingEvent(true)}>
+                  + Событие
+                </button>
+              </>
+            }
+            axis={
+              hasAny ? (
+                <div ref={axisRef}>
+                  <Timeline
+                    focusDate={timelineFocus}
+                    events={filteredCalendarEvents.map((e) => ({
+                      id: e.id, title: e.title,
+                      year: e.inworld_year, month: e.inworld_month, day: e.inworld_day,
+                      precision: e.date_precision,
+                      year_end: e.inworld_year_end, month_end: e.inworld_month_end, day_end: e.inworld_day_end,
+                      status: e.status, important: e.important === 1,
+                    }))}
+                    months={months}
+                    era={calendar?.era ?? ""}
+                    eras={eras}
+                    selectedTimelineId={selectedTimelineId}
+                    now={pinnedNow}
+                    below={(view) => (
+                      <SettingCyclePanel
+                        settingId={settingId}
+                        cycles={cycles}
+                        view={view}
+                        onAddCycle={() => setChronicleTab("Циклы")}
+                        onDayMenu={(day, x, y) => {
+                          const date = dateFromElapsed(day, months);
+                          setCalendarMenu({
+                            x,
+                            y,
+                            items: [{ label: "Событие на этот день", onClick: () => openCreateEventModal(date.year, date.month, date.day) }],
+                          });
+                        }}
+                      />
+                    )}
+                    importantDates={importantDates}
+                    onMoveEvent={moveCalendarEvent}
+                    onNowChange={(date) => pinSettingCalendar(date)}
+                    onEventClick={(id) => navigate(`/events/${id}`)}
+                    action={
+                      timelineEras.length > 0 ? (
+                        <select className="chr-select" aria-label="Эпоха" value={selectedEraId ?? ""} onChange={(e) => setSelectedEraId(e.target.value ? Number(e.target.value) : null)}>
+                          <option value="">Все эпохи</option>
+                          {timelineEras.map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name} ({e.start_year})
+                            </option>
+                          ))}
+                        </select>
+                      ) : undefined
+                    }
+                    leftAction={
+                      <span className="chr-axis__tl">
+                        <span className="d-note">таймлайн</span>
+                        <select className="chr-select" aria-label="Таймлайн" value={selectedTimelineId ?? ""} onChange={(e) => setSelectedTimelineId(e.target.value ? Number(e.target.value) : null)}>
+                          <option value="">Общий</option>
+                          {timelines.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => setAddingTimeline((v) => !v)} title="Новый таймлайн">
+                          +
+                        </button>
+                        {addingTimeline && (
+                          <>
+                            <input className="chr-input" placeholder="Название таймлайна" value={timelineName} onChange={(e) => setTimelineName(e.target.value)} />
+                            <button type="button" className="d-btn d-btn--sm" onClick={createTimeline}>
+                              OK
+                            </button>
+                            <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => { setAddingTimeline(false); setTimelineName(""); }}>
+                              ✕
+                            </button>
+                          </>
+                        )}
+                        {selectedTimelineId != null && (
+                          <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => deleteTimeline(selectedTimelineId)} title="Удалить таймлайн">
+                            ✕
+                          </button>
+                        )}
+                      </span>
+                    }
+                  />
+                </div>
+              ) : undefined
+            }
+            sections={[
+              { id: "Хронология", label: "Хронология", count: calendarEvents.length },
+              { id: "Повторяющиеся", label: "Повторяющиеся", count: importantDates.length },
+              { id: "Циклы", label: "Циклы", count: cycles.length },
+              { id: "Календарь", label: "Календарь" },
+            ]}
+            section={chronicleTab}
+            onSection={setChronicleTab}
+            search={chronicleTab === "Хронология" ? { value: worldFilter, onChange: setWorldFilter, placeholder: "Поиск по хронике" } : undefined}
+            tools={
+              chronicleTab === "Хронология" ? (
+                <>
+                  <button
+                    type="button"
+                    className="d-btn d-btn--sm d-btn--quiet"
+                    aria-pressed={chronicleSort === "important-first"}
+                    onClick={() => setChronicleSort((v) => (v === "important-first" ? "chronological" : "important-first"))}
+                  >
+                    {chronicleSort === "important-first" ? "★ Важные сверху" : "☆ Важные сверху"}
+                  </button>
+                  <button type="button" className="d-btn d-btn--sm d-btn--quiet" aria-pressed={chronicleNewestFirst} title="Порядок дат" onClick={() => setChronicleNewestFirst((v) => !v)}>
+                    {chronicleNewestFirst ? "↓ Новые сверху" : "↑ Старые сверху"}
+                  </button>
+                </>
+              ) : undefined
+            }
+            chips={
+              chronicleTab === "Хронология" && calendarEvents.length > 0 ? (
+                <ChronicleToneChips
+                  tones={chronicleTones}
+                  onToggle={(t) =>
+                    setChronicleTones((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(t)) next.delete(t);
+                      else next.add(t);
+                      return next;
+                    })
+                  }
+                  offCount={offCount}
+                  extra={
+                    <>
+                      <button type="button" className={`chr-tc${onlyImportant ? " is-on" : ""}`} aria-pressed={onlyImportant} onClick={() => setOnlyImportant((v) => !v)}>
+                        ★ Важные
+                      </button>
+                      <button type="button" className={`chr-tc${onlyVisible ? " is-on" : ""}`} aria-pressed={onlyVisible} onClick={() => setOnlyVisible((v) => !v)}>
+                        Видно игрокам
+                      </button>
+                    </>
+                  }
+                  summary={`${shown} ${plural(shown, "событие", "события", "событий")}${shown !== calendarEvents.length ? ` из ${calendarEvents.length}` : ""}${!chronicleTones.has("off") && offCount > 0 ? " · отменённые свёрнуты" : ""}`}
+                />
+              ) : undefined
+            }
+            calendar={
+              months.length > 0 ? (
+                <ChronicleMonthStrip
+                  ref={calendarRef}
+                  months={months}
+                  weekdays={calendar?.weekdays ?? []}
+                  events={toned}
+                  now={pinnedNow}
+                  pin={{ pinned: pinnedNow, onPin: (at) => void pinSettingCalendar(at) }}
+                  seasonOf={(y, m) => seasonAt(cycles, months, y, m)}
+                  focus={calendarFocus}
+                  onDayMenu={(year, month, day, x, y, dayEvents) =>
                     setCalendarMenu({
                       x,
                       y,
-                      items: [{ label: "Событие на этот день", onClick: () => openCreateEventModal(date.year, date.month, date.day) }],
-                    });
-                  }}
+                      items: [
+                        { label: "Событие на этот день", onClick: () => openCreateEventModal(year, month, day) },
+                        ...dayEvents.map((ev) => ({ label: `Править «${ev.title}»`, onClick: () => openEditEventModal(ev) })),
+                      ],
+                    })
+                  }
                 />
-              )}
-              importantDates={importantDates}
-              onMoveEvent={moveCalendarEvent}
-              onNowChange={(date) => pinSettingCalendar(date)}
-              onEventClick={(id) => navigate(`/events/${id}`)}
-              action={
-                <>
-                  <button className="primary" onClick={() => setCreatingEvent(true)}>+ Создать событие</button>
-                  <button onClick={() => setChronicleTab("Календарь")}>+ Эпоху</button>
-                </>
-              }
-              leftAction={
-                <span className="row" style={{ gap: 4, alignItems: "center" }}>
-                  <select
-                    value={selectedTimelineId ?? ""}
-                    onChange={(e) => setSelectedTimelineId(e.target.value ? Number(e.target.value) : null)}
-                    style={{ fontSize: "var(--fs-meta)" }}
-                  >
-                    <option value="">Общий</option>
-                    {timelines.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <button className="comp-mini" onClick={() => setAddingTimeline((v) => !v)} title="Новый таймлайн">+</button>
-                  {addingTimeline && (
-                    <span className="row" style={{ gap: 4 }}>
-                      <input placeholder="Название таймлайна" value={timelineName} onChange={(e) => setTimelineName(e.target.value)} style={{ width: 180 }} />
-                      <button className="comp-mini primary" onClick={createTimeline}>OK</button>
-                      <button className="comp-mini" onClick={() => { setAddingTimeline(false); setTimelineName(""); }}>✕</button>
-                    </span>
-                  )}
-                  {selectedTimelineId != null && (
-                    <button className="comp-mini danger" onClick={() => deleteTimeline(selectedTimelineId)} title="Удалить таймлайн">✕</button>
-                  )}
-                </span>
-              }
-            />
-          </div>
-          ) : null}
-
-          <div className="chronicle-split">
-            <div className="chronicle-left stack">
-              {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
-              {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) && (
-                <div className="tabs">
-                  {(["Хронология", "Повторяющиеся", "Циклы", "Календарь"] as const).map((t) => (
-                    <button key={t} className={chronicleTab === t ? "active" : ""} onClick={() => setChronicleTab(t)}>{t}</button>
-                  ))}
-                </div>
-              )}
-
-              {chronicleTab === "Хронология" && (
-                <div className="stack chronicle-scroll">
-                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                    <input placeholder="Поиск по хронике: название, описание" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 220px" }} />
-                    {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
-                    <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{sortedFilteredEvents.length} из {calendarEvents.length}</span>
-                  </div>
-                  <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                    {(["all", "important", "upcoming", "cancelled", "visible"] as const).map((f) => (
-                      <button key={f} className={`comp-mini ${chronicleFilter === f ? "primary" : ""}`} onClick={() => setChronicleFilter(f)}>
-                        {{ all: "Все", important: "Важные", upcoming: "Предстоящие", cancelled: "Отменённые", visible: "Видимые игрокам" }[f]}
-                      </button>
-                    ))}
-                    <span style={{ margin: "0 4px" }}>|</span>
-                    <button className={`comp-mini ${chronicleSort === "chronological" ? "primary" : ""}`} onClick={() => setChronicleSort("chronological")}>Хронология</button>
-                    <button className={`comp-mini ${chronicleSort === "important-first" ? "primary" : ""}`} onClick={() => setChronicleSort("important-first")}>Важные сверху</button>
-                    <button
-                      className="comp-mini"
-                      aria-pressed={chronicleNewestFirst}
-                      title="Порядок дат"
-                      onClick={() => setChronicleNewestFirst((v) => !v)}
-                    >
-                      {chronicleNewestFirst ? "↓ Новые сверху" : "↑ Старые сверху"}
-                    </button>
-                    {timelineEras.length > 0 && (
-                      <>
-                        <span style={{ margin: "0 4px" }}>|</span>
-                        <select
-                          className="comp-mini"
-                          value={selectedEraId ?? ""}
-                          onChange={(e) => setSelectedEraId(e.target.value ? Number(e.target.value) : null)}
-                          style={{ fontSize: "var(--fs-meta)" }}
-                        >
-                          <option value="">Все эпохи</option>
-                          {timelineEras.map((e) => (
-                            <option key={e.id} value={e.id}>{e.name} ({e.start_year})</option>
-                          ))}
-                        </select>
-                      </>
-                    )}
-                  </div>
-                  <div className="stack">
-                    {sortedFilteredEvents.map((ev, i) => {
-                      // Q4 (2026-10-02): в хронологическом порядке события
-                      // делятся заголовками эпох.
-                      const era = chronicleSort === "chronological" ? eraOfYear(ev.inworld_year) : undefined;
-                      const prev = i > 0 && chronicleSort === "chronological" ? eraOfYear(sortedFilteredEvents[i - 1].inworld_year) : undefined;
-                      return (
-                      <Fragment key={ev.id}>
-                      {era && era !== prev && <div className="chronicle-era">{era.name} <span>· с {era.start_year} года</span></div>}
-                      <SettingChronicleEventRow
-                        ev={ev} href={`/events/${ev.id}`}
-                        expanded={expandedEvents.has(ev.id)} calendar={calendar}
-                        onToggleExpand={toggleEventExpanded}
-                        onToggleImportant={toggleEventImportant}
-                        onToggleVisible={toggleEventVisible}
-                        onEdit={openEditEventModal} onDelete={deleteCalendarEvent}
-                        onShowOnAxis={(e) => { setTimelineFocus({ year: e.inworld_year, month: e.inworld_month, day: e.inworld_day }); setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }}
-                        onShowOnCalendar={() => { calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+              ) : undefined
+            }
+          >
+            {chronicleTab === "Хронология" && (
+              <div className="chr-list">
+                {sortedFilteredEvents.map((ev, i) => {
+                  // Q4 (2026-10-02): в хронологическом порядке события
+                  // делятся заголовками эпох.
+                  const era = chronicleSort === "chronological" ? eraOfYear(ev.inworld_year) : undefined;
+                  const prev = i > 0 && chronicleSort === "chronological" ? eraOfYear(sortedFilteredEvents[i - 1].inworld_year) : undefined;
+                  return (
+                    <Fragment key={ev.id}>
+                      {era && era !== prev && <ChronicleEra name={era.name} note={`с ${era.start_year} года`} />}
+                      <ChronicleRow
+                        ev={ev}
+                        tone={timeTone(ev, pinnedNow)}
+                        months={months}
+                        href={`/events/${ev.id}`}
+                        onToggleVisible={() => toggleEventVisible(ev)}
+                        menu={[
+                          { label: "Править", onClick: () => openEditEventModal(ev) },
+                          { label: ev.important ? "Убрать из важных" : "В важные", onClick: () => toggleEventImportant(ev) },
+                          {
+                            label: "Показать на оси",
+                            onClick: () => {
+                              setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day });
+                              setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+                            },
+                          },
+                          {
+                            label: "Показать в календаре",
+                            onClick: () => {
+                              setCalendarFocus({ year: ev.inworld_year, month: ev.inworld_month });
+                              setTimeout(() => calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+                            },
+                          },
+                          { label: "Удалить", danger: true, onClick: () => void deleteCalendarEvent(ev.id) },
+                        ]}
                       />
-                      </Fragment>
-                      );
-                    })}
-                    {sortedFilteredEvents.length === 0 && <p className="muted">{calendarEvents.length === 0 ? "Событий пока нет." : "Ничего не найдено."}</p>}
-                  </div>
-                </div>
-              )}
+                    </Fragment>
+                  );
+                })}
+                {sortedFilteredEvents.length === 0 && <p className="muted">{calendarEvents.length === 0 ? "Событий пока нет." : "Ничего не найдено."}</p>}
+              </div>
+            )}
 
-              {chronicleTab === "Повторяющиеся" && (
-                <ImportantDatesSection
-                  settingId={settingId}
-                  months={calendar?.months}
-                  weekdays={calendar?.weekdays}
-                  now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }}
-                />
-              )}
-
-              {chronicleTab === "Циклы" && (
-                <SettingCycles
-                  settingId={settingId}
-                  months={calendar?.months}
-                  now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }}
-                />
-              )}
-
-              {chronicleTab === "Календарь" && (
-                <SettingCalendarSettings settingId={settingId} />
-              )}
-            </div>
-
-            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
-              <SettingCalendarEditor
+            {chronicleTab === "Повторяющиеся" && (
+              <ImportantDatesSection
                 settingId={settingId}
-                items={calendarItems}
-                pinned={
-                  setting.pinned_calendar_year != null && setting.pinned_calendar_month != null
-                    ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
-                    : null
-                }
-                onPin={pinSettingCalendar}
-                onDayContextMenu={handleCalendarDayContextMenu}
-                onItemContextMenu={handleCalendarItemContextMenu}
+                months={calendar?.months}
+                weekdays={calendar?.weekdays}
+                now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }}
               />
-            </div>
-          </div>
-        </div>
-        )}
+            )}
+
+            {chronicleTab === "Циклы" && (
+              <SettingCycles settingId={settingId} months={calendar?.months} now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }} />
+            )}
+
+            {chronicleTab === "Календарь" && <SettingCalendarSettings settingId={settingId} />}
+          </Chronicle>
+        );
+      })()}
 
       {tab === "Галерея" && <SettingGalleryTab setting={setting} />}
       {tab === "Библиотека" && <SettingLibraryTab settingId={settingId} />}

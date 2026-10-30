@@ -1051,20 +1051,6 @@ button.set-gch:hover { background: var(--tab); }
    крошках. Каркас ставит его первой строкой листа — прячем. Локальная
    копия: после слияния ds-pilot — проп `hideIdent` у EntityPage. */
 .entity-page[data-entity-type="setting"] > .paper-sheet > .entity-page__ident { display: none; }
-/* Тона времени — общие с Хроникой кампании (решение по Хронике 2026-10-23). */
-.entity-page[data-entity-type="setting"] {
-  --t-past: #a87b2c;
-  --t-on: #3c8456;
-  --t-up: #3d69a3;
-  --t-off: #8a8f8c;
-}
-[data-theme-mode="dark"] .entity-page[data-entity-type="setting"] {
-  --t-past: #d2a253;
-  --t-on: #62b57e;
-  --t-up: #7da4db;
-  --t-off: #7a817e;
-}
-
 /* ── Обзор (Set-Overview) ──────────────────────────────────────────── */
 .set-hero {
   display: grid;

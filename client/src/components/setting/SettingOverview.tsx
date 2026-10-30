@@ -10,7 +10,7 @@ import { useAuthenticatedFileUrl } from "../../utils/fileUrl";
 import { useSettingCalendar } from "../../hooks/useSettingCalendar";
 import { plural } from "../../sceneKinds";
 import { MAX_SIGNATURES, PASSPORT_FIELDS, PASSPORT_NOT_THIS, worldAffects, worldPath } from "../../settingWorld";
-import { pinnedMonthName, seasonAt } from "./settingNow";
+import { monthName as monthNameOf, seasonAt } from "../chronicle/time";
 import type { Campaign, Setting, SettingCycle, SettingEntry, SettingPassport } from "../../types";
 
 // «Обзор» сеттинга в «Д» (макет Set-Overview, блок «Сеттинги» 2026-10-30):
@@ -125,7 +125,7 @@ export function SettingOverview({
   const passportEmpty = !passportText(passport).trim();
 
   const months = calendar?.months ?? [];
-  const monthName = pinned ? pinnedMonthName(months, setting.pinned_calendar_month) : null;
+  const monthName = pinned && months.length ? monthNameOf(months, setting.pinned_calendar_month!) : null;
   const season = pinned ? seasonAt(cycles, months, setting.pinned_calendar_year!, setting.pinned_calendar_month!) : null;
   const toneScale = [passport.tone, passport.scale].filter((v) => v?.trim()).join(" · ");
 
@@ -168,7 +168,7 @@ export function SettingOverview({
               {pinned ? (
                 <>
                   {monthName ?? `${setting.pinned_calendar_month}-й месяц`} {setting.pinned_calendar_year}
-                  {season && ` · ${season.charAt(0).toUpperCase()}${season.slice(1)}`} <span className="d-note">· закреплён</span>
+                  {season && ` · ${season}`} <span className="d-note">· закреплён</span>
                 </>
               ) : (
                 <span className="muted">месяц не закреплён — в «Хронике»</span>
