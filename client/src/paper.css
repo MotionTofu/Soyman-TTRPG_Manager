@@ -1128,7 +1128,7 @@
   }
   .entity-page--paper > .paper-sheet {
     --sheet-edge: 20px;
-    padding: var(--sp-3);
+    padding: var(--sp-5);
   }
   .entity-page--paper > .tabs {
     padding: 0 var(--sp-4);

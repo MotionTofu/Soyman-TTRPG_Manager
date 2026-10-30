@@ -6,12 +6,14 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { LegacyWorldExplorationEntry, Player, WorldExplorationKind } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { TypeGlyph } from "./TypeGlyph";
+import "./campaign/campaign-d.css";
 
-const KIND_TABS: { kind: WorldExplorationKind; label: string; addLabel: string; extraLabel: string | null }[] = [
-  { kind: "being", label: "Существа", addLabel: "+ Добавить существо", extraLabel: "Место обитания" },
-  { kind: "location", label: "Локации", addLabel: "+ Добавить локацию", extraLabel: "Обитатели" },
-  { kind: "item", label: "Предметы", addLabel: "+ Добавить предмет", extraLabel: null },
-  { kind: "event", label: "События", addLabel: "+ Добавить событие", extraLabel: null },
+const KIND_TABS: { kind: WorldExplorationKind; label: string; addLabel: string; extraLabel: string | null; glyph: string }[] = [
+  { kind: "being", label: "Существа", addLabel: "+ Добавить существо", extraLabel: "Место обитания", glyph: "being" },
+  { kind: "location", label: "Локации", addLabel: "+ Добавить локацию", extraLabel: "Обитатели", glyph: "location" },
+  { kind: "item", label: "Предметы", addLabel: "+ Добавить предмет", extraLabel: null, glyph: "artifact" },
+  { kind: "event", label: "События", addLabel: "+ Добавить событие", extraLabel: null, glyph: "setting_event" },
 ];
 
 interface Props {
@@ -59,41 +61,64 @@ export function WorldExplorationTab({ campaignId }: Props) {
 
   const activeTab = KIND_TABS.find((t) => t.kind === kind)!;
 
+  // В «Д» — как «Путевые заметки» у Мастера (макет Party-Journals): виды
+  // колонкой слева со знаком типа, записи строками справа.
   return (
-    <div className="stack">
+    <div className="exploration">
       {confirmDialog}
-      <div className="tabs">
-        {KIND_TABS.map((t) => (
-          <button key={t.kind} className={kind === t.kind ? "active" : ""} onClick={() => setKind(t.kind)}>
-            {t.label}
+      <div className="d-head">
+        <div>
+          <h2>Исследование мира</h2>
+          <div className="d-head__sub">общая картотека партии</div>
+        </div>
+        <div className="d-head__acts">
+          <button type="button" className="d-btn d-btn--primary" onClick={addEntry} disabled={!selfPlayerId}>
+            {activeTab.addLabel}
           </button>
-        ))}
+        </div>
       </div>
-
-      <div className="grid-cards">
-        {entries.map((entry) => (
-          <EntryCard
-            key={entry.id}
-            entry={entry}
-            extraLabel={activeTab.extraLabel}
-            expanded={expandedId === entry.id}
-            onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            campaignId={campaignId}
-            onRemove={() => removeEntry(entry.id)}
-          />
-        ))}
+      <div className="campaign-journals">
+        <nav className="campaign-col" aria-label="Разделы картотеки">
+          <h3 className="d-plate">Разделы</h3>
+          {KIND_TABS.map((t) => (
+            <button key={t.kind} type="button" className={kind === t.kind ? "is-on" : ""} aria-pressed={kind === t.kind} onClick={() => setKind(t.kind)}>
+              <TypeGlyph type={t.glyph} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
+        <section>
+          <div className="d-gh">
+            <h3 className="d-plate">{activeTab.label}</h3>
+            <span className="d-note">{entries.length}</span>
+          </div>
+          {entries.length === 0 ? (
+            <p className="muted">Пока ничего не добавлено.</p>
+          ) : (
+            <ul className="exploration__list">
+              {entries.map((entry) => (
+                <EntryCard
+                  key={entry.id}
+                  entry={entry}
+                  glyph={activeTab.glyph}
+                  extraLabel={activeTab.extraLabel}
+                  expanded={expandedId === entry.id}
+                  onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+                  campaignId={campaignId}
+                  onRemove={() => removeEntry(entry.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
-      {entries.length === 0 && <p className="muted">Пока ничего не добавлено.</p>}
-
-      <button onClick={addEntry} style={{ alignSelf: "flex-start" }} disabled={!selfPlayerId}>
-        {activeTab.addLabel}
-      </button>
     </div>
   );
 }
 
 function EntryCard({
   entry,
+  glyph,
   extraLabel,
   expanded,
   onToggle,
@@ -101,6 +126,7 @@ function EntryCard({
   onRemove,
 }: {
   entry: LegacyWorldExplorationEntry;
+  glyph: string;
   extraLabel: string | null;
   expanded: boolean;
   onToggle: () => void;
@@ -142,27 +168,22 @@ function EntryCard({
   const avatarCrop = useImageCrop("square", handleAvatarChange);
 
   return (
-    <div className="card stack">
-      <div className="row" style={{ justifyContent: "space-between", cursor: "pointer" }} onClick={onToggle}>
-        <div className="row">
-          {entry.avatar_image_url ? (
-            <img src={entry.avatar_image_url} alt="" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
-          ) : (
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--bg-elevated)" }} />
-          )}
-          <strong>{entry.name || "Без имени"}</strong>
-        </div>
-        <span className="muted">{expanded ? "▾" : "▸"}</span>
-      </div>
+    <li className={expanded ? "is-open" : ""}>
+      <button type="button" className="exploration__head" aria-expanded={expanded} onClick={onToggle}>
+        <span className="exploration__pic">
+          {entry.avatar_image_url ? <img src={entry.avatar_image_url} alt="" /> : <TypeGlyph type={glyph} />}
+        </span>
+        <span className="exploration__name">
+          <b>{entry.name || "Без имени"}</b>
+          {!expanded && entry.description && <span>{entry.description}</span>}
+        </span>
+        {extraLabel && entry.extra_field && <span className="d-mono">{entry.extra_field}</span>}
+      </button>
 
       {expanded && (
-        <div className="stack" onClick={(e) => e.stopPropagation()}>
-          <label className="avatar-upload-label" title={IMAGE_HINT} style={{ alignSelf: "flex-start" }}>
-            {entry.avatar_image_url ? (
-              <img src={entry.avatar_image_url} alt="" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--bg-elevated)" }} />
-            )}
+        <div className="exploration__form">
+          <label className="avatar-upload-label exploration__photo" title={IMAGE_HINT}>
+            {entry.avatar_image_url ? <img src={entry.avatar_image_url} alt="" /> : <TypeGlyph type={glyph} />}
             <span className="avatar-upload-hint">{uploading ? "Загрузка…" : "Сменить фото"}</span>
             <input
               type="file"
@@ -172,28 +193,31 @@ function EntryCard({
             />
           </label>
           {avatarCrop.modal}
-
-          <label>
-            Имя
-            <input value={name} onChange={(e) => setName(e.target.value)} onBlur={save} />
-          </label>
-          <label>
-            Описание
-            <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} onBlur={save} />
-          </label>
-          {extraLabel && (
+          <div className="exploration__fields">
             <label>
-              {extraLabel}
-              <input value={extraField} onChange={(e) => setExtraField(e.target.value)} onBlur={save} />
+              <span className="d-mono">Имя</span>
+              <input className="d-input" value={name} onChange={(e) => setName(e.target.value)} onBlur={save} />
             </label>
-          )}
-          {entry.player_name && <span className="muted">Добавил(а): {entry.player_name}</span>}
-          <button className="danger" onClick={onRemove} style={{ alignSelf: "flex-start" }}>
-            Удалить
-          </button>
+            <label>
+              <span className="d-mono">Описание</span>
+              <textarea className="d-input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} onBlur={save} />
+            </label>
+            {extraLabel && (
+              <label>
+                <span className="d-mono">{extraLabel}</span>
+                <input className="d-input" value={extraField} onChange={(e) => setExtraField(e.target.value)} onBlur={save} />
+              </label>
+            )}
+            <div className="exploration__acts">
+              {entry.player_name && <span className="d-note">добавил(а): {entry.player_name}</span>}
+              <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={onRemove}>
+                Удалить
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </li>
   );
 }
 

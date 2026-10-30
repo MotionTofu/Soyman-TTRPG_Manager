@@ -112,6 +112,8 @@ export interface EntityPageProps {
    *  не зависит никогда — она прокручивается вбок (см. `.tabs` в index.css),
    *  и порядок вкладок один и тот же на любом окне. */
   hiddenTabs?: readonly string[];
+  /** Подпись справа у пункта «Ещё» — счётчик или «должны 2». */
+  hiddenTabHints?: Partial<Record<string, string>>;
   /** «+» в конце полосы — завести вкладку. Нет — кнопки нет. */
   onAddTab?: () => void;
   /** Подсказка к «+»: что именно он заводит. */
@@ -141,6 +143,9 @@ export interface EntityPageProps {
   /** На бумаге имя со значками — над ярлыками на всех вкладках, а не на
    *  листе первой (сессия, макет Roll-Prep, Q1 2026-10-29). */
   titleAbove?: boolean;
+  /** На бумаге не ставить имя первой строкой листа: вкладка рисует свою
+   *  голову (профиль кампании глазами игрока, макет Camp-Player-Overview). */
+  hideIdent?: boolean;
   children: ReactNode;
 }
 
@@ -157,6 +162,7 @@ export function EntityPage({
   backdrop,
   tabs,
   hiddenTabs,
+  hiddenTabHints,
   onAddTab,
   addTabLabel,
   tab,
@@ -170,6 +176,7 @@ export function EntityPage({
   paper,
   sheet,
   titleAbove,
+  hideIdent,
   children,
 }: EntityPageProps) {
   // Меню «…» открывается под своей кнопкой, а не там, где щёлкнули: у кнопки
@@ -347,7 +354,7 @@ export function EntityPage({
         <ContextMenu
           x={tabsMenuAt.x}
           y={tabsMenuAt.y}
-          items={restTabs.map((t) => ({ label: t, onClick: () => onTab?.(t) }))}
+          items={restTabs.map((t) => ({ label: t, hint: hiddenTabHints?.[t], onClick: () => onTab?.(t) }))}
           onClose={() => setTabsMenuAt(null)}
         />
       )}
@@ -380,7 +387,7 @@ export function EntityPage({
         <ListSkeleton variant="paragraph" label="Загрузка" />
       ) : paper ? (
         <div className="paper-sheet paper-scope">
-          {!titleAbove && (!shownTabs.length || tab === shownTabs[0].id) && ident}
+          {!titleAbove && !hideIdent && (!shownTabs.length || tab === shownTabs[0].id) && ident}
           {children}
         </div>
       ) : (

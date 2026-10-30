@@ -1,0 +1,301 @@
+/* Вкладки профиля кампании в «Д» (макеты Camp-*, блок «Кампании» 2026-10-30).
+   Общие детали — d-system.css; здесь — то, что есть только у кампании. */
+
+/* Метка «только чтение» — штрих, машинопись. */
+.campaign-readonly {
+  padding: var(--sp-1) var(--sp-4);
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font: 400 var(--fs-micro)/1.3 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Колонка-список слева (авторы, разделы): пункт — строка, выбранный —
+   кромкой слева и тенью чернил (как .entity-tab-workspace--plates). */
+.campaign-col { display: flex; flex-direction: column; min-width: 0; }
+.campaign-col > .d-plate { align-self: flex-start; margin-bottom: var(--sp-4); }
+.campaign-col > button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 40px;
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 var(--fs-data)/1.15 var(--font-body);
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+.campaign-col > button:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.campaign-col > button.is-on {
+  border-left-color: var(--edge);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-weight: 600;
+}
+.campaign-col > button small { display: block; color: var(--muted); font-size: var(--fs-micro); font-weight: 400; }
+.campaign-col > button .type-glyph { width: 16px; height: 16px; flex: none; }
+.campaign-col__n { margin-left: auto; color: var(--muted); font: 400 var(--fs-micro)/1 var(--font-mono); }
+.campaign-col hr { width: 100%; margin: var(--sp-5) 0; border: 0; border-top: 1px solid var(--line); }
+
+/* Партия · Напоминания (макет Camp-Party-Reminders). */
+.campaign-reminders__list { margin: 0; padding: 0; list-style: none; }
+.campaign-reminders__list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 28px;
+  gap: var(--sp-5);
+  align-items: center;
+  min-height: 46px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-lead);
+}
+.campaign-reminders__list .nav-icon { width: 18px; height: 18px; color: var(--ink-2); }
+.campaign-reminders__text { white-space: pre-wrap; }
+.campaign-reminders__empty { margin: var(--sp-5) 0; color: var(--muted); }
+.campaign-reminders__add { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-top: var(--sp-6); }
+.campaign-reminders__add .d-field { flex: 1 1 260px; height: 40px; }
+.campaign-reminders__add .d-select { height: 40px; }
+.campaign-reminders__preview {
+  max-width: 520px;
+  margin-top: var(--sp-7);
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line);
+}
+.campaign-reminders__preview select {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.campaign-reminders__preview ul { margin: var(--sp-3) 0 0; padding-left: var(--sp-7); }
+.campaign-reminders__preview li { margin: var(--sp-1) 0; font-size: var(--fs-data); }
+
+/* Партия · Путевые заметки (макет Camp-Party-Journals). */
+.campaign-journals { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-7); }
+.campaign-journals__search { width: 220px; height: 30px; }
+.campaign-journals__list { margin: 0; padding: 0; list-style: none; }
+.campaign-journals__list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--sp-5);
+  padding: var(--sp-5) 0;
+  border-bottom: 1px solid var(--line);
+}
+.campaign-journals__glyph .type-glyph { width: 20px; height: 20px; margin-top: var(--sp-1); color: var(--ink-2); }
+.campaign-journals__list b { display: block; margin-top: var(--sp-1); font: 500 var(--fs-h3)/1.2 var(--font-display); }
+.campaign-journals__list p { max-width: 72ch; margin: var(--sp-2) 0 0; font-size: var(--fs-data); line-height: 1.45; white-space: pre-wrap; }
+
+@media (max-width: 700px) {
+  .campaign-journals { grid-template-columns: minmax(0, 1fr); }
+  .campaign-journals .campaign-col { flex-direction: row; overflow-x: auto; }
+  .campaign-journals .campaign-col > .d-plate { display: none; }
+  .campaign-journals .campaign-col > button { flex: none; border-left: 0; border-bottom: 3px solid transparent; }
+  .campaign-journals .campaign-col > button.is-on { border-bottom-color: var(--edge); }
+  .campaign-journals__search { width: 100%; }
+  .campaign-reminders__list li { grid-template-columns: 20px minmax(0, 1fr) 28px; }
+  .campaign-reminders__list li .d-mono { grid-column: 2; grid-row: 2; }
+}
+
+/* Сессии (макет Camp-Sessions): список слева, календарь месяца справа. */
+.campaign-sessions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: var(--sp-7);
+  align-items: start;
+}
+.campaign-sessions__list { display: flex; flex-direction: column; gap: var(--sp-7); min-width: 0; }
+.session-overdue .session-rows { margin-top: var(--sp-2); }
+/* Ближайшая — главный блок: дата колонкой, название, «Готовить» кислотой и
+   малая «+ Запланировать ещё» под ней. */
+.session-next {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
+  gap: var(--sp-6);
+  align-items: center;
+  padding: var(--sp-6) var(--sp-7);
+}
+.session-next__date { display: flex; flex-direction: column; align-items: center; }
+.session-next__date b { font: 500 var(--fs-h2)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.session-next__date span { color: var(--muted); font: 400 var(--fs-micro)/1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.session-next__main { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.session-next__title { color: var(--ink); font: 500 var(--fs-h2)/1.05 var(--font-display); text-decoration: none; }
+.session-next__title:hover { text-decoration: underline; }
+.session-next__later { color: var(--muted); font-size: var(--fs-meta); }
+.session-next__later a { color: var(--ink-2); }
+.session-next__acts { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); }
+.session-next--empty { grid-template-columns: minmax(0, 1fr) auto; }
+.session-next--empty p { margin: 0; font-size: var(--fs-body); }
+
+.session-month__head { margin: var(--sp-5) 0 0; font-weight: 400; }
+.session-rows { margin: 0; padding: 0; list-style: none; }
+.session-rows .session-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto auto 28px;
+  gap: var(--sp-5);
+  align-items: center;
+  min-height: 56px;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.session-rows .session-row__date { display: flex; flex-direction: column; align-items: center; }
+.session-rows .session-row__day { font: 500 var(--fs-h2)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.session-rows .session-row__month { color: var(--muted); font: 400 var(--fs-micro)/1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.session-row__main { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.session-rows .session-row__head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.session-rows .session-row__link { color: var(--ink); font: 500 var(--fs-h3)/1.2 var(--font-display); text-decoration: none; }
+.session-rows .session-row__link:hover { text-decoration: underline; }
+.session-rows .session-rows__line { overflow: hidden; color: var(--ink-2); font-size: var(--fs-label); white-space: nowrap; text-overflow: ellipsis; }
+/* Хвосты строки — метками машинописью; долг — малиновой (§2.2). */
+.session-rows .session-row__meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-3); }
+.session-rows .session-row__meta > span:not(:empty) {
+  padding: var(--sp-0) var(--sp-3);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font: 400 var(--fs-micro)/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.session-rows .session-row__meta > span:has(.session-row__debt) { border: var(--edge-width) solid var(--mark); color: var(--mark); }
+.session-rows .session-row__debt { color: inherit; }
+.session-rows .session-row__action { grid-column: 4; }
+.session-rows .session-row__menu { grid-column: 5; }
+
+/* Календарь месяца: запланирована — рамка, сыграна — заливка чернилами,
+   ждёт разбора — малиновая рамка; сегодня — кислотная черта. */
+.campaign-sessions__cal { padding: var(--sp-6); }
+.campaign-sessions__cal .mini-calendar-legend { display: none; }
+.campaign-sessions__cal .mini-calendar-day.has-one { border: var(--edge-width) solid var(--edge); border-radius: 0; background: transparent; }
+.campaign-sessions__cal .mini-calendar-day.has-one.st-held { background: var(--ink); border-color: var(--ink); }
+.campaign-sessions__cal .mini-calendar-day.has-one.st-held .mini-calendar-num { color: var(--sheet); }
+.campaign-sessions__cal .mini-calendar-day.has-one.st-overdue { border-color: var(--mark); }
+.campaign-sessions__cal .mini-calendar-day.today .mini-calendar-num { color: var(--ink); border-bottom: 3px solid var(--acid); }
+.campaign-sessions__cal .mini-calendar-num { font: 400 var(--fs-label)/1 var(--font-display); }
+.campaign-sessions__legend { display: flex; flex-direction: column; gap: var(--sp-3); margin: var(--sp-6) 0 0; padding: 0; list-style: none; font-size: var(--fs-meta); }
+.campaign-sessions__legend li { display: flex; align-items: center; gap: var(--sp-4); }
+.campaign-sessions__legend i { width: 14px; height: 14px; border: var(--edge-width) solid var(--edge); }
+.campaign-sessions__legend i.is-held { background: var(--ink); border-color: var(--ink); }
+.campaign-sessions__legend i.is-overdue { border-color: var(--mark); }
+.campaign-sessions__money { margin: var(--sp-6) 0 0; padding-top: var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-label); }
+.campaign-sessions__money .session-finance__link { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; text-decoration: underline; text-transform: none; letter-spacing: 0; }
+
+@media (max-width: 900px) {
+  .campaign-sessions { grid-template-columns: minmax(0, 1fr); }
+  .session-next { grid-template-columns: 48px minmax(0, 1fr); }
+  .session-next__acts { grid-column: 1 / -1; align-items: stretch; }
+  .session-rows .session-row { grid-template-columns: 40px minmax(0, 1fr) 28px; }
+  .session-rows .session-row__meta { grid-column: 2; justify-content: flex-start; }
+  .session-rows .session-row__action { grid-column: 2; justify-self: start; }
+  .session-rows .session-row__menu { grid-column: 3; grid-row: 1; }
+}
+/* Узкая колонка списка (окно ~1440 с правой панелью): кнопки ближайшей
+   уходят строкой ниже, название не ломается на три строки. */
+.campaign-sessions__list { container-type: inline-size; }
+@container (max-width: 600px) {
+  .session-next { grid-template-columns: 48px minmax(0, 1fr); }
+  .session-next__acts { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+}
+/* Телефон: кнопки ближайшей — во всю ширину под датой. */
+@container (max-width: 400px) {
+  .session-next__acts { grid-column: 1 / -1; flex-direction: column; align-items: stretch; }
+}
+.session-rows .session-row__head { flex-wrap: nowrap; min-width: 0; }
+.session-rows .session-row__head .d-mono { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.session-rows .session-row__link { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+/* Ещё → Оплата (макет Camp-More): условия полосой, «Сверх сессий» строками,
+   справа должники и полученное. */
+.campaign-pay__cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-7); align-items: start; }
+.campaign-pay__main { display: flex; flex-direction: column; gap: var(--sp-7); min-width: 0; }
+.campaign-pay__facts { width: 100%; margin: 0; }
+.campaign-pay__facts > div { flex: 1; }
+.campaign-pay__facts dd { margin: var(--sp-1) 0 0; font: 500 var(--fs-h3)/1.2 var(--font-display); }
+.campaign-pay__aside { display: flex; flex-direction: column; gap: var(--sp-5); }
+.campaign-pay__aside .campaign-debtors { padding: 0; border: 0; }
+.campaign-pay__earned { margin: 0; color: var(--muted); font-size: var(--fs-label); }
+.extra-payments__rows { margin: 0; padding: 0; list-style: none; }
+.extra-payments__rows li {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto auto 28px;
+  gap: var(--sp-5);
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-data);
+}
+.extra-payments__rows .d-mono { font-size: var(--fs-micro); }
+.extra-payments__rows b { font: 500 var(--fs-h3)/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: right; }
+.extra-payments .extra-payment-form { margin-top: var(--sp-5); }
+@media (max-width: 900px) {
+  .campaign-pay__cols { grid-template-columns: minmax(0, 1fr); }
+  .extra-payments__rows li { grid-template-columns: 60px minmax(0, 1fr) auto 28px; }
+  .extra-payments__rows li > span:nth-child(3) { display: none; }
+}
+.campaign-pay__facts dt { color: var(--muted); font: 400 var(--fs-micro)/1.3 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Обзор глазами игрока (макет Camp-Player-Overview). */
+.campaign-player-overview { display: flex; flex-direction: column; gap: var(--sp-6); }
+.campaign-player-overview .d-head { margin: 0; }
+.campaign-player-overview__facts { width: 100%; }
+.campaign-player-overview__facts > div { flex: 1 1 140px; }
+.campaign-player-overview__cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--sp-7); align-items: start; }
+.campaign-player-overview__main { display: flex; flex-direction: column; gap: var(--sp-7); min-width: 0; }
+.campaign-player-overview__reminders { margin: var(--sp-5) 0 0; padding-left: var(--sp-7); font-size: var(--fs-lead); }
+.campaign-player-overview__reminders li { margin: var(--sp-3) 0; }
+.campaign-player-overview__next { display: flex; flex-direction: column; gap: var(--sp-2); }
+.campaign-player-overview__next b { margin-top: var(--sp-4); font: 500 var(--fs-h2)/1.1 var(--font-display); }
+.campaign-player-overview__next span { color: var(--muted); font-size: var(--fs-label); }
+.campaign-player-overview__groups { padding-top: var(--sp-5); border-top: 1px solid var(--line); }
+@media (max-width: 900px) { .campaign-player-overview__cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* «Исследование мира» игрока (по образцу «Путевых заметок»): строка — знак
+   или фото в квадрате с кромкой, имя Oswald, описание строкой, доп. поле
+   машинописью; раскрытая — форма правки полями «Д». */
+.exploration { display: flex; flex-direction: column; gap: var(--sp-6); }
+.exploration__list { margin: 0; padding: 0; list-style: none; }
+.exploration__list > li { border-bottom: 1px solid var(--line); }
+.exploration__head {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: var(--sp-5);
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-4) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+.exploration__head:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.exploration__pic, .exploration__photo { display: grid; place-items: center; overflow: hidden; border: var(--edge-width) solid var(--edge); background: var(--ph); }
+.exploration__pic { width: 48px; height: 48px; }
+.exploration__pic img, .exploration__photo img { width: 100%; height: 100%; object-fit: cover; }
+.exploration__pic .type-glyph { width: 22px; height: 22px; }
+.exploration__name { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.exploration__name b { font: 500 var(--fs-h3)/1.2 var(--font-display); }
+.exploration__name span { overflow: hidden; color: var(--ink-2); font-size: var(--fs-data); text-overflow: ellipsis; white-space: nowrap; }
+.exploration__head .d-mono { font-size: var(--fs-micro); }
+.exploration__form { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--sp-6); padding: var(--sp-3) 0 var(--sp-6); }
+.exploration__photo { position: relative; width: 96px; height: 96px; cursor: pointer; }
+.exploration__photo .type-glyph { width: 36px; height: 36px; }
+.exploration__fields { display: flex; flex-direction: column; gap: var(--sp-4); max-width: 640px; }
+.exploration__fields label { display: flex; flex-direction: column; gap: var(--sp-2); }
+.exploration__fields .d-mono { font-size: var(--fs-micro); }
+.exploration__fields textarea.d-input { height: auto; padding: var(--sp-3) var(--sp-5); font-family: var(--font-body); line-height: 1.45; resize: vertical; }
+.exploration__acts { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+@media (max-width: 700px) {
+  .exploration__form { grid-template-columns: minmax(0, 1fr); }
+}
