@@ -634,13 +634,14 @@ export function SettingDetailPage() {
   );
 
   const isNewSetting = campaigns.length === 0;
-  const tabCount = (n: number | undefined) => (n ? ` · ${n}` : "");
-  const label: Partial<Record<Tab, string>> = {
-    Мир: `Мир${tabCount(counts?.world)}`,
-    География: `География${tabCount(counts?.places)}`,
-    Население: `Население${tabCount(counts ? counts.beings + counts.communities : 0)}`,
-    Хроника: `Хроника${tabCount(counts?.events)}`,
-    Приключения: `Приключения${tabCount(counts?.adventures)}`,
+  // Счётчик ярлыка — машинописью (§6.2); ноль не показывается.
+  const tabCounts: Partial<Record<Tab, number>> = {
+    Мир: counts?.world,
+    География: counts?.places,
+    Население: counts ? counts.beings + counts.communities : 0,
+    Хроника: counts?.events,
+    Приключения: counts?.adventures,
+    Тетрадь: workbooks.length,
   };
   // «Тетрадь» — только когда к сеттингу привязана тетрадь (Q1).
   const available = TABS.filter((t) => t !== "Тетрадь" || workbooks.length > 0);
@@ -680,7 +681,7 @@ export function SettingDetailPage() {
         { label: "Импорт", onClick: () => importInputRef.current?.click() },
         { label: "Архивировать", danger: true, onClick: archiveSetting },
       ]}
-      tabs={shownTabs.map((t) => ({ id: t, label: label[t] ?? t }))}
+      tabs={shownTabs.map((t) => ({ id: t, count: tabCounts[t] || undefined }))}
       hiddenTabs={hiddenTabs}
       tab={tab}
       onTab={(t) => selectTab(t as Tab)}
@@ -776,10 +777,12 @@ export function SettingDetailPage() {
           setting={setting}
           campaigns={campaigns}
           counts={counts}
+          saving={savingFields || savingName}
           savePatch={save}
           onNewCampaign={openCampaignWizard}
           onGenres={() => setGenrePickerOpen(true)}
           onWorld={() => selectTab("Мир")}
+          onGallery={() => selectTab("Галерея")}
         />
       )}
       {campaignWizardOpen && (
