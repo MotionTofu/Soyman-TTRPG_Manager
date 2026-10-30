@@ -5,13 +5,17 @@ import { invalidateAffects } from "../data/entities";
 import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
-import { CampaignCoverTile } from "../components/CampaignCoverTile";
+import { Link } from "react-router-dom";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
-import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
+import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { formatNearestDate } from "../nearestDate";
+import { parseDateKey } from "../utils/date";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
+import "./campaigns-list.css";
 
 // Две вкладки, которых нет у других списков: не группы, а взгляд на список по
 // `campaigns.role` — «эту веду» против «в этой играю». Ключи совпадают с теми,
@@ -84,6 +88,12 @@ export function CampaignsListPage() {
         (c.setting_name ?? "").toLowerCase().includes(qq)
     );
   }, [campaigns, activeTab, groupMemberIds, memberQueries, allMembersKnown, q]);
+  const active = filtered.filter((c) => c.status !== "paused" && c.status !== "completed");
+  const paused = filtered.filter((c) => c.status === "paused");
+  // Завершённые — свежие сверху, по последней игре.
+  const completed = filtered
+    .filter((c) => c.status === "completed")
+    .sort((a, b) => (b.last_played_date ?? "").localeCompare(a.last_played_date ?? ""));
 
 
   return (
@@ -92,8 +102,9 @@ export function CampaignsListPage() {
       <ListPage
         headingSection="campaigns"
         title="Кампании"
-        extraTabs={CAMPAIGN_ROLE_TABS}
-        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        ds
+        extraTabs={CAMPAIGN_ROLE_TABS.map((t) => ({ ...t, count: campaigns.filter((c) => `role:${c.role}` === t.id).length }))}
+        groups={groups.map((g, i) => ({ id: String(g.id), label: g.name, count: memberQueries[i]?.data?.length }))}
         groupsEndpoint="/campaign-groups"
         groupsDeleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
         onGroupsChanged={refreshGroups}
@@ -119,31 +130,38 @@ export function CampaignsListPage() {
         {loading ? (
           <ListSkeleton variant="tiles" label="Загрузка кампаний" />
         ) : (
-          <div className="grid-cards">
-            {filtered.map((c) => (
-              <CampaignCoverTile key={c.id} campaign={c} />
-            ))}
-          {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
-            <button
-              className="card campaign-tile setting-group-empty-add"
-              onClick={() => {
-                const g = groups.find((gr) => gr.id === Number(activeTab));
-                if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-              }}
-            >
-              <div className="campaign-tile-cover cover-halftone">
-                <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                <div className="campaign-tile-scrim" />
-                <span className="group-add-icon"><NavIcon name="adventurers" /></span>
-                <h3 className="campaign-tile-name">+</h3>
-              </div>
-              <div className="campaign-tile-meta">
-                <div className="campaign-tile-system muted">нажми, чтобы добавить кампанию в группу</div>
-              </div>
-            </button>
-          )}
-        </div>
-      )}
+          <>
+            {/* Макет Camp-List: активные — плитками с обложкой, на паузе и
+                завершённые — строками. Пустой раздел не рисуется. */}
+            {active.length > 0 && (
+              <section>
+                <div className="d-gh">
+                  <h3 className="d-plate">Активные</h3>
+                  <span className="d-note">{active.length}</span>
+                </div>
+                <div className="campaign-dtiles">
+                  {active.map((c) => (
+                    <CampaignDTile key={c.id} campaign={c} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {paused.length > 0 && <CampaignRows title="На паузе" list={paused} />}
+            {completed.length > 0 && <CampaignRows title="Завершённые" list={completed} />}
+            {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
+              <button
+                type="button"
+                className="d-btn d-btn--sm campaign-dtiles__add"
+                onClick={() => {
+                  const g = groups.find((gr) => gr.id === Number(activeTab));
+                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                }}
+              >
+                + Кампанию в группу
+              </button>
+            )}
+          </>
+        )}
 
       {!loading && !loadError && filtered.length === 0 && campaigns.length > 0 && (
         <EmptyState kind="search"
@@ -189,5 +207,51 @@ export function CampaignsListPage() {
         />
       )}
     </div>
+  );
+}
+
+const monthYear = new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" });
+
+// Плитка «Д»: обложка с плашкой системы, имя Oswald, ближайшая игра
+// машинописью. Обложка — как у CampaignCoverTile (тот остаётся на Главной).
+function CampaignDTile({ campaign: c }: { campaign: Campaign }) {
+  const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
+  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
+  const authBlob = useAuthenticatedFileUrl(imageUrl);
+  const bg = imageUrl?.startsWith("/files/") ? (authBlob ? `url("${authBlob}")` : undefined) : safeBackgroundImage(imageUrl);
+  const next = c.next_planned_date
+    ? `${formatNearestDate(c.next_planned_date)} · сессия №${(c.held_sessions_count ?? 0) + 1}`
+    : "нет запланированных";
+  return (
+    <Link to={`/campaigns/${c.id}`} className="campaign-dtile" title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}>
+      <span className={`campaign-dtile__cover${bg ? "" : " is-empty"}`} style={bg ? { backgroundImage: bg } : undefined}>
+        {c.system_name && <span className="d-plate">{c.system_name}</span>}
+      </span>
+      <span className="campaign-dtile__body">
+        <b>{c.name}</b>
+        <span className="d-mono">{next}</span>
+      </span>
+    </Link>
+  );
+}
+
+function CampaignRows({ title, list }: { title: string; list: Campaign[] }) {
+  return (
+    <section>
+      <div className="d-gh">
+        <h3 className="d-plate">{title}</h3>
+        <span className="d-note">{list.length}</span>
+      </div>
+      <ul className="campaign-drows">
+        {list.map((c) => (
+          <li key={c.id}>
+            <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
+            <span className="d-mono">{c.system_name ?? "—"}</span>
+            <span className="d-mono">{c.type === "oneshot" ? "ваншот" : `сыграно ${c.held_sessions_count ?? 0}`}</span>
+            <span className="d-mono">{c.last_played_date ? monthYear.format(parseDateKey(c.last_played_date)).replace(" г.", "") : ""}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

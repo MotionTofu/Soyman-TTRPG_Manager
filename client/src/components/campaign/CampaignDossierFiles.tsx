@@ -164,7 +164,7 @@ export function CampaignDossierFiles(props: Props) {
         </p>
       );
       return <Fragment key={p.id}>
-        {index === firstLeft && <li className="dossier-files__divider paper-label">Покинули кампанию</li>}
+        {index === firstLeft && <li className="dossier-files__divider d-mono">Покинули кампанию</li>}
         <li className={`dossier-file${isLeft ? " is-left" : ""}`}>
           <header className="dossier-file__header">
             <div className="dossier-file__title">
@@ -196,7 +196,6 @@ export function CampaignDossierFiles(props: Props) {
                     {img && isSafeImageUrl(img)
                       ? <img className="dossier-photo__image" src={img} alt="" loading="lazy" />
                       : <span className="dossier-photo__placeholder" aria-hidden="true">{c.character_name.slice(0, 1)}</span>}
-                    <span className="dossier-photo__frame" aria-hidden="true" />
                     <span className="dossier-photo__signature">{c.character_name}</span>
                   </Link>
                   <button type="button" className="dossier-peek" onClick={() => props.onPeek(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`}>
@@ -259,9 +258,9 @@ function SheetLines({ id, name, info }: { id: number; name: string; info: SheetI
   return <>
     {info.line && <p className="dossier-sheet__line">{info.line}</p>}
     <dl className="dossier-stats" aria-label={`Характеристики ${name}`}>
-      <div><dt>КЗ</dt><dd>{info.ac}</dd></div>
-      <div><dt>Хиты</dt><dd>{info.hp}</dd></div>
-      <div><dt>Скорость</dt><dd>{info.speed}</dd></div>
+      <div><dt>кз</dt><dd>{info.ac}</dd></div>
+      <div><dt>хиты</dt><dd>{info.hp}</dd></div>
+      <div><dt>скор.</dt><dd>{info.speed}</dd></div>
     </dl>
   </>;
 }
@@ -282,6 +281,6 @@ function Memory({ items, sheets, onMenu }: { items: Character[]; sheets: Map<num
     })}
   </ul>;
   return items.length > MEMORY_INLINE
-    ? <details className="dossier-memory"><summary className="paper-label">Память · {items.length}</summary>{list}</details>
-    : <div className="dossier-memory"><span className="paper-label">Память</span>{list}</div>;
+    ? <details className="dossier-memory"><summary className="dossier-memory__label">Память · {items.length}</summary>{list}</details>
+    : <div className="dossier-memory"><span className="dossier-memory__label">Память:</span>{list}</div>;
 }

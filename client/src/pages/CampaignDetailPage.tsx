@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
 import {
+  campaignAdventureAffects,
   campaignEventAffects,
   campaignFieldsAffects,
   campaignGroupAffects,
@@ -17,23 +18,26 @@ import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
 import { vesselPaths, type VesselSummary } from "../data/campaignVessels";
 import { labelled } from "../data/notices";
-import { toLocalDateKey, formatDateKeyRu, parseDateKey, addDays } from "../utils/date";
+import { toLocalDateKey, formatDateKeyRu, addDays } from "../utils/date";
 import { CampaignSessionList } from "../components/campaign/CampaignSessionList";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
-import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
+import { MiniCalendar } from "../components/MiniCalendar";
+import { type CalendarEvent } from "../components/MonthCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { CampaignEntryList } from "../components/CampaignEntryList";
 import { WorldExplorationTab } from "../components/WorldExplorationTab";
 import { CampaignIssuanceTab } from "../components/CampaignIssuanceTab";
 import { TaskTracker } from "../components/TaskTracker";
-import { CampaignSecrets, type SecretsNavStats } from "../components/CampaignSecrets";
-import { CampaignMilestones, type MilestonesNavStats } from "../components/CampaignMilestones";
+import { CampaignSecrets } from "../components/CampaignSecrets";
+import { CampaignMilestones } from "../components/CampaignMilestones";
 import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
-import { RemindersWidget } from "../components/RemindersWidget";
+import { CampaignReminders } from "../components/campaign/CampaignReminders";
+import { TypeGlyph } from "../components/TypeGlyph";
+import "../components/campaign/campaign-d.css";
 import { CharacterRequestsBlock } from "../components/CharacterRequestsBlock";
 import { IMAGE_ACCEPT } from "../imageUpload";
 import {
@@ -51,7 +55,6 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
-import { useIsMobile } from "../hooks/useIsMobile";
 import { dateFromElapsed, formatInworldDate, formatEventDate } from "../inworldCalendar";
 import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
 import { EntityPage } from "../components/EntityPage";
@@ -65,7 +68,6 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
   StoryArc,
-  CampaignAdventureTree,
   CampaignDetail,
   CampaignEntry,
   CampaignGroup,
@@ -85,6 +87,8 @@ import type {
   System,
   CampaignDebt,
   WorldExplorationEntry,
+  WorldExplorationKind,
+  GmReminder,
 } from "../types";
 import { Timeline } from "../components/Timeline";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
@@ -94,18 +98,20 @@ import { CutsceneBindings } from "../components/cutscenes/CutsceneBindings";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
+import { remindersPath } from "../data/sessions";
+import { daysUntilLabel } from "../components/campaign/sessionGroups";
 import { CampaignRevealList } from "../components/RevealList";
 import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
-import { plural } from "../sceneKinds";
+import { plural, sceneWord } from "../sceneKinds";
 import { CampaignDossierFiles, useCharacterSheets } from "../components/campaign/CampaignDossierFiles";
 import { statusOf, useSetCharacterStatus } from "../characterStatus";
 import { CampaignNow } from "../components/campaign/CampaignNow";
-import { NavIcon, type NavIconName } from "../components/NavIcons";
+import { NavIcon } from "../components/NavIcons";
 import { CampaignDebtors, LastSessionResult, NextSessionPrep, useSettleDebt } from "../components/campaign/CampaignPrep";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
-import { CampaignWorldTab, type CampaignWorld } from "../components/campaign/CampaignWorldTab";
+import { CampaignWorldTab } from "../components/campaign/CampaignWorldTab";
 
 // Вкладки кампании (спека campaign-paper, Q19/Q20/Q26/Q31). «Сюжет» собрал
 // «Главы и сцены», «Вехи», «Тайны и зацепки» и «Выводы» разделами; «Заметок»
@@ -137,24 +143,7 @@ const TAB_SHORT: Record<string, string> = {
   "Хроника мира": "Хроника",
   "Клёвые цитаты": "Цитаты",
   "Трекер задач": "Задачи",
-};
-const TAB_ICON: Record<string, NavIconName> = {
-  "Обзор": "eye",
-  "Персонажи игроков": "players",
-  "Сюжет": "book",
-  "Сессии": "calendar",
-  "Мир кампании": "globe",
-  "Хроника мира": "clock",
-  "Тетрадь": "document",
-  "Выдача": "card",
-  "Оплата": "loot",
-  "Представление": "fullscreen",
-  "Транспорт": "helm",
-  "Итоги": "flag",
-  "Заметки": "document",
-  "Клёвые цитаты": "chat",
-  "Трекер задач": "check",
-  "Исследование Мира": "globe",
+  "Исследование Мира": "Исследование мира",
 };
 
 // Разделы «Сюжета» и старые имена вкладок, которые теперь ведут в них.
@@ -179,7 +168,7 @@ const GM_TAB_ALIASES = {
   "Тайны и зацепки": "Сюжет",
   Выводы: "Сюжет",
 } as const;
-const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Сессии", "Исследование Мира"] as const;
+const PLAYER_TABS = ["Обзор", "Заметки", "Клёвые цитаты", "Трекер задач", "Сессии", "Исследование Мира"] as const;
 const PLAYER_TAB_ALIASES = { "Хроника игр": "Сессии" } as const;
 
 // Пустые значения до загрузки — одними ссылками, чтобы useMemo над ними не
@@ -221,15 +210,18 @@ function CampaignFolderNotice({ campaign }: { campaign: CampaignDetail }) {
   return (
     <>
       {alertDialog}
+      {/* Строка «Д» на всех вкладках (блок «Кампании», Q5): тонкая линия,
+          малиновая метка, кнопка контуром. */}
       {campaign.folder_missing && (
-        <div className="card campaign-folder-missing">
+        <div className="d-nofold">
+          <span className="d-mark">Нет папки</span>
           <p>
             {campaign.folder_path
               ? "Папки кампании нет в хранилище — её удалили или перенесли."
               : "У кампании нет папки в хранилище."}{" "}
             Файлы загружать и переименовывать кампанию нельзя.
           </p>
-          <button onClick={() => void repair()}>Создать папку заново</button>
+          <button type="button" className="d-btn d-btn--sm" onClick={() => void repair()}>Создать папку заново</button>
         </div>
       )}
     </>
@@ -252,8 +244,6 @@ export function CampaignDetailPage() {
   const workbooks = useResource<InstanceSummary[]>(invalidCampaignId ? null : `/workbooks/instances?project_type=campaign&project_id=${campaignId}`).data ?? NO_WORKBOOKS;
   const gmCampaignId = !invalidCampaignId && campaign?.role !== "player" && campaign ? campaignId : null;
   const vessels = useResource<VesselSummary[]>(gmCampaignId == null ? null : vesselPaths.list(gmCampaignId)).data;
-  const storyTree = useResource<CampaignAdventureTree[]>(gmCampaignId == null ? null : campaignPaths.tree(gmCampaignId)).data;
-  const world = useResource<CampaignWorld>(gmCampaignId != null && campaign?.setting_id ? campaignPaths.world(gmCampaignId) : null).data;
   const gmTabs = GM_TABS.filter(
     (t) => (t !== "Хроника мира" || campaign?.type !== "oneshot")
   );
@@ -288,8 +278,6 @@ export function CampaignDetailPage() {
     const current = chapStats.adventures.find((a) => a.current);
     setStorySel({ section: "chapters", item: current ? String(current.id) : "all" });
   }, [chapStats, storySel]);
-  const [mileStats, setMileStats] = useState<MilestonesNavStats | null>(null);
-  const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
   // Ось кампании — частный случай оси сеттинга (разбор 2026-10-02, Q1–Q4):
   // панель циклов (сеттинга и свои), эпохи общего таймлайна сеттинга.
@@ -344,8 +332,6 @@ export function CampaignDetailPage() {
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
   );
-  // Телефон (Q16): список первым, календарь под ним — свёрнутым.
-  const isMobile = useIsMobile();
   const [eventModal, setEventModal] = useState<{
     id?: number;
     year: number;
@@ -412,16 +398,8 @@ export function CampaignDetailPage() {
     const monthName = calendar.months.find((m) => m.position === timelineNow.month)?.name ?? String(timelineNow.month);
     return "Сегодня: " + timelineNow.day + " " + monthName + " " + timelineNow.year + (calendar.era ? " " + calendar.era : "");
   }, [calendar, timelineNow]);
-  const [chronicleFilter, setChronicleFilter] = useState("");
-  const [chronicleSort] = useState<"asc" | "desc">("desc");
-  const chronicleFiltered = useMemo(() => {
-    let list = sessions.filter((s) => s.status !== "cancelled");
-    if (chronicleFilter.trim()) {
-      const q = chronicleFilter.trim().toLowerCase();
-      list = list.filter((s) => s.title?.toLowerCase().includes(q) || s.date.includes(q) || (s.notes_text ?? "").toLowerCase().includes(q));
-    }
-    return [...list].sort((a, b) => chronicleSort === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-  }, [sessions, chronicleFilter, chronicleSort]);
+  // Отменённые живут в Архиве, на вкладке их нет.
+  const chronicleFiltered = useMemo(() => sessions.filter((s) => s.status !== "cancelled"), [sessions]);
   const axisRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
@@ -826,10 +804,7 @@ export function CampaignDetailPage() {
 
   const tabCounts: Partial<Record<(typeof tabs)[number], number>> = {
     "Персонажи игроков": campaign.roster.length,
-    "Транспорт": vessels?.filter(v => !v.archived_at).length,
-    "Сюжет": storyTree?.reduce((total, adventure) => total + adventure.scenes.length + adventure.chapters.reduce((n, chapter) => n + chapter.scenes.length, 0), 0),
     "Сессии": sessions.length,
-    "Мир кампании": world?.entities.length,
     "Хроника мира": calendarEvents.length,
     "Тетрадь": workbooks.length,
   };
@@ -843,6 +818,7 @@ export function CampaignDetailPage() {
       // строка фактов и два действия (гриллинг 2026-10-23, Q2–Q3): заработок
       // ушёл во вкладку «Оплата», тип — плашкой только у ваншота.
       paper
+      hideIdent={campaign.role === "player"}
       meta={
         campaign.role === "player" ? (
           <span className="paper-ident-tags">
@@ -860,17 +836,21 @@ export function CampaignDetailPage() {
       }
       actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
       tabs={tabs.filter(id => !CAMPAIGN_MORE_TABS.some(t => t === id)).map(id => {
-        const label = TAB_SHORT[id] ?? id;
-        return { id, icon: TAB_ICON[id], label: tabCounts[id] ? `${label} · ${tabCounts[id]}` : label };
+        // Ярлыки «Д» без знаков, счётчик машинописью (блок «Кампании», пачка 1).
+        return { id, label: TAB_SHORT[id] ?? id, count: tabCounts[id] || undefined };
       })}
       hiddenTabs={CAMPAIGN_MORE_TABS.filter(id => tabs.some(t => t === id))}
+      hiddenTabHints={{
+        "Оплата": debts.length ? `должны ${debts.length}` : undefined,
+        "Транспорт": vessels ? String(vessels.filter((v) => !v.archived_at).length) : undefined,
+      }}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
       <CampaignFolderNotice campaign={campaign} />
 
       {tab === "Обзор" && campaign.role === "player" && (
-        <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />
+        <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} />
       )}
 
       {tab === "Заметки" && campaign.role === "player" && (
@@ -879,6 +859,8 @@ export function CampaignDetailPage() {
           category="notes"
           addLabel="+ Добавить заметку"
           emptyLabel="Заметок пока нет."
+          title="Заметки"
+          sub="видите только вы"
           defaultSettingId={campaign.setting_id ?? undefined}
         />
       )}
@@ -889,6 +871,8 @@ export function CampaignDetailPage() {
           category="quotes"
           addLabel="+ Добавить цитату"
           emptyLabel="Цитат пока нет."
+          title="Цитаты"
+          sub="что сказано за столом"
           defaultSettingId={campaign.setting_id ?? undefined}
         />
       )}
@@ -911,30 +895,25 @@ export function CampaignDetailPage() {
                   .filter((a) => !a.is_default || a.scenes > 0)
                   .map((a) => ({ id: String(a.id), label: a.name, count: a.scenes, current: a.current, dim: a.is_default })),
               ],
+              // «+ Приключение» кислотой под списком (Q4, макет Camp-Story).
+              footer: campaign.setting_id != null && (
+                <CampaignAdventureAdd
+                  campaignId={campaignId}
+                  onAdded={(id) => {
+                    storyPicked.current = true;
+                    setStorySel({ section: "chapters", item: String(id) });
+                  }}
+                />
+              ),
             },
-            {
-              id: "milestones",
-              group: "Материалы",
-              label: "Вехи",
-              count: (mileStats?.own.total ?? 0) + (mileStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
-              items: [
-                { id: "own", label: `Свои · ${mileStats?.own.done ?? 0}/${mileStats?.own.total ?? 0}` },
-                ...(mileStats?.groups ?? []).map((g) => ({ id: String(g.id), label: `${g.name} · ${g.done}/${g.total}` })),
-              ],
-            },
-            {
-              id: "secrets",
-              group: "Материалы",
-              label: "Тайны и зацепки",
-              count: (secStats?.own.total ?? 0) + (secStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
-              items: [
-                { id: "own", label: `Свои · ${secStats?.own.done ?? 0}/${secStats?.own.total ?? 0}` },
-                ...(secStats?.groups ?? []).map((g) => ({ id: String(g.id), label: `${g.name} · ${g.done}/${g.total}` })),
-              ],
-            },
-            { id: "reveals", group: "Материалы", label: "Выводы" },
+            // Материалы — строками со знаком; группы вех и тайн — блоками на
+            // странице раздела, а не пунктами колонки (макет Camp-Story-Milestones).
+            { id: "milestones", group: "Материалы", label: "Вехи", icon: "book" },
+            { id: "secrets", group: "Материалы", label: "Тайны и зацепки", icon: "book" },
+            { id: "reveals", group: "Материалы", label: "Выводы", icon: "book" },
           ]}
           phoneSelect
+          plates
           selection={storySel}
           onSelect={(sel) => {
             storyPicked.current = true;
@@ -959,19 +938,26 @@ export function CampaignDetailPage() {
             <CampaignMilestones
               campaignId={campaignId}
               settingId={campaign.setting_id}
-              groupId={storySel.item ?? null}
-              onStats={(st) => setMileStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+              groupId={null}
             />
           )}
           {storySel.section === "secrets" && (
             <CampaignSecrets
               campaignId={campaignId}
               settingId={campaign.setting_id}
-              groupId={storySel.item ?? null}
-              onStats={(st) => setSecStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+              groupId={null}
             />
           )}
-          {storySel.section === "reveals" && <CampaignRevealList campaignId={campaignId} />}
+          {storySel.section === "reveals" && (
+            // Плашка, как у вех и тайн (макет Camp-Story-Milestones).
+            <section>
+              <div className="d-gh">
+                <h3 className="d-plate">Выводы</h3>
+                <span className="d-note">куда ведут найденные улики</span>
+              </div>
+              <CampaignRevealList campaignId={campaignId} />
+            </section>
+          )}
         </EntityTabWorkspace>
       )}
 
@@ -1018,6 +1004,7 @@ export function CampaignDetailPage() {
           selection={playersSel}
           onSelect={setPlayersSel}
           workspaceKey={campaignId}
+          seg
         >
           {playersSel.section === "roster" && (
             <PlayersAndCharactersTab
@@ -1029,24 +1016,8 @@ export function CampaignDetailPage() {
               sessions={sessions}
             />
           )}
-          {playersSel.section === "reminders" && (
-          <section className="stack">
-            <div className="section-heading-sub">
-              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">✦</span> Напоминания игрокам</h3>
-              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>видны на Главной игроков</span>
-            </div>
-            <RemindersWidget targetType="campaign" targetId={campaignId} />
-          </section>
-          )}
-          {playersSel.section === "journals" && (
-          <section className="stack">
-            <div className="section-heading-sub">
-              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◈</span> Путевые заметки игроков</h3>
-              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>только чтение — как игроки понимают сюжет</span>
-            </div>
-            <PlayerJournalsSection campaignId={campaignId} />
-          </section>
-          )}
+          {playersSel.section === "reminders" && <CampaignReminders campaignId={campaignId} roster={campaign.roster} />}
+          {playersSel.section === "journals" && <PlayerJournalsSection campaignId={campaignId} />}
         </EntityTabWorkspace>
         </div>
       )}
@@ -1065,119 +1036,62 @@ export function CampaignDetailPage() {
       )}
 
       {tab === "Сессии" && (
-        <div className="chronicle-split">
-          <div className="chronicle-left">
-            {(() => {
-              const filtered = chronicleFiltered;
-              return (
-                <details className="card res-group" open style={{ margin: 0 }}>
-                  <summary className="res-group__band">
-                    <span className="res-group__title">Все сессии</span>
-                    <span className="res-group__count">
-                      {filtered.length} из {sessions.length}
-                    </span>
-                  </summary>
-                  <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
-                    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                      <input
-                        placeholder="Поиск по названию, дате, событиям"
-                        value={chronicleFilter}
-                        onChange={(e) => setChronicleFilter(e.target.value)}
-                        style={{ flex: "1 1 220px", minWidth: 180 }}
-                      />
-                      {chronicleFilter && (
-                        <button onClick={() => setChronicleFilter("")}>Сбросить</button>
-                      )}
-                    </div>
-
-                    {sessions.length === 0 ? (
-                      <EmptyState
-                        title="Сессий пока нет"
-                        hint="Запланируйте первую игру — здесь появится лента сыгранных сессий."
-                        action={
-                          <button className="primary" onClick={scheduleNext}>
-                            + Запланировать сессию
-                          </button>
-                        }
-                      />
-                    ) : filtered.length === 0 ? (
-                      <p className="muted">
-                        Ничего не найдено.{" "}
-                        <button onClick={() => setChronicleFilter("")}>
-                          Сбросить фильтр
-                        </button>
-                      </p>
-                    ) : (
-                      <CampaignSessionList
-                        sessions={filtered}
-                        today={toLocalDateKey()}
-                        isGm={campaign.role !== "player"}
-                        showMoney={campaign.role !== "player" && !loadHideFinance()}
-                        inworldLabel={(x) =>
-                          (calendar && formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)) || ""
-                        }
-                        onSchedule={scheduleNext}
-                        onMenu={openSessionMenu}
-                        onOutcome={(x) => setOutcomeSessionId(x.id)}
-                      />
-                    )}
-                  </div>
-                </details>
-              );
-            })()}
+        // Макет Camp-Sessions: слева «Ждут разбора», главный блок ближайшей и
+        // сыгранные; справа календарь месяца и деньги одной строкой.
+        <div className="campaign-sessions">
+          <div className="campaign-sessions__list">
+            {sessions.length === 0 && campaign.role === "player" ? (
+              <p className="muted">Сессий пока нет.</p>
+            ) : (
+              <CampaignSessionList
+                sessions={chronicleFiltered}
+                today={toLocalDateKey()}
+                isGm={campaign.role !== "player"}
+                showMoney={campaign.role !== "player" && !loadHideFinance()}
+                oneshot={campaign.type === "oneshot"}
+                inworldLabel={(x) =>
+                  (calendar && formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)) || ""
+                }
+                onSchedule={scheduleNext}
+                onMenu={openSessionMenu}
+                onOutcome={(x) => setOutcomeSessionId(x.id)}
+              />
+            )}
           </div>
-          <div className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
-            {(() => {
-              const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
-              const nextPlanned = sorted.find((s) => s.status === "planned" && s.date >= todayKey) || sorted.find((s) => s.status === "planned") || null;
-              const diffDays = nextPlanned ? Math.round((parseDateKey(nextPlanned.date).getTime() - parseDateKey(todayKey).getTime()) / 86400000) : null;
-              const diffLabel = diffDays == null ? null : diffDays === 0 ? "сегодня" : diffDays === 1 ? "завтра" : diffDays > 0 ? `через ${diffDays} дн.` : `${Math.abs(diffDays)} дн. назад`;
-              return (
-                <details className="card res-group" open={!isMobile}>
-                  <summary className="res-group__band">
-                    <span className="res-group__title">Календарь игр</span>
-                    <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-                      {nextPlanned ? (
-                        <span>
-                          след. <span className="session-calendar__next-date">{formatDateKeyRu(nextPlanned.date)}</span>
-                          {nextPlanned.start_time ? ` ${nextPlanned.start_time}` : ""} · {sessionLabel(nextPlanned)}
-                          {diffLabel ? ` · ${diffLabel}` : ""}
-                        </span>
-                      ) : (
-                        <span>{sessions.filter((s) => s.status !== "cancelled").length} игр · проведено {campaign.finance.heldSessions}</span>
-                      )}
-                    </span>
-                  </summary>
-                  <div className="res-group__body" style={{ padding: 12 }}>
-                    <MonthCalendar
-                      events={events}
-                      onDayClick={(date) => openCreate(date)}
-                      onEventClick={(e) => navigate(`/sessions/${e.id}`)}
-                      onEventContextMenu={(event, x, y) => setMenu({ x, y, event })}
-                    />
-
-
-                  </div>
-                </details>
-              );
-            })()}
+          <aside className="d-block campaign-sessions__cal" aria-label="Календарь игр">
+            <MiniCalendar
+              months={1}
+              events={sessions.map((x) => ({
+                id: x.id,
+                date: x.date,
+                status: x.status,
+                campaignId,
+                startTime: x.start_time,
+                overdue: x.status === "planned" && x.date < todayKey,
+              }))}
+              onDayClick={campaign.role !== "player" ? (date) => openCreate(date) : undefined}
+              onEventContextMenu={(e, x, y) => {
+                const ev = events.find((v) => v.id === e.id);
+                if (ev && campaign.role !== "player") setMenu({ x, y, event: ev });
+              }}
+            />
+            <ul className="campaign-sessions__legend" aria-hidden="true">
+              <li><i className="is-planned" />запланирована</li>
+              <li><i className="is-held" />сыграна</li>
+              {campaign.role !== "player" && <li><i className="is-overdue" />ждёт разбора</li>}
+            </ul>
             {/* Q10: финансы одной строкой — сколько получено и кто должен, подробности на «Оплате». */}
             {campaign.role !== "player" && !loadHideFinance() && campaign.payment_type !== "free" && (
-              <p className="card session-finance">
-                <span>
-                  Получено <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency}
-                </span>
-                {debts.length > 0 && (
-                  <span className="session-row__debt">
-                    должны {debts.length} {plural(debts.length, "игрок", "игрока", "игроков")}
-                  </span>
-                )}
+              <p className="campaign-sessions__money">
+                Получено {campaign.finance.earned} {campaign.currency}
+                {debts.length > 0 && ` · должны ${debts.length} ${plural(debts.length, "игрок", "игрока", "игроков")}`}
+                <br />
                 <button type="button" className="session-finance__link" onClick={() => selectTab("Оплата")}>
-                  Оплата →
+                  Оплата ›
                 </button>
               </p>
             )}
-          </div>
+          </aside>
         </div>
       )}
 
@@ -1739,33 +1653,35 @@ function PlayersAndCharactersTab({
   const avgLevel = levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : null;
   const today = toLocalDateKey();
   const next = sessions.filter((s) => s.status === "planned" && s.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  // Полоса фактов над делами (Q10, Q25; макет Camp-Party): пустое не рисуется.
   const summary = [
-    inRoster.length > 0 && `${inRoster.length} ${plural(inRoster.length, "игрок", "игрока", "игроков")}`,
-    active.length > 0 && `${active.length} ${plural(active.length, "активный персонаж", "активных персонажа", "активных персонажей")}`,
-    avgLevel != null && `Средний уровень ${avgLevel}`,
-    next && `Следующая игра ${formatDateKeyRu(next.date)}`,
-  ].filter(Boolean) as string[];
+    inRoster.length > 0 && ["Игроки", String(inRoster.length)],
+    active.length > 0 && ["Активные", String(active.length)],
+    avgLevel != null && ["Ср. уровень", String(avgLevel)],
+    next && ["Следующая игра", formatDateKeyRu(next.date)],
+  ].filter(Boolean) as [string, string][];
 
   return (
     <div className="campaign-dossier">
-      <header className="campaign-dossier__header">
+      <header className="d-head campaign-dossier__header">
         <div>
-          <h3>Личные дела</h3>
-          <p className="campaign-dossier__meta">Игроки и их персонажи</p>
-          {summary.length > 0 && (
-            <ul className="campaign-dossier__summary">
-              {summary.map((t) => <li key={t}>{t}</li>)}
-            </ul>
-          )}
+          <h2>Личные дела</h2>
+          <div className="d-head__sub">Игроки и их персонажи</div>
         </div>
-        <button type="button" className="campaign-dossier__add" aria-haspopup="menu" aria-expanded={!!addMenu}
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            setAddMenu(addMenu ? null : { x: r.left, y: r.bottom });
-          }}>
-          <NavIcon name="plus" />
-          Добавить игрока ▾
-        </button>
+        {summary.length > 0 && (
+          <div className="d-strip">
+            {summary.map(([k, v]) => <div key={k}><small>{k}</small><b>{v}</b></div>)}
+          </div>
+        )}
+        <div className="d-head__acts">
+          <button type="button" className="d-btn d-btn--primary" aria-haspopup="menu" aria-expanded={!!addMenu}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setAddMenu(addMenu ? null : { x: r.left, y: r.bottom });
+            }}>
+            Добавить игрока ▾
+          </button>
+        </div>
         {addMenu && (
           <ContextMenu
             x={addMenu.x}
@@ -1825,78 +1741,107 @@ function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
   const load = journals.reload;
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("all");
+  // Авторы колонкой (макет Camp-Party-Journals): игрок, под ним персонаж, число записей.
   const authors = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { player: string; character: string; n: number }>();
     for (const r of rows ?? []) {
       const key = `${r.player_name ?? "—"} · ${r.character_name ?? "без персонажа"}`;
-      if (!map.has(key)) map.set(key, key);
+      const a = map.get(key) ?? { player: r.player_name ?? "—", character: r.character_name ?? "без персонажа", n: 0 };
+      a.n += 1;
+      map.set(key, a);
     }
-    return [...map.keys()].sort((a, b) => a.localeCompare(b, "ru"));
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "ru"));
   }, [rows]);
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (rows ?? [])
       .filter((r) => (author === "all" ? true : `${r.player_name ?? "—"} · ${r.character_name ?? "без персонажа"}` === author))
-      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q));
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [rows, query, author]);
-  if (rows === null) return <p className="muted">Загрузка…</p>;
-  if (error) {
-    return (
-      <LoadErrorCard
-        message={<>Заметки не загрузились: {error}</>}
-        onRetry={load}
-      />
-    );
-  }
-  if (rows.length === 0) return <p className="muted">Игроки пока ничего не записали.</p>;
-  return (
-    <div className="stack">
-      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          className="res-toolbar__search"
-          placeholder="Поиск по заметкам…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Поиск по заметкам игроков"
-          style={{ flex: "1 1 200px", minWidth: 160 }}
-        />
-        <select value={author} onChange={(e) => setAuthor(e.target.value)} aria-label="Фильтр по автору" style={{ maxWidth: 260 }}>
-          <option value="all">Все авторы</option>
-          {authors.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }}>
-          {visible.length} из {rows.length}
-        </span>
+  const head = (
+    <div className="d-head">
+      <div>
+        <h2>Путевые заметки игроков</h2>
+        <div className="d-head__sub">как игроки понимают сюжет</div>
       </div>
-      {visible.length === 0 ? (
-        <p className="muted">По этому запросу записей нет — снимите фильтр.</p>
-      ) : (
-        visible.map((r) => (
-          <div key={r.id} className="card stack" style={{ gap: 6 }}>
-            <div className="row" style={{ justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-                {r.created_at.slice(0, 10).split("-").reverse().join(".")}
-                {" · "}
-                {r.player_name ?? "—"}
-                {" · "}
-                {r.character_name ?? "без персонажа"}
-              </span>
-              {r.kind && (
-                <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  {r.kind}
-                </span>
-              )}
-            </div>
-            {r.name && <strong>{r.name}</strong>}
-            <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{r.description}</p>
-          </div>
-        ))
-      )}
+      <div className="d-head__acts">
+        <span className="campaign-readonly">только чтение</span>
+      </div>
     </div>
   );
+  if (rows === null) return <>{head}<p className="muted">Загрузка…</p></>;
+  if (error) {
+    return (
+      <>
+        {head}
+        <LoadErrorCard message={<>Заметки не загрузились: {error}</>} onRetry={load} />
+      </>
+    );
+  }
+  if (rows.length === 0) return <>{head}<p className="muted">Игроки пока ничего не записали.</p></>;
+  return (
+    <>
+      {head}
+      <div className="campaign-journals">
+        <aside className="campaign-col" aria-label="Авторы">
+          <h3 className="d-plate">Авторы</h3>
+          <button type="button" className={author === "all" ? "is-on" : ""} onClick={() => setAuthor("all")}>
+            <span>Все авторы</span>
+            <span className="campaign-col__n">{rows.length}</span>
+          </button>
+          {authors.map(([key, a]) => (
+            <button key={key} type="button" className={author === key ? "is-on" : ""} onClick={() => setAuthor(key)}>
+              <span>
+                {a.player}
+                <small>{a.character}</small>
+              </span>
+              <span className="campaign-col__n">{a.n}</span>
+            </button>
+          ))}
+        </aside>
+        <div>
+          <div className="d-gh">
+            <h3 className="d-plate">{author === "all" ? "Все заметки" : authors.find(([k]) => k === author)?.[1].player}</h3>
+            <span className="d-note">{visible.length} · новые сверху</span>
+            <label className="d-end d-field campaign-journals__search">
+              <NavIcon name="search" />
+              <input placeholder="Поиск" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Поиск по заметкам игроков" />
+            </label>
+          </div>
+          {visible.length === 0 ? (
+            <p className="muted">По этому запросу записей нет — снимите фильтр.</p>
+          ) : (
+            <ul className="campaign-journals__list">
+              {visible.map((r) => (
+                <li key={r.id}>
+                  <span className="campaign-journals__glyph">
+                    {r.kind && <TypeGlyph type={JOURNAL_GLYPH[r.kind]} />}
+                  </span>
+                  <div>
+                    <div className="d-mono">
+                      {formatDateKeyRu(r.created_at.slice(0, 10))} · {r.player_name ?? "—"} · {r.character_name ?? "без персонажа"}
+                    </div>
+                    {r.name && <b>{r.name}</b>}
+                    <p>{r.description}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </>
+  );
 }
+
+// Метка записи дневника → знак типа сущности (находка: раньше выводился сырой ключ).
+const JOURNAL_GLYPH: Record<WorldExplorationKind, string> = {
+  being: "being",
+  location: "location",
+  item: "artifact",
+  event: "setting_event",
+};
 
 function CampaignSquadDates({ characters }: { characters: Character[] }) {
   // Карточки персонажей — тот же ключ, что у профиля персонажа.
@@ -1908,18 +1853,20 @@ function CampaignSquadDates({ characters }: { characters: Character[] }) {
   );
   if (dates.length === 0) return null;
   return (
-    <div className="card stack" style={{ marginTop: 8 }}>
-      <div className="campaign-player-header" style={{ margin: "-14px -14px 10px" }}><span>Важные даты отряда</span><span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{dates.length}</span></div>
-      <div className="stack" style={{ gap: 4 }}>
+    <section className="d-block campaign-squad-dates" aria-label="Важные даты отряда">
+      <h3 className="d-plate">Важные даты отряда</h3>
+      <ul>
         {dates.slice(0, 8).map((r) => (
-          <div key={`${r.charId}-${r.date.id}`} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-            <span><strong>{r.charName}</strong> — {r.date.title} <span className="muted">· {r.date.day}.{r.date.month ?? "—"}.{r.date.year ?? "—"}</span></span>
-            <Link to={`/characters/${r.charId}`} className="comp-mini">→ лист</Link>
-          </div>
+          <li key={`${r.charId}-${r.date.id}`}>
+            <span className="d-mono">{r.date.day}.{r.date.month ?? "—"}.{r.date.year ?? "—"}</span>
+            <span>
+              {r.date.title} · <Link to={`/characters/${r.charId}`}>{r.charName}</Link>
+            </span>
+          </li>
         ))}
-        {dates.length > 8 && <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>+ ещё {dates.length - 8}</span>}
-      </div>
-    </div>
+      </ul>
+      {dates.length > 8 && <span className="d-note">+ ещё {dates.length - 8}</span>}
+    </section>
   );
 }
 
@@ -2001,12 +1948,17 @@ function PlayerOverviewTab({
   campaign,
   systems,
   settingsList,
+  sessions,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
+  sessions: SessionSummary[];
 }) {
   const campaignId = campaign.id;
+  const reminders = useResource<GmReminder[]>(remindersPath("campaign", campaignId)).data ?? [];
+  const today = toLocalDateKey();
+  const next = sessions.filter((x) => x.status === "planned" && x.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
   const [editingMain, setEditingMain] = useState(false);
   const { allGroups, campaignGroupIds, toggleGroup } = useCampaignGroups(campaignId);
   const { save, saving } = useCampaignFieldsSave(campaignId);
@@ -2043,35 +1995,29 @@ function PlayerOverviewTab({
   const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
   const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
 
+  // Обзор глазами игрока (макет Camp-Player-Overview): имя кампании и кто
+  // ведёт, факты полосой, слева «Напоминания от Мастера» и персонаж, справа
+  // «Следующая сессия». Пустые блоки не рисуются (§6.11).
+  const rate = campaign.payment_type === "paid" ? `${campaign.session_rate ?? 0} ${campaign.currency} ${campaign.payment_frequency === "per_month" ? "в месяц" : "за сессию"}` : PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type;
   return (
-    <div className="stack">
-      <details className="card res-group" open>
-        <summary className="res-group__band">
-          <span className="res-group__title">Основное</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
+    <div className="campaign-player-overview">
+      <div className="d-head">
+        <div>
+          <h2>{campaign.name}</h2>
+          <div className="d-head__sub">ведёт Мастер{campaign.system_name ? ` · ${campaign.system_name}` : ""}</div>
+        </div>
+        {!editingMain && (
+          <div className="d-head__acts">
+            <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={startEdit}>Редактировать</button>
+          </div>
+        )}
+      </div>
           {!editingMain ? (
-            <div className="stack">
-              <table className="detail-table">
-                <tbody>
-                  <tr><td className="detail-label">Название</td><td>{campaign.name}</td></tr>
-                  <tr><td className="detail-label">Тип</td><td>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</td></tr>
-                  <tr><td className="detail-label">Система</td><td>{systemName}</td></tr>
-                  <tr><td className="detail-label">Сеттинг</td><td>{settingName}</td></tr>
-                  <tr><td className="detail-label">Статус</td><td>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</td></tr>
-                  <tr><td className="detail-label">Оплата</td><td>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</td></tr>
-                  {campaign.payment_type === "paid" && (
-                    <>
-                      <tr><td className="detail-label">Периодичность</td><td>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</td></tr>
-                      <tr><td className="detail-label">Тип ставки</td><td>{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</td></tr>
-                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0}</span> {campaign.currency}</td></tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-              <div className="campaign-actions">
-                <button onClick={startEdit}>Редактировать</button>
-              </div>
+            <div className="d-strip campaign-player-overview__facts">
+              <div><small>Система</small><b>{systemName}</b></div>
+              <div><small>Сеттинг</small><b>{settingName}</b></div>
+              <div><small>Статус</small><b>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</b></div>
+              <div><small>Оплата</small><b>{rate}</b></div>
             </div>
           ) : (
             <div className="campaign-edit-form">
@@ -2161,7 +2107,30 @@ function PlayerOverviewTab({
             </div>
           )}
 
-          <div style={{ marginTop: 8 }}>
+      <div className="campaign-player-overview__cols">
+        <div className="campaign-player-overview__main">
+          {reminders.length > 0 && (
+            <section>
+              <div className="d-gh"><h3 className="d-plate">Напоминания от Мастера</h3></div>
+              <ul className="campaign-player-overview__reminders">
+                {reminders.map((r) => <li key={r.id}>{r.message}</li>)}
+              </ul>
+            </section>
+          )}
+          <section>
+            <div className="d-gh"><h3 className="d-plate">Персонаж</h3></div>
+            <PlayerCharacterTab campaignId={campaignId} />
+          </section>
+        </div>
+        {next && (
+          <aside className="d-block campaign-player-overview__next">
+            <h3 className="d-plate">Следующая сессия</h3>
+            <b>{formatDateKeyRu(next.date)}{next.start_time ? ` · ${next.start_time}` : ""}</b>
+            <span>{sessionLabel(next)} · {daysUntilLabel(next.date, today)}</span>
+          </aside>
+        )}
+      </div>
+          <div className="campaign-player-overview__groups">
             <span className="campaign-field-label" style={{ fontSize: "var(--fs-meta)" }}>Группы кампаний</span>
             <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: "var(--fs-meta)" }}>Настроить группы →</Link>
             {allGroups.length > 0 ? (
@@ -2187,17 +2156,6 @@ function PlayerOverviewTab({
               <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице кампаний.</div>
             )}
           </div>
-        </div>
-      </details>
-
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Персонаж</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <PlayerCharacterTab campaignId={campaignId} />
-        </div>
-      </details>
     </div>
   );
 }
@@ -2387,31 +2345,45 @@ function OverviewTab({
     </div>
   );
 
+  // «Ещё → Оплата» (макет Camp-More): голова с итогом словами, слева
+  // условия и «Сверх сессий», справа должники и полученное.
   if (section === "payment") return (
-    <section className="stack">
-        {!hideFinance && (
-          <section className="stack">
-            <h3>
-              Оплата <span className="paper-fold__count">· {paymentSummary}</span>
-            </h3>
-
+    <section className="campaign-pay">
+      <div className="d-head">
+        <div>
+          <h2>Оплата</h2>
+          {!hideFinance && <div className="d-head__sub">{paymentSummary}</div>}
+        </div>
+        {!hideFinance && editing !== "payment" && (
+          <div className="d-head__acts">
+            <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => start("payment")}>
+              Править оплату
+            </button>
+          </div>
+        )}
+      </div>
+        {hideFinance ? (
+          <p className="muted">Финансы скрыты в настройках интерфейса.</p>
+        ) : (
+          <div className="campaign-pay__cols">
+          <div className="campaign-pay__main">
               {editing === "payment" ? (
                 paymentForm
               ) : (
                 <>
-                  <dl className="paper-facts">
+                  <dl className="d-strip campaign-pay__facts">
                     <div>
-                      <dt className="paper-label">Оплата</dt>
+                      <dt>Оплата</dt>
                       <dd>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</dd>
                     </div>
                     {campaign.payment_type === "paid" && (
                       <>
                         <div>
-                          <dt className="paper-label">Периодичность</dt>
+                          <dt>Периодичность</dt>
                           <dd>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</dd>
                         </div>
                         <div>
-                          <dt className="paper-label">Ставка</dt>
+                          <dt>Ставка</dt>
                           <dd>
                             {campaign.session_rate ?? 0} {campaign.currency} · {RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}
                           </dd>
@@ -2419,15 +2391,19 @@ function OverviewTab({
                       </>
                     )}
                   </dl>
-                  <button type="button" className="paper-more" onClick={() => start("payment")}>
-                    Править оплату ›
-                  </button>
                   <ExtraPayments campaignId={campaignId} roster={campaign.roster} currency={campaign.currency} />
                 </>
               )}
-          </section>
+          </div>
+          <aside className="d-block campaign-pay__aside">
+            <CampaignDebtors campaignId={campaignId} currency={campaign.currency} />
+            <p className="campaign-pay__earned">
+              Получено {campaign.finance.earned} {campaign.currency} за {campaign.finance.heldSessions}{" "}
+              {plural(campaign.finance.heldSessions, "сессию", "сессии", "сессий")}
+            </p>
+          </aside>
+          </div>
         )}
-
     </section>
   );
 
@@ -2487,16 +2463,15 @@ function OverviewTab({
 // «Итоги» (бывший «Пост-продакшен», Q15): свободные записи итогов кампании.
 function ResultsTab({ campaign }: { campaign: CampaignDetail }) {
   return (
-    <section className="stack">
-        <p className="muted">Что получилось, что нет, эпилоги персонажей, несбывшиеся линии, идеи для сиквела.</p>
-        <CampaignEntryList
-          campaignId={campaign.id}
-          category="post_production"
-          addLabel="+ Запись"
-          emptyLabel="Итогов пока нет."
-          defaultSettingId={campaign.setting_id ?? undefined}
-        />
-    </section>
+    <CampaignEntryList
+      campaignId={campaign.id}
+      category="post_production"
+      addLabel="+ Запись"
+      emptyLabel="Итогов пока нет."
+      defaultSettingId={campaign.setting_id ?? undefined}
+      title="Итоги"
+      sub="что получилось, эпилоги, несбывшиеся линии, идеи для сиквела"
+    />
   );
 }
 
@@ -2604,6 +2579,57 @@ function OneshotWorkbook({ campaignId, campaignBooks }: { campaignId: number; ca
           <h3 className="paper-group__head">Тетрадь кампании</h3>
           <WorkbookRows books={campaignBooks} />
         </section>
+      )}
+    </>
+  );
+}
+
+/**
+ * «+ Приключение» в колонке «Сюжета»: приключения сеттинга, ещё не взятые в
+ * кампанию, — меню у кнопки; выбранное открывается сразу.
+ */
+function CampaignAdventureAdd({ campaignId, onAdded }: { campaignId: number; onAdded: (id: number) => void }) {
+  const run = useAction();
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const available = useResource<StoryArc[]>(at ? campaignPaths.availableAdventures(campaignId) : null);
+  async function attach(arcId: number) {
+    const done = await run(
+      labelled("Приключение в кампанию", () =>
+        write.post("/story/campaign-adventures", { campaign_id: campaignId, arc_id: arcId }).then(() => true)
+      ),
+      { affects: campaignAdventureAffects(campaignId), retry: false }
+    );
+    if (done) onAdded(arcId);
+  }
+  const list = (available.data ?? []).filter((a) => a.is_default !== 1);
+  return (
+    <>
+      <button
+        type="button"
+        className="d-btn d-btn--primary"
+        aria-haspopup="menu"
+        aria-label="Добавить приключение"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt(at ? null : { x: r.left, y: r.bottom });
+        }}
+      >
+        +<span className="etw-phone-hide"> Приключение</span>
+      </button>
+      {at && (
+        <ContextMenu
+          x={at.x}
+          y={at.y}
+          title="Из сеттинга"
+          items={
+            available.data == null
+              ? [{ label: "Загрузка…" }]
+              : list.length
+                ? list.map((a) => ({ label: a.name, hint: `${a.scene_count} ${sceneWord(a.scene_count)}`, onClick: () => void attach(a.id) }))
+                : [{ label: "Все приключения сеттинга уже в кампании" }]
+          }
+          onClose={() => setAt(null)}
+        />
       )}
     </>
   );

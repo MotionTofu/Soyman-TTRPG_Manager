@@ -1,231 +1,181 @@
-@import "../../caveat.css";
 .campaign-dossier {
   width: 100%;
   container-type: inline-size;
-  --dossier-portrait-width: 155px;
-  --dossier-signature-size: 32px;
   font-family: var(--font-body);
 }
-.campaign-dossier__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: var(--sp-6);
-  padding-bottom: var(--sp-6);
-  margin-bottom: var(--sp-7);
-  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
-}
-.campaign-dossier__header h3 {
-  margin: 0 0 var(--sp-2);
-  font: 700 var(--fs-h2)/1.1 var(--font-body);
-  text-transform: none;
-  letter-spacing: -0.02em;
-}
-.campaign-dossier__meta { margin: 0 0 var(--sp-3); color: var(--paper-muted); font-size: var(--fs-meta); }
-/* Сводка партии плашками (гриллинг «Партия», Q10). */
-.campaign-dossier__summary { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin: var(--sp-4) 0 0; padding: 0; list-style: none; }
-.campaign-dossier__summary li { padding: var(--sp-2) var(--sp-4); border: 1px solid var(--paper-rule); background: var(--paper-wash); font: 600 var(--fs-meta)/1.3 var(--font-ui); }
-.campaign-dossier .campaign-dossier__add {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-6);
-  border: var(--card-border-width) solid var(--paper-ink);
-  border-radius: 0;
-  background: var(--paper-acid);
-  box-shadow: 2px 2px 0 var(--paper-ink);
-  color: var(--paper-ink);
-  font: 600 var(--fs-data)/1.2 var(--font-ui);
-  text-transform: none;
-  letter-spacing: 0;
-}
-/* Ряды, а не кладка (Q24): порядок номеров предсказуем; ширина дела не уже
-   ~460 px — две колонки на обычном экране, три на широком (Q16). */
+/* Голова «Личных дел» — .d-head (d-system.css), макет Camp-Party. */
+.campaign-dossier__header .d-strip { align-self: flex-end; }
+/* Ряды, а не кладка (Q24): порядок номеров предсказуем; две колонки на
+   обычном экране, одна на узком (Q16). */
 .dossier-files {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
-  gap: var(--sp-7);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--sp-6);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 .dossier-files__divider { grid-column: 1 / -1; margin-top: var(--sp-4); }
-/* Дело — на подложке блока, со скрепкой в углу (Q15). */
+/* Дело (макет Camp-Party): блок 1 px; скрепка — только у первого (Q15). */
 .dossier-file {
   position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border: 16px solid transparent;
-  border-image: var(--skin-dossier-block) 40 fill / 16px round;
-  padding: var(--sp-3) var(--sp-5) var(--sp-3) var(--sp-7);
-  box-shadow: 0 2px 8px rgb(31 26 20 / 0.16);
-  color: var(--paper-ink);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  border: 1px solid var(--line);
+  background: var(--sheet);
+  color: var(--ink);
 }
-.dossier-file::after {
+.dossier-file:first-child::after {
   content: "";
   position: absolute;
-  top: -30px;
-  left: -6px;
-  width: 20px;
-  height: 75px;
+  top: -14px;
+  right: 80px;
+  width: 22px;
+  height: 58px;
   background: var(--skin-dossier-clip) center / contain no-repeat;
-  transform: rotate(-4deg);
+  transform: rotate(8deg);
   pointer-events: none;
 }
 .dossier-file.is-left { opacity: 0.62; }
 .dossier-file__header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--sp-3) var(--sp-5);
+  align-items: baseline;
+  gap: var(--sp-5);
   padding-bottom: var(--sp-4);
-  margin-bottom: var(--sp-6);
-  border-bottom: 1px solid var(--paper-rule);
+  margin-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--line);
 }
-.dossier-file__number { font: var(--fs-meta)/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--paper-muted); }
-.dossier-file__title { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; margin-right: auto; }
-.dossier-file__player { min-width: 0; overflow-wrap: anywhere; font: 700 var(--fs-h3)/1.2 var(--font-body); color: inherit; text-decoration: none; }
+.dossier-file__number { font: var(--fs-micro)/1.2 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.dossier-file__title { display: flex; align-items: baseline; gap: var(--sp-5); min-width: 0; margin-right: auto; }
+.dossier-file__player { min-width: 0; overflow-wrap: anywhere; font: 500 var(--fs-h3)/1.2 var(--font-display); color: inherit; text-decoration: none; }
 .dossier-file__player:hover { text-decoration: underline; }
+/* Долг — малиновой меткой (§2.2). */
 .campaign-dossier .dossier-file__debt {
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid color-mix(in oklab, var(--paper-alarm) 45%, transparent);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--edge-width) solid var(--mark);
   border-radius: 0;
-  background: color-mix(in oklab, var(--paper-alarm) 10%, transparent);
-  color: var(--paper-alarm);
-  font: 600 var(--fs-meta)/1.3 var(--font-ui);
-  text-transform: none;
-  letter-spacing: 0;
+  background: transparent;
+  color: var(--mark);
+  font: 500 var(--fs-micro)/1.2 var(--font-ui);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
-.campaign-dossier .dossier-file__menu { padding: 0 var(--sp-3); border: 0; font-size: var(--fs-h3); line-height: 1; background: transparent; color: var(--paper-muted); box-shadow: none; }
-.campaign-dossier .dossier-file__menu:hover { color: var(--paper-ink); background: var(--paper-wash); }
-.dossier-file__characters { display: flex; flex-direction: column; gap: var(--sp-7); padding: 0; margin: 0 0 var(--sp-6); list-style: none; }
+.campaign-dossier .dossier-file__menu { width: 28px; height: 28px; padding: 0; border: 0; font-size: var(--fs-h3); line-height: 1; background: transparent; color: var(--ink-2); box-shadow: none; }
+.campaign-dossier .dossier-file__menu:hover { color: var(--ink); background: var(--tab); }
+.dossier-file__characters { display: flex; flex-direction: column; gap: var(--sp-5); padding: 0; margin: 0 0 var(--sp-4); list-style: none; }
 .dossier-character {
   display: grid;
-  grid-template-columns: var(--dossier-portrait-width) minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
   gap: var(--sp-5);
-  align-items: center;
+  align-items: start;
 }
+/* Портрет 76 px с кромкой и плашкой имени снизу (макет Camp-Party). */
 .dossier-photo {
   position: relative;
   display: block;
-  width: 100%;
-  /* Окно рамки под квадратное фото: рамка 3:4 чуть сжата по высоте. */
-  aspect-ratio: 10 / 11;
-  color: var(--paper-ink);
+  width: 76px;
+  height: 76px;
+  overflow: hidden;
+  border: var(--edge-width) solid var(--edge);
+  background: var(--ph);
+  color: var(--ink);
   text-decoration: none;
 }
-.dossier-photo__image, .dossier-photo__placeholder {
-  position: absolute;
-  inset: 12% 12% 19%;
-  width: 76%;
-  height: 69%;
-  object-fit: cover;
-}
-.dossier-photo__placeholder { display: grid; place-items: center; background: var(--paper-rule); font: 600 var(--fs-h1)/1 var(--font-display); color: var(--paper-muted); }
-.dossier-photo__frame { position: absolute; inset: 0; background: var(--skin-dossier-frame) center / 100% 100% no-repeat; pointer-events: none; }
+.dossier-photo__image, .dossier-photo__placeholder { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dossier-photo__placeholder { display: grid; place-items: center; padding-bottom: var(--sp-6); font: 500 var(--fs-h2)/1 var(--font-display); color: var(--muted); }
 .dossier-photo__signature {
   position: absolute;
-  top: 80%;
-  inset-inline: 10%;
-  max-height: 18%;
+  inset: auto 0 0;
   overflow: hidden;
+  padding: var(--sp-0) var(--sp-2);
+  background: var(--surface);
+  color: var(--on-surface);
   white-space: nowrap;
   text-overflow: ellipsis;
   text-align: center;
-  font: 600 var(--dossier-signature-size)/1.05 "Caveat", cursive;
-  text-transform: none;
-  letter-spacing: 0;
+  font: 500 var(--fs-micro)/1.3 var(--font-ui);
+  letter-spacing: 0.06em;
 }
-.dossier-photo-wrap { position: relative; }
+.dossier-photo-wrap { position: relative; width: 76px; }
 .campaign-dossier .dossier-peek {
   position: absolute;
-  top: 6%;
-  right: 4%;
+  top: var(--sp-2);
+  right: var(--sp-2);
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 1px solid var(--paper-rule);
-  border-radius: 50%;
-  background: var(--paper-base);
-  color: var(--paper-ink);
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
   box-shadow: none;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity 0.14s;
 }
 .dossier-photo-wrap:hover .dossier-peek, .campaign-dossier .dossier-peek:focus-visible { opacity: 1; }
-.dossier-peek .nav-icon { width: 16px; height: 16px; }
-.dossier-character__info { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-3); }
-/* Плашка статуса (Q19): зелёная — активный, синяя — запасной и временный. */
+.dossier-peek .nav-icon { width: 14px; height: 14px; }
+.dossier-character__info { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
+/* Статус машинописью в кромке; запасной — штрихом (§2.2: начертание, а не цвет). */
 :is(.campaign-dossier, .character-status-line) .dossier-status {
-  padding: var(--sp-1) var(--sp-4);
-  border: 1px solid transparent;
+  padding: var(--sp-0) var(--sp-3);
+  border: var(--edge-width) solid var(--edge);
   border-radius: 0;
-  background: #cfe3c4;
-  color: #1f3d1a;
+  background: transparent;
+  color: var(--ink);
   box-shadow: none;
-  font: 600 var(--fs-meta)/1.3 var(--font-ui);
-  text-transform: none;
-  letter-spacing: 0;
+  font: 400 var(--fs-micro)/1.3 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-:is(.campaign-dossier, .character-status-line) .dossier-status:is([data-status="reserve"], [data-status="temporary"]) { background: #cdd9ea; color: #1c2f4a; }
-:is(.campaign-dossier, .character-status-line) .dossier-status:is([data-status="dead"], [data-status="gone"]) { background: #d6d2c8; color: #3f382e; }
-:is(.campaign-dossier, .character-status-line) button.dossier-status:hover { border-color: currentColor; }
+:is(.campaign-dossier, .character-status-line) .dossier-status:is([data-status="reserve"], [data-status="temporary"]) { border-style: dashed; }
+:is(.campaign-dossier, .character-status-line) .dossier-status:is([data-status="dead"], [data-status="gone"]) { border-style: dotted; color: var(--muted); }
+:is(.campaign-dossier, .character-status-line) button.dossier-status:hover { background: var(--tab); }
 .character-status-line { margin: 0 0 var(--sp-4); }
 .character-status-line .dossier-status { display: inline-block; }
 .dossier-sheet, .dossier-sheet__line { margin: 0; font-size: var(--fs-data); }
-.dossier-stats { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: var(--sp-2) var(--sp-7); margin: 0; }
-.dossier-stats dt { font-size: var(--fs-meta); text-transform: uppercase; letter-spacing: 0.04em; color: var(--paper-muted); }
-.dossier-stats dd { margin: var(--sp-1) 0 0; font-size: var(--fs-h3); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.dossier-file__footer { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--sp-5); margin-top: auto; padding-top: var(--sp-4); border-top: 1px solid var(--paper-rule); }
+/* Строка характеристик: «кз 12 · хиты 43/43 · скор. 30». */
+.dossier-stats { display: flex; flex-wrap: wrap; align-items: baseline; margin: 0; font: 500 var(--fs-label)/1.3 var(--font-display); font-variant-numeric: tabular-nums; }
+.dossier-stats > div { display: inline-flex; align-items: baseline; gap: var(--sp-2); }
+.dossier-stats > div + div::before { content: "·"; margin: 0 var(--sp-3); color: var(--muted); }
+.dossier-stats dt { font: 400 var(--fs-micro)/1 var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+.dossier-stats dd { margin: 0; overflow-wrap: anywhere; }
+.dossier-file__footer { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-5); margin-top: auto; padding-top: var(--sp-2); }
 .campaign-dossier .dossier-text-action {
   background: transparent;
-  color: var(--paper-muted);
+  color: var(--ink);
   border: 0;
   border-radius: 0;
-  padding: var(--sp-2) 0;
+  padding: var(--sp-2) var(--sp-4);
   box-shadow: none;
   min-width: 0;
-  font: 400 var(--fs-data)/1.3 var(--font-body);
-  text-transform: none;
-  letter-spacing: 0;
+  font: 500 var(--fs-label)/1.3 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   white-space: normal;
   overflow-wrap: anywhere;
   text-align: left;
 }
-.campaign-dossier .dossier-text-action:hover { background: transparent; color: var(--paper-ink); text-decoration: underline; }
-.campaign-dossier .dossier-text-action--danger { color: var(--paper-alarm); }
+.campaign-dossier .dossier-text-action:hover { background: var(--tab); }
+.campaign-dossier .dossier-text-action--danger { color: var(--danger); }
 /* «Память» (Q22): погибшие и ушедшие одной строкой. */
-.dossier-memory { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); margin: 0 0 var(--sp-5); }
+.dossier-memory { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); margin: 0 0 var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-meta); }
 .dossier-memory > summary { cursor: pointer; }
 .dossier-memory__list { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); margin: 0; padding: 0; list-style: none; }
-.dossier-memory__item { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--paper-muted); font-size: var(--fs-meta); text-decoration: none; }
-.dossier-memory__item:hover { color: var(--paper-ink); }
+.dossier-memory__item { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--muted); font-size: var(--fs-meta); text-decoration: none; }
+.dossier-memory__item:hover { color: var(--ink); }
 .dossier-memory__item img, .dossier-memory__dot { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; filter: grayscale(1); }
-.dossier-memory__dot { display: grid; place-items: center; background: var(--paper-rule); font-weight: 600; }
+.dossier-memory__dot { display: grid; place-items: center; background: var(--line); font-weight: 600; }
 .dossier-file__last { margin: var(--sp-2) 0 0; font-size: var(--fs-meta); }
-.dossier-file__last span { color: var(--paper-muted); margin-right: var(--sp-3); }
-.dossier-file__empty { margin: var(--sp-7) 0; color: var(--paper-muted); font-size: var(--fs-data); }
+.dossier-file__last span { color: var(--muted); margin-right: var(--sp-3); }
+.dossier-file__empty { margin: var(--sp-7) 0; color: var(--muted); font-size: var(--fs-data); }
 .dossier-create { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-5); }
-.dossier-create label { color: var(--paper-muted); font-size: var(--fs-meta); }
+.dossier-create label { color: var(--muted); font-size: var(--fs-meta); }
 .dossier-create input { width: 100%; min-width: 0; font-family: var(--font-body); }
 .dossier-create__actions { display: flex; flex-wrap: wrap; gap: var(--sp-6); }
-@container (max-width: 400px) {
-  .dossier-files { --dossier-portrait-width: 135px; --dossier-signature-size: 28px; }
-  .dossier-file { padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-5); }
-}
-@container (max-width: 330px) {
-  .dossier-files { --dossier-portrait-width: 105px; --dossier-signature-size: 24px; }
-  .dossier-stats dd { font-size: var(--fs-h3); }
-}
-@container (max-width: 260px) {
-  .dossier-character { grid-template-columns: minmax(0, 1fr); justify-items: center; }
-  .dossier-photo { width: var(--dossier-portrait-width); }
-  .dossier-character__info { width: 100%; }
-}
 @media (pointer: coarse) {
   .campaign-dossier .dossier-peek { opacity: 1; }
   .campaign-dossier .dossier-text-action, .dossier-action-menu .context-menu button { min-height: 44px; }
@@ -233,4 +183,25 @@
 }
 @media (max-width: 900px) {
   .campaign-players-workspace .entity-tab-workspace__detail { width: 100%; }
+}
+/* На телефоне имени не хватает места — скрепка уходит на кромку дела. */
+@media (max-width: 700px) {
+  .dossier-file:first-child::after { right: -6px; }
+}
+/* Важные даты отряда (макет Camp-Party): дата машинописью | событие. */
+.campaign-squad-dates { margin-top: var(--sp-6); }
+.campaign-squad-dates ul { margin: 0; padding: 0; list-style: none; }
+.campaign-squad-dates li {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: var(--sp-5);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-data);
+}
+/* Полоса фактов не влезает между заголовком и кнопкой — уходит строкой ниже,
+   кнопка остаётся справа от заголовка (как на телефоне в макете). */
+@container (max-width: 820px) {
+  .campaign-dossier__header .d-strip { order: 3; }
+  .campaign-dossier__header .d-head__acts { order: 2; }
 }
