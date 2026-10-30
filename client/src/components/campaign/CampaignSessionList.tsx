@@ -7,10 +7,12 @@ import { parseDateKey } from "../../utils/date";
 import { daysUntilLabel, groupSessions, hasOutcome, heldTails, passportDone } from "./sessionGroups";
 import type { SessionDetail, SessionSummary } from "../../types";
 
-// Вкладка «Сессии» строками (гриллинг 2026-10-23, Q1–Q19): группы «Ждут
-// разбора / Запланированы / Сыграны», у сыгранных — месяцы; слева колонка
-// даты, строка целиком ведёт в сессию, редкие действия — под «⋯». Под
-// названием — то, что по сессии ещё не сделано (Q8, Q9); игроку хвостов нет.
+// Вкладка «Сессии» строками (гриллинг 2026-10-23, Q1–Q19; вид «Д» — макет
+// Camp-Sessions): «Ждут разбора» плашкой сверху, ближайшая запланированная —
+// главным блоком с «Готовить» и малой «+ Запланировать ещё» (группы
+// «Запланированы» нет), ниже «Сыграны» по месяцам. Слева колонка даты,
+// редкие действия — под «⋯». Справа на строке — то, что по сессии ещё не
+// сделано (Q8, Q9); игроку хвостов нет.
 
 const monthShort = new Intl.DateTimeFormat("ru", { month: "short" });
 
@@ -37,31 +39,31 @@ function SessionRow({
         <span className="session-row__day">{d.getDate()}</span>
         <span className="session-row__month">{monthShort.format(d).replace(".", "")}</span>
       </span>
-      <span className="paper-rows__main">
+      <span className="session-row__main">
         <span className="session-row__head">
           <Link className="session-row__link" to={`/sessions/${session.id}`}>{label}</Link>
-          {inworld && <span className="paper-rows__sub">{inworld}</span>}
+          {inworld && <span className="d-mono">{inworld}</span>}
         </span>
         {first ? (
           <span className="session-rows__line"><MentionText text={first} /></span>
         ) : (
           session.status === "held" && <span className="session-rows__line muted">лента пуста</span>
         )}
-        {shown.length > 0 && (
-          <span className="session-row__meta">
-            {shown.map((m, i) => (
-              <span key={i}>{m}</span>
-            ))}
-          </span>
-        )}
       </span>
+      {shown.length > 0 && (
+        <span className="session-row__meta">
+          {shown.map((m, i) => (
+            <span key={i}>{m}</span>
+          ))}
+        </span>
+      )}
       {onOutcome && (
-        <button type="button" className="session-row__action" onClick={() => onOutcome(session)}>
+        <button type="button" className="d-btn d-btn--sm session-row__action" onClick={() => onOutcome(session)}>
           Разобрать
         </button>
       )}
       {onMenu && (
-        <button type="button" className="session-row__menu" aria-label={`Действия: ${label}`} aria-haspopup="menu" onClick={(e) => onMenu(e, session)}>
+        <button type="button" className="d-dots session-row__menu" aria-label={`Действия: ${label}`} aria-haspopup="menu" onClick={(e) => onMenu(e, session)}>
           ⋯
         </button>
       )}
@@ -78,6 +80,7 @@ export function CampaignSessionList({
   onSchedule,
   onMenu,
   onOutcome,
+  oneshot = false,
 }: {
   sessions: SessionSummary[];
   today: string;
@@ -88,6 +91,8 @@ export function CampaignSessionList({
   onSchedule: () => void;
   onMenu: (e: React.MouseEvent<HTMLElement>, s: SessionSummary) => void;
   onOutcome: (s: SessionSummary) => void;
+  /** У ваншота готовят прогон, а не сессию №N. */
+  oneshot?: boolean;
 }) {
   const groups = groupSessions(sessions, today, isGm);
   const nearest = groups.planned[0];
@@ -115,7 +120,7 @@ export function CampaignSessionList({
   };
 
   const rows = (list: SessionSummary[], meta: (s: SessionSummary) => ReactNode[], outcome: (s: SessionSummary) => boolean) => (
-    <ul className="paper-rows session-rows">
+    <ul className="session-rows">
       {list.map((s) => (
         <SessionRow
           key={s.id}
@@ -128,39 +133,73 @@ export function CampaignSessionList({
       ))}
     </ul>
   );
+  const nd = nearest && parseDateKey(nearest.date);
+  const later = groups.planned.slice(1);
   return (
     <>
       {groups.overdue.length > 0 && (
-        <section className="paper-list-group session-group--overdue">
-          <h3 className="paper-group__head">
-            Ждут разбора <span className="paper-group__count">· {groups.overdue.length}</span>
-          </h3>
+        <section className="session-overdue" aria-label="Ждут разбора">
+          <div className="d-gh">
+            <h3 className="d-plate">Ждут разбора</h3>
+            <span className="d-mark active">{groups.overdue.length}</span>
+          </div>
           {rows(groups.overdue, (s) => [s.start_time], () => true)}
         </section>
       )}
-      {(isGm || groups.planned.length > 0) && (
-        <section className="paper-list-group">
-          <h3 className="paper-group__head">
-            Запланированы <span className="paper-group__count">· {groups.planned.length}</span>
-            {isGm && (
-              <button type="button" className="session-group__add" onClick={onSchedule}>
-                + Запланировать
-              </button>
+      {nearest && nd ? (
+        <section className="d-focal session-next" aria-label="Ближайшая игра">
+          <span className="session-next__date" aria-hidden="true">
+            <b>{nd.getDate()}</b>
+            <span>{monthShort.format(nd).replace(".", "")}</span>
+          </span>
+          <div className="session-next__main">
+            <Link className="session-next__title" to={`/sessions/${nearest.id}`}>
+              {sessionLabel(nearest)}
+              {nearest.start_time ? ` · ${nearest.start_time}` : ""}
+            </Link>
+            <span className="d-mono">{plannedMeta(nearest).slice(1).filter(Boolean).reverse().join("  ")}</span>
+            {later.length > 0 && (
+              <span className="session-next__later">
+                Дальше:{" "}
+                {later.map((s, i) => (
+                  <span key={s.id}>
+                    {i > 0 && ", "}
+                    <Link to={`/sessions/${s.id}`}>{formatDayMonth(s.date)} · {sessionLabel(s)}</Link>
+                  </span>
+                ))}
+              </span>
             )}
-          </h3>
-          {groups.planned.length > 0 && rows(groups.planned, plannedMeta, () => false)}
+          </div>
+          {isGm && (
+            <div className="session-next__acts">
+              <Link className="d-btn d-btn--primary" to={`/sessions/${nearest.id}`}>
+                {oneshot ? "Готовить прогон" : `Готовить сессию №${nearest.session_number ?? ""}`}
+              </Link>
+              <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={onSchedule}>
+                + Запланировать ещё
+              </button>
+            </div>
+          )}
         </section>
+      ) : (
+        isGm && (
+          <section className="d-focal session-next session-next--empty" aria-label="Ближайшая игра">
+            <p>Ближайшей игры нет.</p>
+            <button type="button" className="d-btn d-btn--primary" onClick={onSchedule}>
+              + Запланировать
+            </button>
+          </section>
+        )
       )}
       {groups.months.length > 0 && (
-        <section className="paper-list-group">
-          <h3 className="paper-group__head">
-            Сыграны <span className="paper-group__count">· {groups.months.reduce((n, m) => n + m.sessions.length, 0)}</span>
-          </h3>
+        <section className="session-held">
+          <div className="d-gh">
+            <h3 className="d-plate">Сыграны</h3>
+            <span className="d-note">{groups.months.reduce((n, m) => n + m.sessions.length, 0)}</span>
+          </div>
           {groups.months.map((m) => (
             <div key={m.key} className="session-month">
-              <h4 className="session-month__head">
-                {m.title} <span className="paper-group__count">· {m.sessions.length}</span>
-              </h4>
+              <h4 className="session-month__head d-mono">{m.title}</h4>
               {rows(m.sessions, heldMeta, (s) => s.status === "held" && heldTails(s).unreviewed)}
             </div>
           ))}
@@ -168,4 +207,9 @@ export function CampaignSessionList({
       )}
     </>
   );
+}
+
+const dayMonth = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+function formatDayMonth(date: string): string {
+  return dayMonth.format(parseDateKey(date)).replace(".", "");
 }

@@ -134,6 +134,7 @@ export function CampaignChaptersScenes({
   }
 
   const visibleTree = adventureId != null ? tree.filter((a) => a.id === adventureId) : tree;
+  const current = currentAdventureId(tree);
 
   return (
     <div className="stack campaign-chapters">
@@ -149,6 +150,7 @@ export function CampaignChaptersScenes({
           settingId={settingId}
           selected={adventureId === adv.id}
           chapterId={chapterId ?? null}
+          current={adv.id === current}
           onStatus={applyStatus}
         />
       ))}
@@ -203,9 +205,9 @@ const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapter
  */
 const MAKEUP_WORDS: [keyof SceneMakeup, NavIconName, string, [string, string, string]][] = [
   ["characters", "players", "NPC", ["NPC", "NPC", "NPC"]],
-  ["locations", "pin", "Локации", ["локация", "локации", "локаций"]],
-  ["obstacles", "skull", "Препятствия", ["препятствие", "препятствия", "препятствий"]],
-  ["loot", "bag", "Сокровища", ["сокровище", "сокровища", "сокровищ"]],
+  ["locations", "pin", "Лок.", ["локация", "локации", "локаций"]],
+  ["obstacles", "skull", "Преп.", ["препятствие", "препятствия", "препятствий"]],
+  ["loot", "bag", "Сокр.", ["сокровище", "сокровища", "сокровищ"]],
 ];
 const makeupCount = (m: SceneMakeup, k: keyof SceneMakeup) => m[k].length;
 
@@ -280,22 +282,16 @@ function AdventuresOverview({
   ].filter(Boolean);
 
   return (
-    <section className="card res-group campaign-chapters__adventure">
-      <header className="res-group__band campaign-adv__head">
-        <div className="campaign-adv__title">
-          <span className="res-group__title">Все приключения</span>
-          <span className="campaign-adv__facts">{facts.join(" · ")}</span>
-        </div>
-        <div className="campaign-adv__actions">
-          <button
-            type="button"
-            className="primary campaign-adv__canvas"
-            onClick={() => navigate(`/canvas?campaign=${campaignId}&view=map`)}
-          >
+    <section className="campaign-adv-overview">
+      <div className="d-gh campaign-adv-overview__head">
+        <h2 className="d-plate">Все приключения</h2>
+        <span className="d-note">{facts.join(" · ")}</span>
+        <span className="d-end">
+          <button type="button" className="d-btn" onClick={() => navigate(`/canvas?campaign=${campaignId}&view=map`)}>
             <NavIcon name="canvas" /> Карта кампании
           </button>
-        </div>
-      </header>
+        </span>
+      </div>
       <div className="campaign-adv-cards">
         {shown.map((adv) => (
           <AdventureCard
@@ -329,21 +325,29 @@ function AdventureCard({
   const all = allScenes(adv);
   const { done } = countByStatus(all);
   const holes = countHoles(all, nodeBy);
+  // Плитка (макет Camp-Story-All): над названием — роль на карте кампании,
+  // под ним полоса сыгранного; текущее — кромкой и кислотным квадратиком.
+  const kicker = adv.is_default ? "вне приключений" : [current && "текущее", role && ADV_ROLE[role]].filter(Boolean).join(" · ");
   return (
     <button
       type="button"
-      className={`campaign-adv-card${adv.is_default ? " is-dim" : ""}`}
+      className={`campaign-adv-card${adv.is_default ? " is-dim" : ""}${current ? " is-current" : ""}`}
       onClick={() => onPick?.(adv.id)}
     >
-      <span className="campaign-adv-card__name">
-        {adv.name}
-        {current && <span className="campaign-adv-card__current">сейчас</span>}
-        {role && ADV_ROLE[role] && <span className="campaign-adv-card__role">{ADV_ROLE[role]}</span>}
-      </span>
+      {kicker && <span className="d-mono campaign-adv-card__kicker">{kicker}</span>}
+      {current && <span className="campaign-adv-card__now" aria-label="текущее" />}
+      <span className="campaign-adv-card__name">{adv.name}</span>
+      {!adv.is_default && (
+        <span className="campaign-adv-card__bar" aria-hidden="true">
+          <i style={{ width: `${all.length ? Math.round((done / all.length) * 100) : 0}%` }} />
+        </span>
+      )}
       <span className="campaign-adv-card__facts">
-        {all.length > 0 ? `сыграно ${done} из ${all.length}` : "сцен нет"}
-        {holes > 0 && <span className="campaign-adv__holes-note"> · {holesLabel(holes)}</span>}
-        {unmarked && " · улик ещё нет"}
+        {adv.is_default
+          ? `${all.length} ${sceneWord(all.length)}`
+          : all.length > 0 ? `сыграно ${done} из ${all.length}` : "сцен нет"}
+        {holes > 0 && <span className="campaign-adv__holes-note">{holesLabel(holes)}</span>}
+        {unmarked && <span>улик ещё нет</span>}
       </span>
     </button>
   );
@@ -361,6 +365,7 @@ function AdventureSection({
   settingId,
   selected,
   chapterId,
+  current,
   onStatus,
 }: {
   adv: CampaignAdventureTree;
@@ -368,6 +373,8 @@ function AdventureSection({
   settingId: number | null;
   selected: boolean;
   chapterId: number | null;
+  /** Текущее приключение кампании — главный блок вкладки, в тушь-рамке (Q4). */
+  current: boolean;
   onStatus: (sceneId: number, status: string) => void;
 }) {
   const navigate = useNavigate();
@@ -398,10 +405,11 @@ function AdventureSection({
   const logline = adv.description?.split("\n")[0].trim();
 
   return (
-    <section className="card res-group campaign-chapters__adventure">
-      <header className="res-group__band campaign-adv__head">
+    <section className="campaign-chapters__adventure">
+      <header className={`${current ? "d-focal" : "d-block"} campaign-adv__head`}>
         <div className="campaign-adv__title">
-          <span className="res-group__title">{adv.name}</span>
+          {current && <span className="d-mono">Текущее приключение</span>}
+          <h2>{adv.name}</h2>
           {logline && (
             <span className="campaign-adv__logline">
               <MentionText text={logline} />
@@ -410,8 +418,8 @@ function AdventureSection({
           <span className="campaign-adv__facts">
             {facts.join(" · ")}
             {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
+            <Makeup m={adventureMakeup(all)} words />
           </span>
-          <Makeup m={adventureMakeup(all)} words />
           {unmarked && settingId != null && (
             <button
               type="button"
@@ -434,22 +442,22 @@ function AdventureSection({
             </button>
           )}
           {!adv.is_default && settingId != null && (
-            <>
+            <span className="campaign-adv__buttons">
               <button
                 type="button"
-                className="primary campaign-adv__canvas"
+                className="d-btn"
                 onClick={() => navigate(`/canvas?setting=${settingId}&arc=${adv.id}&campaign=${campaignId}`)}
               >
                 <NavIcon name="canvas" /> Холст
               </button>
-              <button type="button" onClick={() => navigate(`/adventures/${adv.id}?campaign=${campaignId}`)}>
+              <button type="button" className="d-btn d-btn--quiet" onClick={() => navigate(`/adventures/${adv.id}?campaign=${campaignId}`)}>
                 Редактировать
               </button>
-            </>
+            </span>
           )}
         </div>
       </header>
-      <div className="res-group__body campaign-chapters__body">
+      <div className="campaign-chapters__body">
         {selected && !adv.is_default && <CampaignAdventureOverview campaignId={campaignId} adventureId={adv.id} />}
         {/* Сцены, лежащие прямо на приключении: у книжного импорта их
             почти не бывает, у самодельного — наоборот, все. */}
@@ -470,19 +478,19 @@ function AdventureSection({
           return (
             <details
               key={c.id}
-              className="card res-group campaign-chapters__chapter"
+              className="campaign-chapters__chapter"
               open={openCh.has(c.id)}
               onToggle={(e) => toggleCh(c.id, e.currentTarget.open)}
             >
-              <summary className="res-group__band">
-                <span className="res-group__title">{c.name}</span>
-                <span className="res-group__count">
+              <summary className="campaign-chapter__head">
+                <span className="campaign-chapter__title">{c.name}</span>
+                <span className="campaign-chapter__count">
                   {c.scenes.length > 0 ? `сыграно ${chDone} из ${c.scenes.length}` : "сцен нет"}
                   {chHoles > 0 && <span className="campaign-adv__holes-note"> · {holesLabel(chHoles)}</span>}
                 </span>
                 {c.is_override && <span className="campaign-scene__note">правка кампании</span>}
               </summary>
-              <div className="res-group__body campaign-chapters__scenes">
+              <div className="campaign-chapters__scenes">
                 <SceneList
                   scenes={c.scenes}
                   campaignId={campaignId}
@@ -497,9 +505,7 @@ function AdventureSection({
           );
         })}
         {all.length === 0 && (
-          <div className="card" style={{ borderStyle: "dashed" }}>
-            <p className="muted" style={{ maxWidth: "62ch" }}>Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
-          </div>
+          <p className="muted">Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
         )}
       </div>
     </section>
@@ -669,7 +675,7 @@ const SceneRow = memo(function SceneRow({
         </span>
         <button
           type="button"
-          className="campaign-scene__more"
+          className="d-dots campaign-scene__more"
           aria-label={`Статус сцены «${s.name}»`}
           aria-haspopup="menu"
           onClick={(e) => {
@@ -711,10 +717,10 @@ const SceneRow = memo(function SceneRow({
             <Makeup m={s.makeup} words />
           </span>
           <div className="campaign-scene__actions">
-            <button type="button" onClick={() => navigate(`/scenes/${s.id}?campaign=${campaignId}`)}>Открыть сцену</button>
+            <button type="button" className="d-btn d-btn--sm" onClick={() => navigate(`/scenes/${s.id}?campaign=${campaignId}`)}>Открыть сцену</button>
             {canvasUrl && (
-              <button type="button" onClick={() => navigate(canvasUrl)}>
-                <NavIcon name="canvas" /> На холсте
+              <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => navigate(canvasUrl)}>
+                На холсте
               </button>
             )}
           </div>

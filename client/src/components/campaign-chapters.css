@@ -1,7 +1,6 @@
-@import "../caveat.css";
-
-/* Выбранный макет: прозрачные строки на линованной бумаге и небольшие
-   чернильные штампы. Только сюжет кампании; общие списки не меняются. */
+/* «Сюжет» кампании в «Д» (макеты Camp-Story, Camp-Story-All, Camp-Story-Phone):
+   текущее приключение — главный блок в тушь-рамке, эпизоды — заголовками с
+   кромкой снизу, сцены — строками с кружком статуса и столбцами состава. */
 .entity-tab-workspace__detail:has(> .campaign-chapters) {
   width: 100%;
 }
@@ -10,409 +9,284 @@
   min-width: 0;
   container-type: inline-size;
 }
-.campaign-chapters .res-group__band {
-  flex-wrap: wrap;
-  column-gap: var(--sp-5);
-  row-gap: var(--sp-2);
-}
-.campaign-chapters .res-group__title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.campaign-chapters .res-group__count {
-  margin-left: auto;
-  white-space: normal;
-}
-.paper-sheet .campaign-chapters details.card summary.res-group__band:hover :is(.res-group__title, .res-group__count) {
-  color: var(--paper-ink);
-}
-.campaign-chapters .campaign-chapters__adventure > .res-group__band .res-group__title {
-  font-size: var(--fs-h2);
-}
-.paper-sheet .campaign-chapters section.campaign-chapters__adventure { border-top: 0; padding: 0; }
-.campaign-chapters__adventure > header.res-group__band {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  padding: var(--sp-2) 0;
-  background: none;
-  color: var(--paper-ink);
-  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
-}
-.paper-sheet .campaign-chapters .campaign-chapters__chapter > summary.res-group__band { padding-top: var(--sp-1); }
-.campaign-chapters .campaign-chapters__chapter > .res-group__band .res-group__title,
-.campaign-chapters .campaign-chapters__overview > .res-group__band .res-group__title {
-  font-size: var(--fs-h3);
-}
-.campaign-chapters__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  padding: var(--sp-6) 0;
-}
-.campaign-chapters__scenes {
-  padding: var(--sp-4) 0 0;
-}
-.campaign-scene-list {
-  padding-left: var(--sp-2);
-}
-.campaign-scene-list__title {
-  display: block;
-  font-size: var(--fs-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding-bottom: var(--sp-4);
-}
-.campaign-scene {
-  position: relative;
-  border-bottom: var(--card-border-width) solid var(--line);
-}
-.campaign-chapters .campaign-scene > .campaign-scene__summary,
-.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
-  align-items: center;
-  gap: var(--sp-5);
-  min-height: 58px;
-  margin: 0;
-  padding: var(--sp-4) var(--sp-2) var(--sp-4) 0;
-  background: transparent;
-  cursor: pointer;
-  list-style: none;
-}
-.campaign-scene__summary::-webkit-details-marker {
-  display: none;
-}
-.campaign-scene__summary:hover .campaign-scene__name,
-.campaign-scene[open] .campaign-scene__name {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-.campaign-scene__summary:focus-visible {
-  outline: var(--card-border-width-strong) solid currentColor;
-  outline-offset: var(--sp-2);
-}
-/* «тип · роль» (Q8) — тихо после названия, без рамки и своей колонки. */
-.campaign-scene__kind {
-  font-family: var(--font-body);
-  font-size: var(--fs-meta);
-  font-weight: 400;
-  color: var(--paper-muted, var(--muted));
-  text-transform: lowercase;
-}
-/* Состав: значок и число. В строке — столбцы постоянной ширины, чтобы
-   числа соседних сцен стояли друг под другом. */
-.campaign-makeup {
-  display: flex;
-  align-items: center;
-  font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
-}
-.campaign-makeup__cell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  width: 6rem;
-  white-space: nowrap;
-}
-/* Подписи столбцов: та же сетка, что у строк сцен, без щелчка и подчёркивания. */
-.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
-  min-height: 0;
-  padding-top: var(--sp-2);
-  padding-bottom: 0;
-  cursor: default;
-  font-size: var(--fs-micro);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--paper-muted, var(--muted));
-}
-.campaign-makeup__cell .nav-icon {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
-.campaign-makeup__cell.is-zero {
-  opacity: 0.45;
-}
-.campaign-makeup--words {
-  flex-wrap: wrap;
-  column-gap: var(--sp-5);
-  row-gap: var(--sp-1);
-}
-.campaign-makeup--words .campaign-makeup__cell {
-  width: auto;
-}
-.campaign-scene__makeup-inline {
-  display: none;
-}
-.campaign-scene__name {
-  min-width: 0;
-  font: 700 var(--fs-body)/1.35 Georgia, "Times New Roman", serif;
-  overflow-wrap: anywhere;
-}
-/* Кружок статуса (Q9): пусто — не начата, залит — пройдена, перечёркнут — пропущена. */
-.campaign-scene__mark {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  padding: 0;
-  border-radius: 50%;
-  border: var(--edge-width) solid var(--paper-ink, var(--ink));
-  background: transparent;
-  cursor: pointer;
-  position: relative;
-}
-.campaign-scene.is-done .campaign-scene__mark {
-  background: var(--paper-ink, var(--ink));
-}
-.campaign-scene.is-done .campaign-scene__mark::after {
-  content: "✓";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--paper, #fff);
-  font-size: var(--fs-label);
-  font-weight: 700;
-}
-.campaign-scene.is-skipped .campaign-scene__mark {
-  border-style: dashed;
-  border-color: var(--paper-muted, var(--muted));
-}
-.campaign-scene.is-skipped .campaign-scene__mark::after {
-  content: "";
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  top: 50%;
-  border-top: 2px solid var(--paper-muted, var(--muted));
-  transform: rotate(-45deg);
-}
-/* Сыгранное и пропущенное — тише будущего. */
-.campaign-scene:is(.is-done, .is-skipped) .campaign-scene__name {
-  color: var(--paper-muted, var(--muted));
-  font-weight: 600;
-}
-.campaign-scene__name .campaign-scene__note {
-  margin-left: var(--sp-3);
-  font-family: var(--font-body);
-  font-weight: 400;
-}
-.campaign-scene__session {
-  width: 6.5rem;
-  text-align: right;
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-}
-.campaign-scene__clues {
-  min-width: 5rem;
-  text-align: right;
-  font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
-  white-space: nowrap;
-}
-.campaign-scene__clues.is-bad {
-  color: var(--danger-text, #fff);
-  background: var(--danger-bg);
-  padding: var(--sp-0) var(--sp-3);
-  font-weight: 600;
-}
-.campaign-scene__more {
-  width: 2rem;
-  padding: 0 var(--sp-3);
-  background: transparent;
-  border: none;
-  font-size: var(--fs-h3);
-  line-height: 1;
-  cursor: pointer;
-  color: var(--paper-ink, var(--ink));
-}
-.campaign-scene__clue-lists {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  font-size: var(--fs-meta);
-}
-.campaign-scene__clue-list {
-  margin: var(--sp-1) 0 0;
-  padding-left: var(--sp-6);
-}
-.campaign-scene__clue-list li.is-found {
-  text-decoration: line-through;
-  text-decoration-color: var(--paper-muted, var(--muted));
-}
-.campaign-scene__found {
-  font-style: italic;
-}
-.campaign-scene__trigger {
-  margin: 0;
-}
-.campaign-scene__sessions {
-  font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
-}
-.campaign-scene__note {
-  font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
-  border-bottom: var(--card-border-width) dotted currentColor;
-}
-.campaign-scene__expanded {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  padding: 0 var(--sp-4) var(--sp-6);
-}
-.campaign-scene__lead {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-6);
-}
-.campaign-scene__lead > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.campaign-scene__actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--sp-3);
-  flex: none;
-}
 
-/* Шапка приключения «Сюжета» (гриллинг 2026-10-23, Q13): слева название,
-   логлайн и факты словами, справа дыры правила трёх и вход на холст. */
-.campaign-chapters__adventure > header.campaign-adv__head {
+/* Голова приключения: kicker, название, логлайн, факты; справа — дыры
+   правила трёх, «Холст» и «Редактировать». */
+.campaign-adv__head {
+  display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: var(--sp-5);
+  gap: var(--sp-5) var(--sp-6);
+  padding: var(--sp-6) var(--sp-7);
 }
 .campaign-adv__title {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   flex: 1 1 24rem;
   min-width: 0;
 }
+.campaign-adv__title h2 {
+  margin: 0;
+  font: 500 var(--fs-h2)/1.05 var(--font-display);
+  letter-spacing: 0;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
 .campaign-adv__logline {
-  font-size: var(--fs-body);
-  color: var(--paper-ink, var(--ink));
+  max-width: 760px;
+  color: var(--ink-2);
+  font-size: var(--fs-data);
+  line-height: 1.45;
   /* Логлайн — первая строка описания, а книжные пишут её абзацем. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   overflow: hidden;
 }
 .campaign-adv__facts {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
-  font-size: var(--fs-meta);
-  color: var(--muted);
+  gap: var(--sp-3) var(--sp-6);
+  font-size: var(--fs-label);
 }
 .campaign-adv__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-5);
 }
-.campaign-adv__canvas {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
+.campaign-adv__buttons { display: inline-flex; gap: var(--sp-4); }
+.campaign-adv__buttons .nav-icon { width: 16px; height: 16px; }
 .campaign-adv__holes {
-  color: var(--danger-bg);
-  border-color: currentColor;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mark);
+  font: 600 var(--fs-label)/1.3 var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
 }
+.campaign-adv__holes:hover { text-decoration: underline; }
 .campaign-adv__unmarked {
   align-self: flex-start;
   padding: 0;
   background: none;
   border: none;
   font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
+  color: var(--muted);
   text-decoration: underline dotted;
   text-underline-offset: 0.2em;
+  text-transform: none;
+  letter-spacing: 0;
   cursor: pointer;
 }
-.campaign-adv__holes-note {
-  color: var(--danger-bg);
-}
+.campaign-adv__holes-note { color: var(--mark); }
 
-/* «Все приключения» (Q15): карточки без сцен. */
-.campaign-adv-cards {
+.campaign-chapters__body {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-4) 0;
+  gap: var(--sp-6);
+  padding: var(--sp-6) 0 0;
 }
-.campaign-adv-card {
+/* Эпизод: Oswald-капс с кромкой снизу, факты тихо рядом. */
+.campaign-chapter__head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--sp-2) var(--sp-5);
-  width: 100%;
-  padding: var(--sp-5) var(--sp-2);
-  background: transparent;
-  border: none;
-  border-bottom: var(--card-border-width) solid var(--line);
-  text-align: left;
+  padding-bottom: var(--sp-3);
+  border-bottom: var(--edge-width) solid var(--edge);
   cursor: pointer;
-  color: var(--paper-ink, var(--ink));
+  list-style: none;
 }
-.campaign-adv-card:hover .campaign-adv-card__name {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+.campaign-chapter__head::-webkit-details-marker { display: none; }
+.campaign-chapter__title {
+  min-width: 0;
+  font: 500 var(--fs-lead)/1.2 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
-.campaign-adv-card.is-dim {
-  color: var(--paper-muted, var(--muted));
-}
-.campaign-adv-card__name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-3);
-  font: 700 var(--fs-h3)/1.3 Georgia, "Times New Roman", serif;
-}
-.campaign-adv-card__current,
-.campaign-adv-card__role {
-  font: 400 var(--fs-meta)/1 var(--font-body);
-  padding: var(--sp-0) var(--sp-3);
-  border: var(--card-border-width) solid currentColor;
-}
-.campaign-adv-card__current {
-  background: var(--paper-ink, var(--ink));
-  color: var(--paper, #fff);
-  border-color: var(--paper-ink, var(--ink));
-}
-.campaign-adv-card__facts {
-  font-size: var(--fs-meta);
-  color: var(--paper-muted, var(--muted));
+.campaign-chapter__count { color: var(--muted); font-size: var(--fs-meta); }
+.campaign-chapters__chapter:not([open]) > .campaign-chapter__head { border-bottom-width: 1px; border-bottom-color: var(--line); }
+.campaign-chapters__scenes { padding: 0; }
+.campaign-scene-list__title {
+  display: block;
+  padding: var(--sp-4) 0 var(--sp-2);
+  color: var(--muted);
+  font: 400 var(--fs-micro)/1.3 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-/* Телефон (Q19): в строке кружок, название и только красный счётчик улик. */
-@container (max-width: 520px) {
-  .campaign-chapters .campaign-scene > .campaign-scene__summary {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    column-gap: var(--sp-4);
-  }
+/* Строка сцены: кружок, имя с «тип · роль», состав столбцами, улики, сессия, «⋯». */
+.campaign-scene { position: relative; border-bottom: 1px solid var(--line); }
+.campaign-chapters .campaign-scene > .campaign-scene__summary,
+.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto auto 28px;
+  align-items: center;
+  gap: var(--sp-5);
+  min-height: 40px;
+  margin: 0;
+  padding: var(--sp-2) 0;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+.campaign-scene__summary::-webkit-details-marker { display: none; }
+.campaign-scene__summary:hover .campaign-scene__name { text-decoration: underline; text-underline-offset: 0.2em; }
+.campaign-scene__summary:focus-visible { outline: var(--edge-width) solid var(--edge); outline-offset: var(--sp-1); }
+.campaign-scene[open] { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.campaign-scene__name {
+  min-width: 0;
+  font: 400 var(--fs-lead)/1.35 var(--font-body);
+  overflow-wrap: anywhere;
+}
+/* «тип · роль» (Q8) — тихо после названия, без рамки и своей колонки. */
+.campaign-scene__kind { color: var(--muted); font-size: var(--fs-meta); text-transform: lowercase; }
+/* Состав: числа столбцами постоянной ширины, чтобы стояли друг под другом. */
+.campaign-makeup { display: flex; align-items: center; font-size: var(--fs-data); color: var(--ink); }
+.campaign-makeup__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 2.25rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.campaign-scene__summary .campaign-makeup__cell .nav-icon { display: none; }
+.campaign-makeup__cell .nav-icon { width: 15px; height: 15px; flex: none; color: var(--ink-2); }
+.campaign-makeup__cell.is-zero { opacity: 0.4; }
+.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
+  min-height: 0;
+  padding: var(--sp-3) 0 var(--sp-1);
+  cursor: default;
+  color: var(--muted);
+  font: 400 var(--fs-micro)/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.campaign-scene__heads .campaign-makeup { color: var(--muted); font-size: var(--fs-micro); }
+.campaign-makeup--words { flex-wrap: wrap; column-gap: var(--sp-6); row-gap: var(--sp-1); font-size: var(--fs-label); }
+.campaign-makeup--words .campaign-makeup__cell { width: auto; justify-content: flex-start; }
+.campaign-scene__makeup-inline { display: none; }
+/* Кружок статуса (Q9): пусто — не начата, залит — пройдена, штрих — пропущена. */
+.campaign-scene__mark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.campaign-scene.is-done .campaign-scene__mark { background: var(--ink); border-color: var(--ink); }
+.campaign-scene.is-skipped .campaign-scene__mark { border-style: dashed; border-color: var(--muted); }
+.campaign-scene:is(.is-done, .is-skipped) .campaign-scene__name { color: var(--ink-2); }
+.campaign-scene__name .campaign-scene__note { margin-left: var(--sp-3); }
+.campaign-scene__session {
+  width: 4rem;
+  color: var(--ink-2);
+  font: 400 var(--fs-micro)/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-align: right;
+  white-space: nowrap;
+}
+.campaign-scene__clues {
+  min-width: 4.5rem;
+  color: var(--muted);
+  font: 400 var(--fs-micro)/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.campaign-scene__clues.is-bad { color: var(--mark); font-weight: 600; }
+.campaign-scene__clue-lists { display: flex; flex-direction: column; gap: var(--sp-3); font-size: var(--fs-meta); }
+.campaign-scene__clue-list { margin: var(--sp-1) 0 0; padding-left: var(--sp-6); }
+.campaign-scene__clue-list li.is-found { text-decoration: line-through; text-decoration-color: var(--muted); }
+.campaign-scene__found { font-style: italic; }
+.campaign-scene__trigger { margin: 0; }
+.campaign-scene__sessions { color: var(--muted); font-size: var(--fs-meta); }
+.campaign-scene__note { color: var(--muted); font-size: var(--fs-meta); border-bottom: 1px dotted currentColor; }
+.campaign-scene__expanded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-2) var(--sp-5) var(--sp-6) var(--sp-9);
+}
+.campaign-scene__lead { display: flex; align-items: flex-start; gap: var(--sp-6); }
+.campaign-scene__lead > :first-child { flex: 1 1 auto; min-width: 0; }
+.campaign-scene__lead .reading-text { font-size: var(--fs-data); }
+.campaign-scene__actions { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3); flex: none; }
+
+/* «Все приключения» (Q15, макет Camp-Story-All): плитки в две колонки. */
+.campaign-adv-overview__head { margin-bottom: var(--sp-6); border-bottom: 0; padding-bottom: 0; }
+.campaign-adv-overview__head .nav-icon { width: 16px; height: 16px; }
+.campaign-adv-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--sp-6);
+}
+.campaign-adv-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+  cursor: pointer;
+}
+.campaign-adv-card:hover { border-color: var(--edge); }
+.campaign-adv-card.is-current { border: var(--edge-width) solid var(--edge); }
+.campaign-adv-card.is-dim { border-style: dashed; color: var(--ink-2); }
+.campaign-adv-card__kicker { padding-right: var(--sp-6); font-size: var(--fs-micro); }
+.campaign-adv-card__now {
+  position: absolute;
+  top: var(--sp-5);
+  right: var(--sp-5);
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--edge);
+  background: var(--acid);
+}
+.campaign-adv-card__name { font: 500 var(--fs-h2)/1.15 var(--font-display); overflow-wrap: anywhere; }
+.campaign-adv-card__bar { height: 6px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.campaign-adv-card__bar i { display: block; height: 100%; background: var(--ink); }
+.campaign-adv-card__facts { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); color: var(--ink-2); font-size: var(--fs-label); }
+.campaign-adv-card__facts > span:not(.campaign-adv__holes-note) { color: var(--muted); }
+
+/* Телефон (Q19, макет Camp-Story-Phone): кружок, название и только красный счётчик улик. */
+@container (max-width: 440px) {
+  .campaign-adv__head { padding: var(--sp-5); }
+  .campaign-adv__actions, .campaign-adv__buttons { width: 100%; }
+  .campaign-adv__buttons > * { flex: 1; }
+  .campaign-adv__head .campaign-makeup--words { display: none; }
+  .campaign-chapters .campaign-scene > .campaign-scene__summary { grid-template-columns: 22px minmax(0, 1fr) auto 28px; column-gap: var(--sp-4); }
   .campaign-scene__session,
   .campaign-chapters .campaign-scene-list > .campaign-scene__heads,
   .campaign-scene__summary > .campaign-makeup,
-  .campaign-scene__clues:not(.is-bad) {
-    display: none;
-  }
-  .campaign-scene__more {
-    grid-column: 4;
-  }
-  .campaign-scene__lead {
-    flex-direction: column;
-  }
-  .campaign-scene__makeup-inline {
-    display: block;
-  }
-  .campaign-scene__actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
+  .campaign-scene__clues:not(.is-bad) { display: none; }
+  .campaign-scene__more { grid-column: 4; }
+  .campaign-scene__expanded { padding-left: var(--sp-5); }
+  .campaign-scene__lead { flex-direction: column; }
+  .campaign-scene__makeup-inline { display: block; }
+  .campaign-scene__actions { flex-direction: row; flex-wrap: wrap; }
 }
+.campaign-adv-card { white-space: normal; }
