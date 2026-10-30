@@ -131,7 +131,7 @@ export function SettingCyclePanel({
           <span className="cycle-panel__title">Циклы</span>
           <span className="muted">пока нет</span>
           <span className="cycle-panel__grow" />
-          <button type="button" onClick={onAddCycle}>
+          <button type="button" className="cycle-panel__add" onClick={onAddCycle}>
             + Цикл
           </button>
         </div>
@@ -163,11 +163,11 @@ export function SettingCyclePanel({
             )}
           </span>
         ))}
-        <button type="button" className="population__chip" onClick={() => setEditing("new")}>
+        <button type="button" className="population__chip cycle-panel__add" onClick={() => setEditing("new")}>
           + Группа
         </button>
         <span className="cycle-panel__grow" />
-        <button type="button" onClick={onAddCycle}>
+        <button type="button" className="cycle-panel__add" onClick={onAddCycle}>
           + Цикл
         </button>
       </div>
@@ -236,7 +236,7 @@ function CycleLane({ segments, xOf }: { segments: CycleSegment[]; xOf: (day: num
         const key = `${seg.start}-${seg.index}`;
         if (seg.days === 1) {
           return (
-            <span key={key} className="cycle-lane__mark" style={{ left: x }} title={seg.name}>
+            <span key={key} className={`cycle-lane__mark${seg.index % 2 ? " is-alt" : ""}`} style={{ left: x }} title={seg.name}>
               {seg.name}
             </span>
           );
@@ -245,7 +245,7 @@ function CycleLane({ segments, xOf }: { segments: CycleSegment[]; xOf: (day: num
         // края видимой части, а не уезжает вместе с началом.
         const hidden = Math.max(0, -x);
         return (
-          <span key={key} className={`cycle-lane__phase${seg.index % 2 ? " is-alt" : ""}`} style={{ left: x, width }} title={seg.name}>
+          <span key={key} className={`cycle-lane__phase${seg.index % 2 ? " is-alt" : ""}`} data-ph={seg.index % 4} style={{ left: x, width }} title={seg.name}>
             {width - hidden > LABEL_PX && <span style={{ marginLeft: hidden }}>{seg.name}</span>}
           </span>
         );

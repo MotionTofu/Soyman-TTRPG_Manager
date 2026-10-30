@@ -87,12 +87,105 @@
   text-transform: uppercase;
 }
 .chr-axis__tl { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
-.chr-axis .tl-canvas { border: 0; border-bottom: var(--edge-width) solid var(--edge); background: transparent; }
-.chr-axis .tl-event { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, var(--sheet)); }
+.chr-axis .tl-toolbar select {
+  height: 30px;
+  padding: 0 var(--sp-4);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* Полотно по доске Set-Chronicle: линия оси толстой кромкой в 28px от низа,
+   под ней подписи шкалы машинописью, над ней — точки событий с подписями
+   (чётные — вторым рядом, чтобы соседи не наезжали), сверху — скобка эпохи. */
+.chr-axis .tl-canvas,
+.chr-axis .cycle-panel__lanes { user-select: none; }
+.chr-axis .tl-canvas { height: 104px; border: 0; background: transparent; }
+.chr-axis .tl-canvas::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 26px;
+  border-top: var(--edge-width) solid var(--edge);
+}
+.chr-axis .tl-tick { top: auto; bottom: 20px; height: 6px; border-left-color: var(--muted); }
+.chr-axis .tl-tick span { bottom: -18px; left: 0; transform: translateX(-50%); text-transform: lowercase; }
+.chr-axis .tl-era-band { top: 2px; height: 12px; border: 1px solid var(--line); border-bottom: 0; border-radius: 0; background: transparent; opacity: 1; }
+.chr-axis .tl-era-label {
+  top: -1px;
+  line-height: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chr-axis .tl-cycle { bottom: 24px; height: 8px; opacity: 0.6; }
+
+.chr-axis .tl-event {
+  top: auto;
+  bottom: 22px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 .chr-axis .tl-event:not(.is-upcoming):not(.is-cancelled) { --tone: var(--t-past); }
 .chr-axis .tl-event.is-upcoming { --tone: var(--t-up); }
 .chr-axis .tl-event.is-cancelled { --tone: var(--t-off); }
-.chr-axis .tl-event.is-important { background: var(--tone); border-color: var(--tone); color: var(--sheet); }
+.chr-axis .tl-event::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--tone);
+  transform: translateX(-50%);
+}
+/* Дата до месяца или года — кольцом: точка обещала бы точный день. */
+.chr-axis .tl-event.is-fuzzy::before { border: var(--edge-width) solid var(--tone); background: var(--sheet); }
+.chr-axis .tl-event.is-important::before { width: 12px; height: 12px; top: -1px; outline: var(--edge-width) solid var(--edge); }
+/* Период — полосой тона по линии оси от начала до конца. */
+.chr-axis .tl-event.is-period::before { left: 0; width: 100%; height: 6px; top: 2px; border-radius: 0; transform: none; }
+.chr-axis .tl-event-title {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  z-index: 3;
+  padding: 0 var(--sp-1);
+  transform: translateX(-50%);
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
+.chr-axis .tl-event.is-period .tl-event-title { left: 0; transform: none; }
+.chr-axis button.tl-event:nth-of-type(even) .tl-event-title { bottom: 34px; }
+.chr-axis .tl-event.is-important .tl-event-title::before { content: "★ "; }
+.chr-axis .tl-event.is-cancelled .tl-event-title { color: var(--muted); }
+/* Сессия кампании — ромбом на линии, номер под осью. */
+.chr-axis .tl-event.is-session::before { width: 8px; height: 8px; top: 1px; border-radius: 0; background: var(--ink); transform: translateX(-50%) rotate(45deg); }
+.chr-axis .tl-event.is-session .tl-event-title { bottom: auto; top: 12px; color: var(--ink-2); font-family: var(--font-mono); font-size: var(--fs-micro); }
+.chr-axis .tl-cluster {
+  top: auto;
+  bottom: 19px;
+  min-width: 16px;
+  height: 16px;
+  border: var(--edge-width) solid var(--edge);
+  background: var(--ink);
+  color: var(--sheet);
+  font-size: var(--fs-micro);
+}
 .chr-axis .tl-now { width: 3px; border-left: 0; background: var(--acid); outline: 1px solid var(--edge); }
 .chr-axis .tl-now::after {
   content: "сейчас";
@@ -107,7 +200,109 @@
   white-space: nowrap;
 }
 .chr-axis .tl-now-head { display: none; }
-.chr-axis .cycle-panel { --cycle-cross: var(--mark); }
+.chr-axis .cycle-panel { --cycle-cross: var(--mark); gap: var(--sp-3); margin-top: var(--sp-5); padding-top: 0; }
+
+/* Панель циклов по доске: квадратные чипы групп машинописью, «+» пунктиром
+   рядом с ними; дорожки — имя капителью слева, фазы цветными полосами,
+   однодневные точки — кружками (через одну залитыми). */
+.chr-axis .cycle-panel__title {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+.chr-axis .cycle-panel__head { gap: var(--sp-3); }
+.chr-axis .cycle-panel__grow { display: none; }
+.chr-axis .cycle-panel__head .population__chip,
+.chr-axis .cycle-panel__add {
+  height: 24px;
+  padding: 0 var(--sp-4);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chr-axis .cycle-panel__head .population__chip.is-on { background: var(--ink); color: var(--sheet); }
+.chr-axis .cycle-panel__head .cycle-panel__add { border-style: dashed; color: var(--muted); }
+.chr-axis .cycle-panel__lanes { border: 0; background: transparent; }
+.chr-axis .cycle-lane { height: 22px; border-top: 0; border-bottom: 1px solid var(--line); }
+.chr-axis .cycle-lane.is-off { height: 22px; }
+.chr-axis .cycle-lane__phase {
+  top: var(--sp-1);
+  bottom: var(--sp-1);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-left: 1px solid var(--sheet);
+  /* clip, а не hidden: hidden делает полосу контейнером прокрутки, и липкая
+     подпись внутри неё перестаёт липнуть к краю панели. */
+  overflow: clip;
+  background: #4f6e86;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chr-axis .cycle-lane__phase::after { display: none; }
+/* Подпись фазы, начатой левее экрана, держится справа от имени дорожки, а не
+   под ним: липкость вместо сдвига из Timeline (тот считает от края). */
+.chr-axis .cycle-lane__phase > span { position: sticky; left: 104px; margin-left: 0 !important; }
+.chr-axis .cycle-lane__phase[data-ph="1"] { background: #7b8b4a; }
+.chr-axis .cycle-lane__phase[data-ph="2"] { background: #a38b3a; }
+.chr-axis .cycle-lane__phase[data-ph="3"] { background: #9c6a3a; }
+.chr-axis .cycle-lane__mark {
+  top: 5px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 50%;
+  background: var(--sheet);
+  font-size: 0;
+  transform: translateX(-50%);
+}
+.chr-axis .cycle-lane__mark.is-alt { background: var(--ink); }
+.chr-axis .cycle-lane__label {
+  top: 0;
+  bottom: 0;
+  align-items: center;
+  padding: 0 var(--sp-4) 0 0;
+  border: 0;
+  background: var(--sheet);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chr-axis .cycle-lane__label { width: 96px; overflow: hidden; }
+.chr-axis .cycle-lane__label label { min-width: 0; font-weight: 400; white-space: nowrap; }
+/* Галочка скрытия остаётся (щелчок по имени), но не видна — как на доске;
+   скрытая дорожка — блёклым зачёркнутым именем. */
+.chr-axis .cycle-lane__label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.chr-axis .cycle-lane.is-off .cycle-lane__label { color: var(--muted); text-decoration: line-through; }
+.chr-axis .cycle-lane__meta { display: none; }
+.chr-axis .cycle-panel__cross { border-left-width: 1.5px; }
+.chr-axis .cycle-panel__cross::before {
+  content: "сходятся";
+  position: absolute;
+  top: 0;
+  left: var(--sp-2);
+  color: var(--mark);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
 /* Строка сегмента: разделы слева, поиск и порядок справа. */
 .chr-segrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-5); }
