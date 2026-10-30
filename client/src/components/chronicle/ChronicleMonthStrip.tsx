@@ -2,7 +2,7 @@ import { forwardRef, useState } from "react";
 import { useConfirm } from "../../hooks/useConfirm";
 import { weekdayIndexFor } from "../../inworldCalendar";
 import type { CalendarMonth, CalendarWeekday } from "../../types";
-import { monthName, TONE_LABEL, TONES, type ChronicleNow, type TimeTone, type TonedEvent } from "./time";
+import { eventOccursOn, monthName, TONE_LABEL, TONES, type ChronicleNow, type TimeTone, type TonedEvent } from "./time";
 
 // Календарь Хроники (доска Set-Chronicle, решение 2026-10-30 — у сеттинга и
 // кампании одинаково): полоса из трёх месяцев внизу страницы — предыдущий ·
@@ -48,11 +48,14 @@ export interface ChronicleMonthStripProps<E extends StripEvent> {
   seasonOf?: (year: number, month: number) => string | null;
   /** Месяц, к которому перешли из строки хроники. */
   focus?: YM | null;
+  selectedDay?: { year: number; month: number; day: number } | null;
+  onDayClick?: (at: { year: number; month: number; day: number }) => void;
+  sessions?: { id: number; title: string; year: number; month: number; day: number }[];
   onDayMenu: (year: number, month: number, day: number, x: number, y: number, events: E[]) => void;
 }
 
 function ChronicleMonthStripInner<E extends StripEvent>(
-  { months, weekdays, events, now, pin, seasonOf, focus, onDayMenu }: ChronicleMonthStripProps<E>,
+  { months, weekdays, events, now, pin, seasonOf, focus, onDayMenu, onDayClick, selectedDay, sessions = [] }: ChronicleMonthStripProps<E>,
   ref: React.ForwardedRef<HTMLElement>
 ) {
   const [confirmDialog, confirm] = useConfirm();
@@ -87,7 +90,6 @@ function ChronicleMonthStripInner<E extends StripEvent>(
   function month(at: YM, cur: boolean) {
     const n = months.find((x) => x.position === at.month)?.days ?? 0;
     const lead = wd.length ? weekdayIndexFor(at.year, at.month, 1, months, wd.length) : 0;
-    const inMonth = events.filter(({ ev }) => ev.inworld_year === at.year && ev.inworld_month === at.month);
     // Идущий период — подложкой по дням, которые он накрывает в этом месяце.
     const inPeriod = (d: number) =>
       ongoing.some(({ ev }) => {
@@ -120,13 +122,19 @@ function ChronicleMonthStripInner<E extends StripEvent>(
           ))}
           {Array.from({ length: n }, (_, i) => {
             const d = i + 1;
-            const dayEvents = inMonth.filter(({ ev }) => ev.inworld_day === d);
+            const dayEvents = events.filter(({ ev }) => eventOccursOn(ev, { ...at, day: d }));
+            const daySessions = sessions.filter((session) => session.year === at.year && session.month === at.month && session.day === d);
+            const selected = selectedDay?.year === at.year && selectedDay.month === at.month && selectedDay.day === d;
             const tone = dayEvents[0]?.tone;
             return (
-              <span
+              <button
+                type="button"
                 key={d}
-                className={`chr-cal__d${inPeriod(d) ? " is-per" : ""}${d === today ? " is-today" : ""}${tone ? ` chr-tone--${tone}` : ""}`}
-                title={dayEvents.map(({ ev }) => ev.title).join("\n") || undefined}
+                aria-label={`${d} ${name(at.month)} ${at.year}`}
+                aria-pressed={onDayClick ? selected : undefined}
+                onClick={() => onDayClick?.({ ...at, day: d })}
+                className={`chr-cal__d${selected ? " is-selected" : ""}${inPeriod(d) ? " is-per" : ""}${d === today ? " is-today" : ""}${tone ? ` chr-tone--${tone}` : ""}`}
+                title={[...dayEvents.map(({ ev }) => ev.title), ...daySessions.map((session) => session.title)].join("\n") || undefined}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   onDayMenu(at.year, at.month, d, e.clientX, e.clientY, dayEvents.map(({ ev }) => ev));
@@ -134,7 +142,8 @@ function ChronicleMonthStripInner<E extends StripEvent>(
               >
                 {d}
                 {tone && <em aria-hidden="true" />}
-              </span>
+                {!!daySessions.length && <small className="chr-cal__session" aria-hidden="true">◇</small>}
+              </button>
             );
           })}
         </div>

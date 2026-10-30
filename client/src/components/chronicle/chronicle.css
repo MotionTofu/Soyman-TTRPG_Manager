@@ -2,16 +2,19 @@
    решение владельца 2026-10-30). Цвета — токены темы и четыре тона времени. */
 
 /* Тона времени — общие с Хроникой кампании (гриллинг Хроники 2026-10-23). */
-.chr {
+.chr,
+.chr-old-calendar,
+.tl {
   --t-past: #a87b2c;
   --t-on: #3c8456;
   --t-up: #3d69a3;
   --t-off: #8a8f8c;
   --tone: var(--t-past);
-  display: flex;
-  flex-direction: column;
 }
-[data-theme-mode="dark"] .chr {
+.chr { display: flex; flex-direction: column; }
+[data-theme-mode="dark"] .chr,
+[data-theme-mode="dark"] .chr-old-calendar,
+[data-theme-mode="dark"] .tl {
   --t-past: #d2a253;
   --t-on: #62b57e;
   --t-up: #7da4db;
@@ -138,9 +141,6 @@
   -webkit-mask-image: none;
   mask-image: none;
 }
-.chr-axis .tl-event:not(.is-upcoming):not(.is-cancelled) { --tone: var(--t-past); }
-.chr-axis .tl-event.is-upcoming { --tone: var(--t-up); }
-.chr-axis .tl-event.is-cancelled { --tone: var(--t-off); }
 .chr-axis .tl-event::before {
   content: "";
   position: absolute;
@@ -435,3 +435,64 @@ a.chr-ev__title:hover { color: var(--ink); text-decoration: underline; }
   .chr-segrow__end { margin-left: 0; width: 100%; }
   .chr-field { flex: 1; width: auto; }
 }
+
+
+/* Слои кампании: участники, сессии и связанный выбор дня. */
+.chr-ev.is-selected { box-shadow: inset 3px 0 var(--ink); padding-left: var(--sp-3); }
+.chr-ev__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); color: var(--muted); font-size: var(--fs-meta); }
+.chr-participant { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.chr-participant .type-glyph { width: 16px; height: 16px; }
+.chr-participant a { color: inherit; }
+.chr-tag { display: inline-block; padding: 0 var(--sp-2); border: 1px solid var(--line); color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); text-decoration: none; }
+.chr-ev__date > b { font-size: var(--fs-h2); white-space: nowrap; }
+.chr-ev__date > span { line-height: 1.3; }
+.chr-cal__g > button.chr-cal__d { min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; background-color: transparent; color: var(--ink); font: inherit; letter-spacing: normal; }
+.chr-cal__g > button.chr-cal__d.is-per { background: color-mix(in srgb, var(--t-on) 22%, transparent); }
+.chr-cal__g > button.chr-cal__d.is-today { background: color-mix(in srgb, var(--acid) 55%, transparent); }
+.chr-cal__g > button.chr-cal__d.is-selected { outline: var(--edge-width) solid var(--ink); outline-offset: -2px; }
+.chr-cal__session { position: absolute; right: 0; top: 0; color: var(--ink); font-size: var(--fs-micro); }
+.chr-mobile-tabs, .chr-nearest { display: none; }
+.chr-day-filter { margin-bottom: var(--sp-4); }
+.chr-form-row { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.chr-event-form label, .chr-form-row label { display: flex; flex-direction: column; gap: var(--sp-2); }
+.chr-event-form label.row { flex-direction: row; }
+.chr-form-row > label { flex: 1 1 80px; min-width: 0; }
+.chr-form-row input, .chr-form-row select { width: 100%; min-width: 0; }
+.chr-settings > h3 { margin-bottom: 0; }
+.chr-settings > .d-btn { align-self: flex-start; }
+.chr-session-events { margin-top: var(--sp-5); }
+.chr-session-events h3 { margin: 0; }
+.chr-old-calendar [data-time-tone="past"] { --tone: var(--t-past); }
+.chr-old-calendar [data-time-tone="on"] { --tone: var(--t-on); }
+.chr-old-calendar [data-time-tone="up"] { --tone: var(--t-up); }
+.chr-old-calendar [data-time-tone="off"] { --tone: var(--t-off); }
+.inworld-event-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-1); }
+.chr-calendar-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--tone); }
+.inworld-session-mark { font-size: var(--fs-micro); line-height: 1; }
+
+@media (max-width: 700px) {
+  .chr[data-mobile-view] .chr-mobile-tabs { display: flex; gap: var(--sp-3); order: 1; margin-bottom: var(--sp-4); }
+  .chr-mobile-tabs > button[aria-selected="true"] { background: var(--ink); color: var(--sheet); }
+  .chr[data-mobile-view] > .chr-head { order: 0; }
+  .chr[data-mobile-view] > .chr-tch { order: 2; }
+  .chr[data-mobile-view] > .chr-axis { order: 3; }
+  .chr[data-mobile-view] > .chr-segrow { order: 4; }
+  .chr[data-mobile-view] > .chr-content { order: 5; }
+  .chr[data-mobile-view] > .chr-cal { order: 6; }
+  .chr[data-mobile-view="Список"] > .chr-axis, .chr[data-mobile-view="Список"] > .chr-cal,
+  .chr[data-mobile-view="Ось"] > .chr-segrow, .chr[data-mobile-view="Ось"] > .chr-content, .chr[data-mobile-view="Ось"] > .chr-cal,
+  .chr[data-mobile-view="Календарь"] > .chr-segrow, .chr[data-mobile-view="Календарь"] > .chr-content, .chr[data-mobile-view="Календарь"] > .chr-axis { display: none; }
+  .chr-nearest { display: block; margin-bottom: var(--sp-4); }
+  .chr-nearest a { display: block; padding: var(--sp-2) 0; }
+  .chr-head__acts { margin-left: 0; }
+  .chr-ev { grid-template-columns: 9px 64px minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
+  .chr-ev__acts { grid-column: 3; justify-self: end; }
+  .chr-ev__dot { margin-top: var(--sp-3); }
+  .chr-axis { padding: var(--sp-4); }
+  .chr-axis .tl-toolbar { min-width: 0; }
+  .chr-axis .tl-toolbar > .row:nth-child(2) { max-width: 100%; flex-wrap: wrap; }
+  .chr-cal__nav { margin-left: 0; }
+}
+
+/* В тесном масштабе подписи соседних совпадений не перекрывают дорожки. */
+.chr-axis .cycle-panel__cross[data-label="no"]::before { display: none; }

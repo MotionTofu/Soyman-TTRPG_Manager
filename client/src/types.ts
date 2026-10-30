@@ -252,6 +252,8 @@ export interface CampaignCalendarEvent extends EventTimeFields {
   setting_id?: number | null;
   campaign_name?: string;
   sessions?: ChronicleSession[];
+  /** Участники и места события (отношения в обе стороны) — для строки Хроники. */
+  participants?: { type: string; id: number; name: string }[];
   /** Хроника кампании (спека campaign-paper, Q28): своё или событие сеттинга живым. */
   source?: "campaign" | "setting";
   /** Событие сеттинга, скрытое у этой кампании. */
@@ -1792,12 +1794,15 @@ export interface SettingCalendarEra {
   name: string;
   start_year: number;
   timeline_id: number | null;
+  /** Своя эпоха кампании; null — эпоха сеттинга. */
+  campaign_id?: number | null;
   created_at: string;
 }
 
 export interface SettingCalendarTimeline {
   id: number;
   setting_id: number;
+  campaign_id?: number | null;
   name: string;
   position: number;
   created_at: string;

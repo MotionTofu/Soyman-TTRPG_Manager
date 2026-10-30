@@ -1,5 +1,6 @@
 import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "./sessionNumber";
+import { entityNames, refKey } from "./entityNames";
 
 /** Связь сессии с ходом мира; не смешивается с участниками события. */
 export const SESSION_EVENTS_SECTION = "session_events";
@@ -36,6 +37,38 @@ export function withEventSessions<T extends { id: number }>(rows: T[], kind: Chr
     byEvent.set(session.event_id, list);
   }
   return rows.map((row) => ({ ...row, sessions: byEvent.get(row.id) ?? [] }));
+}
+
+export interface ChronicleParticipant {
+  type: string;
+  id: number;
+  name: string;
+}
+
+/**
+ * Участники событий списка для строки Хроники — одной выборкой отношений в обе
+ * стороны и пачкой имён. Исчезнувшая сущность (имени нет) в строку не идёт.
+ */
+// ponytail: id в IN(...) — по одному параметру; упрётся в лимит SQLite (32766) только на десятках тысяч событий.
+export function withEventParticipants<T extends { id: number }>(rows: T[], kind: ChronicleEventKind) {
+  const byEvent = new Map<number, ChronicleParticipant[]>();
+  if (rows.length > 0) {
+    const ids = rows.map((r) => r.id);
+    const marks = ids.map(() => "?").join(",");
+    const rel = db.prepare(`SELECT from_id AS event_id, to_type AS type, to_id AS id FROM entity_relations
+        WHERE from_type = ? AND from_id IN (${marks})
+      UNION ALL SELECT to_id, from_type, from_id FROM entity_relations
+        WHERE to_type = ? AND to_id IN (${marks})`).all(kind, ...ids, kind, ...ids) as { event_id: number; type: string; id: number }[];
+    const names = entityNames(rel.map((r) => ({ kind: r.type, id: r.id })));
+    for (const r of rel) {
+      const name = names.get(refKey(r.type, r.id));
+      if (!name) continue;
+      const list = byEvent.get(r.event_id) ?? [];
+      list.push({ type: r.type, id: r.id, name });
+      byEvent.set(r.event_id, list);
+    }
+  }
+  return rows.map((row) => ({ ...row, participants: byEvent.get(row.id) ?? [] }));
 }
 
 export function sessionEvents(sessionId: number) {

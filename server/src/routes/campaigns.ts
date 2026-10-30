@@ -6,7 +6,7 @@ import os from "os";
 import { db } from "../db/db";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import type {AuthedRequest} from "../services/auth";
-import { eventSessions, withEventSessions } from "../services/chronicle";
+import { eventSessions, withEventParticipants, withEventSessions } from "../services/chronicle";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { debtsForCampaign, restoreCampaignPayments, settleCampaignDebt, unpaidCountBySession, type PaidBefore } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
@@ -651,8 +651,8 @@ campaignsRouter.get("/:id/calendar-events", (req, res) => {
         ORDER BY e.important DESC, e.inworld_year, e.inworld_month, e.inworld_day`
     )
     .all(req.params.id);
-  res.json([...withEventSessions(own as { id: number }[], "campaign_event", Number(req.params.id)),
-    ...withEventSessions(fromSetting as { id: number }[], "setting_event", Number(req.params.id))]);
+  res.json([...withEventParticipants(withEventSessions(own as { id: number }[], "campaign_event", Number(req.params.id)), "campaign_event"),
+    ...withEventParticipants(withEventSessions(fromSetting as { id: number }[], "setting_event", Number(req.params.id)), "setting_event")]);
 });
 
 // Скрыть событие сеттинга у кампании и вернуть его (Q28). Удалить его отсюда
@@ -705,6 +705,10 @@ function saveCampaignEventProfile(id: number, body: Record<string, unknown>) {
 
 campaignsRouter.post("/:id/calendar-events", (req, res) => {
   if (!db.prepare("SELECT 1 FROM campaigns WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const sessionId = req.body.session_id;
+  if (sessionId !== undefined && (!Number.isInteger(sessionId) || !db.prepare(
+    "SELECT 1 FROM sessions WHERE id = ? AND campaign_id = ? AND archived_at IS NULL"
+  ).get(sessionId, req.params.id))) return res.status(400).json({ error: "Сессия не принадлежит кампании" });
   const profileError = campaignEventProfileError(req.body);
   if (profileError) return res.status(400).json({ error: profileError });
   const { title, description, inworld_year, inworld_month, inworld_day, important } =
@@ -733,6 +737,7 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
   // сессия: у расписания будущее и есть основной случай, и ставить всему
   // «случилось» значило бы врать почти каждой записи.
   const status = defaultStatus(y, m, campaignNow(Number(req.params.id)));
+  const created = db.transaction(() => {
   const info = db
     .prepare(
       `INSERT INTO campaign_calendar_events
@@ -753,7 +758,10 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
   saveCampaignEventProfile(id, req.body);
   const time = timePatch(req.body);
   if (time.sets.length) db.prepare(`UPDATE campaign_calendar_events SET ${time.sets.join(", ")} WHERE id = ?`).run(...time.values, id);
-  res.status(201).json(db.prepare("SELECT * FROM campaign_calendar_events WHERE id = ?").get(id));
+  if (sessionId !== undefined) db.prepare("INSERT INTO generic_links (from_type, from_id, to_type, to_id, section) VALUES ('session', ?, 'campaign_event', ?, 'session_events')").run(sessionId, id);
+  return db.prepare("SELECT * FROM campaign_calendar_events WHERE id = ?").get(id);
+  })();
+  res.status(201).json(created);
 });
 
 campaignsRouter.put("/calendar-events/:eventId", (req, res) => {

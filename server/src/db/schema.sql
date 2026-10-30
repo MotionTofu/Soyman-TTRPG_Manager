@@ -1429,6 +1429,7 @@ CREATE INDEX IF NOT EXISTS idx_setting_cycle_points_cycle ON setting_cycle_point
 CREATE TABLE IF NOT EXISTS setting_calendar_eras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_year INTEGER NOT NULL,
   timeline_id INTEGER REFERENCES setting_calendar_timelines(id) ON DELETE SET NULL,
@@ -1438,6 +1439,7 @@ CREATE TABLE IF NOT EXISTS setting_calendar_eras (
 CREATE TABLE IF NOT EXISTS setting_calendar_timelines (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+  campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))

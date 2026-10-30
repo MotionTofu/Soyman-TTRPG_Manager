@@ -4,6 +4,7 @@ import { MentionText } from "../mentions/MentionText";
 import { NavIcon } from "../NavIcons";
 import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
 import type { CalendarMonth, DatePrecision } from "../../types";
+import { formatByPrecision } from "../../inworldCalendar";
 import { monthName, type TimeTone } from "./time";
 
 // Строка Хроники в «Д» (доска Set-Chronicle): точка тоном времени, дата
@@ -11,8 +12,6 @@ import { monthName, type TimeTone } from "./time";
 // описанием строкой, справа глаз и «⋯». Одна у сеттинга и кампании;
 // своё кампания кладёт в `tags` (метка «мир», «Сессия №») и `extra`
 // (участники).
-// `SettingChronicleEventRow` — прежняя строка, ею пока пользуется кампания;
-// после перевода Хроники кампании на этот каркас — убрать.
 
 export interface ChronicleRowEvent {
   id: number;
@@ -42,6 +41,9 @@ function ChronicleRowInner({
   extra,
   menu,
   onToggleVisible,
+  onToggleImportant,
+  onSelect,
+  selected,
 }: {
   ev: ChronicleRowEvent;
   tone: TimeTone;
@@ -56,6 +58,9 @@ function ChronicleRowInner({
   menu: ContextMenuItem[];
   /** Без него глаза нет. */
   onToggleVisible?: () => void;
+  onToggleImportant?: () => void;
+  onSelect?: () => void;
+  selected?: boolean;
 }) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const precision = ev.date_precision ?? "day";
@@ -68,17 +73,20 @@ function ChronicleRowInner({
         : String(ev.inworld_day)
       : precision === "month"
         ? monthName(months, ev.inworld_month)
-        : String(ev.inworld_year);
-  const small = precision === "day" ? `${monthName(months, ev.inworld_month)} ${ev.inworld_year}` : precision === "month" ? String(ev.inworld_year) : "год";
+        : formatByPrecision(ev.inworld_year, ev.inworld_month, ev.inworld_day, precision, months, "");
+  const small = precision === "day" ? `${monthName(months, ev.inworld_month)} ${ev.inworld_year}` : precision === "month" ? String(ev.inworld_year) : "";
   const visible = !!ev.visible_to_players;
   const text = ev.status === "cancelled" && ev.cancel_note ? ev.cancel_note : ev.description;
 
   return (
-    <div className={`chr-ev chr-tone--${tone}`}>
+    <div className={`chr-ev chr-tone--${tone}${selected ? " is-selected" : ""}`} tabIndex={onSelect ? 0 : undefined}
+      onClick={(e) => { if (!(e.target as HTMLElement).closest("a, button, input")) onSelect?.(); }}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect?.(); } }}>
       <span className="chr-ev__dot" aria-hidden="true" />
       <span className="chr-ev__date">
         <b>{big}</b>
         <span>{small}</span>
+        {ev.inworld_year_end != null && !sameMonth && <span>→ {formatByPrecision(ev.inworld_year_end, ev.inworld_month_end ?? ev.inworld_month, ev.inworld_day_end ?? ev.inworld_day, precision, months, "")}</span>}
       </span>
       <span className="chr-ev__main">
         <span className="chr-ev__head">
@@ -89,7 +97,7 @@ function ChronicleRowInner({
           ) : (
             <span className="chr-ev__title">{ev.title}</span>
           )}
-          {ev.important ? (
+          {ev.important && !onToggleImportant ? (
             <span className="chr-ev__star" title="Важное">
               ★
             </span>
@@ -105,6 +113,7 @@ function ChronicleRowInner({
         {extra}
       </span>
       <span className="chr-ev__acts">
+        {onToggleImportant && <button type="button" className="chr-dots" aria-label={`Важное: ${ev.title}`} aria-pressed={!!ev.important} onClick={onToggleImportant}>{ev.important ? "★" : "☆"}</button>}
         {onToggleVisible && (
           <button
             type="button"

@@ -33,11 +33,13 @@ type Now = { year: number | null; month: number | null };
 export function SettingCycles({
   settingId,
   campaignId = null,
+  initiallyAdding = false,
   months = [],
   now = { year: null, month: null },
 }: {
   settingId: number;
   campaignId?: number | null;
+  initiallyAdding?: boolean;
   months?: CalendarMonth[];
   now?: Now;
 }) {
@@ -46,7 +48,7 @@ export function SettingCycles({
   const all = useResource<SettingCycle[]>(chroniclePaths.cycles(settingId, campaignId)).data ?? [];
   const own = all.filter((c) => c.campaign_id === campaignId);
   const inherited = campaignId == null ? [] : all.filter((c) => c.campaign_id == null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(initiallyAdding);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState({ name: "", period_days: "28", year: "1", month: "1", day: "1" });
   const run = useAction();

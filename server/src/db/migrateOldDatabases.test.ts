@@ -280,4 +280,22 @@ describe("миграция хроники кампании", () => {
     expect(fs.readdirSync(dir).filter((file) => file.startsWith("app-before-campaign-chronicle-"))).toEqual(snapshots);
     database.close();
   }, 60_000);
+  it("старые эпохи и линии времени переживают добавление слоя кампании и повторный запуск", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-chronicle-layer-"));
+    let database = openDatabase(dir);
+    const settingId = Number(database.prepare("INSERT INTO settings (name) VALUES ('Мир эпох')").run().lastInsertRowid);
+    const lineId = Number(database.prepare("INSERT INTO setting_calendar_timelines (setting_id, name) VALUES (?, 'Старая линия')").run(settingId).lastInsertRowid);
+    database.prepare("INSERT INTO setting_calendar_eras (setting_id, name, start_year, timeline_id) VALUES (?, 'Старая эпоха', 1400, ?)").run(settingId, lineId);
+    database.exec("ALTER TABLE setting_calendar_eras DROP COLUMN campaign_id");
+    database.exec("ALTER TABLE setting_calendar_timelines DROP COLUMN campaign_id");
+    database.close();
+    for (let pass = 0; pass < 2; pass++) {
+      database = openDatabase(dir);
+      expect(database.prepare("SELECT name, start_year, timeline_id, campaign_id FROM setting_calendar_eras").get()).toEqual({ name: "Старая эпоха", start_year: 1400, timeline_id: lineId, campaign_id: null });
+      expect(database.prepare("SELECT name, campaign_id FROM setting_calendar_timelines").get()).toEqual({ name: "Старая линия", campaign_id: null });
+      expect(database.pragma("foreign_key_check")).toEqual([]);
+      database.close();
+    }
+  }, 60_000);
+
 });

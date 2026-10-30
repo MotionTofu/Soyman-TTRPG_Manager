@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAction, useResource, write } from "../../data/hooks";
 import { chroniclePaths } from "../../data/settingPage";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -47,6 +47,8 @@ export function SettingCyclePanel({
   cycles,
   view,
   onAddCycle,
+  onEditCycles,
+  onVisibleCycles,
   onDayMenu,
 }: {
   settingId: number;
@@ -54,6 +56,8 @@ export function SettingCyclePanel({
   cycles: SettingCycle[];
   view: TimelineView;
   onAddCycle: () => void;
+  onEditCycles?: () => void;
+  onVisibleCycles?: (cycles: SettingCycle[]) => void;
   /** ПКМ по линии «сходятся»: день от начала летоисчисления и точка щелчка. */
   onDayMenu: (day: number, x: number, y: number) => void;
 }) {
@@ -66,7 +70,8 @@ export function SettingCyclePanel({
   const [editing, setEditing] = useState<SettingCycleGroup | "new" | null>(null);
 
   const group = groupId === ALL ? undefined : groups.find((g) => g.id === groupId);
-  const lanes = group ? cycles.filter((c) => group.cycle_ids.includes(c.id)) : cycles;
+  const lanes = useMemo(() => group ? cycles.filter((c) => group.cycle_ids.includes(c.id)) : cycles, [group, cycles]);
+  useEffect(() => { onVisibleCycles?.(lanes); }, [lanes, onVisibleCycles]);
 
   function setGroupId(next: number | typeof ALL) {
     setGroupIdState(next);
@@ -154,9 +159,9 @@ export function SettingCyclePanel({
               aria-pressed={group?.id === g.id}
               onClick={() => setGroupId(g.id)}
             >
-              {g.name} · {g.cycle_ids.length}
+              {campaignId != null && g.campaign_id == null ? "🔒 " : ""}{g.name} · {g.cycle_ids.length}
             </button>
-            {group?.id === g.id && (
+            {group?.id === g.id && (campaignId == null || g.campaign_id === campaignId) && (
               <button type="button" className="comp-mini" title="Изменить группу" aria-label={`Изменить группу «${g.name}»`} onClick={() => setEditing(g)}>
                 ⋯
               </button>
@@ -170,6 +175,7 @@ export function SettingCyclePanel({
         <button type="button" className="cycle-panel__add" onClick={onAddCycle}>
           + Цикл
         </button>
+        {onEditCycles && <button type="button" className="cycle-panel__add" onClick={onEditCycles} aria-label="Редактировать циклы">⚙</button>}
       </div>
 
       <div className="cycle-panel__lanes" {...view.pan}>
@@ -185,7 +191,7 @@ export function SettingCyclePanel({
               <span className="cycle-lane__label">
                 <label>
                   <input type="checkbox" checked={!off} onChange={() => toggleHidden(cycle.id)} />
-                  {cycle.name}
+                  {campaignId != null && cycle.campaign_id == null ? "🔒 " : ""}{cycle.name}
                 </label>
                 <span className="cycle-lane__meta">
                   {cycle.period_days} дн. · {pointsLabel}
@@ -195,10 +201,11 @@ export function SettingCyclePanel({
           );
         })}
         {lanes.length === 0 && <p className="muted cycle-panel__empty">В группе нет циклов.</p>}
-        {crossings.map(({ day, days, names }) => (
+        {crossings.map(({ day, days, names }, index) => (
           <span
             key={day}
             className="cycle-panel__cross"
+            data-label={index === 0 || xOf(day) - xOf(crossings[index - 1].day) >= 110 ? "yes" : "no"}
             style={{ left: xOf(day) }}
             title={`Сходятся${days > 1 ? ` ${days} дн.` : ""}: ${names.join(", ")}\nПКМ — событие на этот день`}
             onContextMenu={(e) => {

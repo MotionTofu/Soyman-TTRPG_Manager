@@ -1024,27 +1024,51 @@ settingsRouter.post("/:id/important-dates/:dateId/to-event", (req, res) => {
 // Десятилетие > Года > События) — an era spans from its own start_year up
 // to the next era's start_year (by ascending start_year), so ordering alone
 // defines the ranges without a redundant end_year column.
+function calendarOwnerError(table: "setting_calendar_eras" | "setting_calendar_timelines", id: string, rawCampaign: unknown): string | null {
+  const row = db.prepare(`SELECT setting_id, campaign_id FROM ${table} WHERE id = ?`).get(id) as { setting_id: number; campaign_id: number | null } | undefined;
+  if (!row) return "not found";
+  const context = campaignOf(rawCampaign, row.setting_id);
+  return context === "foreign" || row.campaign_id !== context ? "Эта запись доступна здесь только для чтения" : null;
+}
+
+function validEraTimeline(settingId: number, campaignId: number | null, timelineId: unknown): boolean {
+  if (timelineId == null) return true;
+  return !!db.prepare(`SELECT 1 FROM setting_calendar_timelines WHERE id = ? AND ${CYCLE_SCOPE}`).get(timelineId, settingId, campaignId);
+}
+
+// Эпохи кампании — как циклы: `?campaign=` добавляет её свои к эпохам сеттинга.
 settingsRouter.get("/:id/calendar-eras", (req, res) => {
+  const settingId = Number(req.params.id);
+  const campaignId = campaignOf(req.query.campaign, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
   const rows = db
-    .prepare("SELECT * FROM setting_calendar_eras WHERE setting_id = ? ORDER BY start_year")
-    .all(req.params.id);
+    .prepare(`SELECT * FROM setting_calendar_eras WHERE ${CYCLE_SCOPE} ORDER BY start_year`)
+    .all(settingId, campaignId);
   res.json(rows);
 });
 
 settingsRouter.post("/:id/calendar-eras", (req, res) => {
-  const { name, start_year, timeline_id } = req.body as { name: string; start_year: number; timeline_id?: number | null };
+  const { name, start_year, timeline_id, campaign_id } = req.body as { name: string; start_year: number; timeline_id?: number | null; campaign_id?: number | null };
   if (!name || start_year == null) return res.status(400).json({ error: "name and start_year are required" });
+  const campaignId = campaignOf(campaign_id, Number(req.params.id));
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
+  if (!validEraTimeline(Number(req.params.id), campaignId, timeline_id)) return res.status(400).json({ error: "Таймлайн не принадлежит кампании или её сеттингу" });
   const info = db
-    .prepare("INSERT INTO setting_calendar_eras (setting_id, name, start_year, timeline_id) VALUES (?, ?, ?, ?)")
-    .run(req.params.id, name, start_year, timeline_id ?? null);
+    .prepare("INSERT INTO setting_calendar_eras (setting_id, name, start_year, timeline_id, campaign_id) VALUES (?, ?, ?, ?, ?)")
+    .run(req.params.id, name, start_year, timeline_id ?? null, campaignId);
   res.status(201).json(db.prepare("SELECT * FROM setting_calendar_eras WHERE id = ?").get(info.lastInsertRowid));
 });
 
 settingsRouter.put("/calendar-eras/:eraId", (req, res) => {
+  const ownerError = calendarOwnerError("setting_calendar_eras", req.params.eraId, req.query.campaign);
+  if (ownerError) return res.status(ownerError === "not found" ? 404 : 403).json({ error: ownerError });
   const { name, start_year, timeline_id } = req.body as { name?: string; start_year?: number; timeline_id?: number | null };
-  db.prepare("UPDATE setting_calendar_eras SET name = COALESCE(?, name), start_year = COALESCE(?, start_year), timeline_id = COALESCE(?, timeline_id) WHERE id = ?").run(
+  const owner = db.prepare("SELECT setting_id, campaign_id FROM setting_calendar_eras WHERE id = ?").get(req.params.eraId) as { setting_id: number; campaign_id: number | null };
+  if (!validEraTimeline(owner.setting_id, owner.campaign_id, timeline_id)) return res.status(400).json({ error: "Таймлайн не принадлежит кампании или её сеттингу" });
+  db.prepare("UPDATE setting_calendar_eras SET name = COALESCE(?, name), start_year = COALESCE(?, start_year), timeline_id = CASE WHEN ? THEN ? ELSE timeline_id END WHERE id = ?").run(
     name ?? null,
     start_year ?? null,
+    timeline_id !== undefined ? 1 : 0,
     timeline_id ?? null,
     req.params.eraId
   );
@@ -1052,28 +1076,34 @@ settingsRouter.put("/calendar-eras/:eraId", (req, res) => {
 });
 
 settingsRouter.delete("/calendar-eras/:eraId", (req, res) => {
+  const ownerError = calendarOwnerError("setting_calendar_eras", req.params.eraId, req.query.campaign);
+  if (ownerError) return res.status(ownerError === "not found" ? 404 : 403).json({ error: ownerError });
   db.prepare("DELETE FROM setting_calendar_eras WHERE id = ?").run(req.params.eraId);
   res.json({ ok: true });
 });
 
 settingsRouter.get("/:id/calendar-timelines", (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM setting_calendar_timelines WHERE setting_id = ? ORDER BY position, id")
-    .all(req.params.id);
-  res.json(rows);
+  const settingId = Number(req.params.id);
+  const campaignId = campaignOf(req.query.campaign, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
+  res.json(db.prepare(`SELECT * FROM setting_calendar_timelines WHERE ${CYCLE_SCOPE} ORDER BY position, id`).all(settingId, campaignId));
 });
 
 settingsRouter.post("/:id/calendar-timelines", (req, res) => {
-  const { name } = req.body as { name: string };
-  if (!name?.trim()) return res.status(400).json({ error: "name is required" });
-  const maxPos = db.prepare("SELECT COALESCE(MAX(position), -1) as p FROM setting_calendar_timelines WHERE setting_id = ?").get(req.params.id) as { p: number };
-  const info = db
-    .prepare("INSERT INTO setting_calendar_timelines (setting_id, name, position) VALUES (?, ?, ?)")
-    .run(req.params.id, name.trim(), maxPos.p + 1);
+  const { name, campaign_id } = req.body as { name: string; campaign_id?: number | null };
+  if (typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name is required" });
+  const settingId = Number(req.params.id);
+  const campaignId = campaignOf(campaign_id, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
+  const maxPos = db.prepare("SELECT COALESCE(MAX(position), -1) as p FROM setting_calendar_timelines WHERE setting_id = ?").get(settingId) as { p: number };
+  const info = db.prepare("INSERT INTO setting_calendar_timelines (setting_id, name, position, campaign_id) VALUES (?, ?, ?, ?)")
+    .run(settingId, name.trim(), maxPos.p + 1, campaignId);
   res.status(201).json(db.prepare("SELECT * FROM setting_calendar_timelines WHERE id = ?").get(info.lastInsertRowid));
 });
 
 settingsRouter.put("/calendar-timelines/:timelineId", (req, res) => {
+  const ownerError = calendarOwnerError("setting_calendar_timelines", req.params.timelineId, req.query.campaign);
+  if (ownerError) return res.status(ownerError === "not found" ? 404 : 403).json({ error: ownerError });
   const { name, position } = req.body as { name?: string; position?: number };
   db.prepare("UPDATE setting_calendar_timelines SET name = COALESCE(?, name), position = COALESCE(?, position) WHERE id = ?").run(
     name ?? null,
@@ -1084,6 +1114,8 @@ settingsRouter.put("/calendar-timelines/:timelineId", (req, res) => {
 });
 
 settingsRouter.delete("/calendar-timelines/:timelineId", (req, res) => {
+  const ownerError = calendarOwnerError("setting_calendar_timelines", req.params.timelineId, req.query.campaign);
+  if (ownerError) return res.status(ownerError === "not found" ? 404 : 403).json({ error: ownerError });
   db.prepare("UPDATE setting_calendar_eras SET timeline_id = NULL WHERE timeline_id = ?").run(req.params.timelineId);
   db.prepare("DELETE FROM setting_calendar_timelines WHERE id = ?").run(req.params.timelineId);
   res.json({ ok: true });

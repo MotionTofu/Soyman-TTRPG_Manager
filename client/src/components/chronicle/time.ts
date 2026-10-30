@@ -1,6 +1,6 @@
 import { cycleElements, dayInTurn, elementDays } from "../../cycles";
 import { daysInYear, elapsedDays } from "../../inworldCalendar";
-import type { CalendarMonth, SettingCycle } from "../../types";
+import type { CalendarMonth, DatePrecision, SettingCycle, SessionSummary } from "../../types";
 
 // Время Хроники — общее у сеттинга и кампании (решение владельца 2026-10-30:
 // один каркас). «Сейчас» приходит снаружи: у сеттинга — закреплённый месяц,
@@ -20,39 +20,57 @@ export const TONE_LABEL: Record<TimeTone, string> = { past: "Прошло", on: 
 
 /** Что тону нужно от события — поля есть и у события сеттинга, и у события кампании. */
 export interface TonedEvent {
-  status: string;
+  status?: string;
+  date_precision?: DatePrecision | null;
   inworld_year: number;
   inworld_month: number;
   inworld_day: number;
-  inworld_year_end: number | null;
-  inworld_month_end: number | null;
-  inworld_day_end: number | null;
+  inworld_year_end?: number | null;
+  inworld_month_end?: number | null;
+  inworld_day_end?: number | null;
 }
 
-const key = (y: number, m: number, d: number) => (y * 1000 + m) * 100 + d;
+export const dateKey = (y: number, m: number, d: number) => (y * 1000 + m) * 100 + d;
 
-/**
- * Тон к «сейчас». Без дня у «сейчас» сравнение идёт по месяцам: «идёт» —
- * только период, накрывший этот месяц, а точечное событие внутри месяца
- * решает статус. С днём — по дням.
- */
+/** Перенесено из codex/campaign-chronicle: цвет — статус, «идёт» — только период. */
 export function timeTone(ev: TonedEvent, now: ChronicleNow | null): TimeTone {
   if (ev.status === "cancelled") return "off";
-  if (now) {
+  if (now && (ev.inworld_year_end != null || ev.inworld_month_end != null || ev.inworld_day_end != null)) {
     const byDay = now.day != null;
-    const n = key(now.year, now.month, byDay ? now.day! : 0);
-    const start = key(ev.inworld_year, ev.inworld_month, byDay ? ev.inworld_day : 0);
-    const end =
-      ev.inworld_year_end != null
-        ? key(ev.inworld_year_end, ev.inworld_month_end ?? 999, byDay ? (ev.inworld_day_end ?? 99) : 0)
-        : byDay
-          ? start
-          : null;
-    if (end != null && start <= n && n <= end) return "on";
-    if (start > n) return "up";
-    if (byDay && end != null && end < n) return "past";
+    const start = dateKey(ev.inworld_year, ev.inworld_month, byDay ? ev.inworld_day : 0);
+    const end = dateKey(ev.inworld_year_end ?? ev.inworld_year, ev.inworld_month_end ?? ev.inworld_month, byDay ? (ev.inworld_day_end ?? ev.inworld_day) : 0);
+    const n = dateKey(now.year, now.month, byDay ? now.day! : 0);
+    if (start <= n && n <= end) return "on";
   }
   return ev.status === "upcoming" ? "up" : "past";
+}
+
+/** Периоды включают оба конца; неточная дата не обещает точный день. */
+export function eventOccursOn(ev: TonedEvent, at: { year: number; month: number; day: number }): boolean {
+  const start = dateKey(ev.inworld_year, ev.inworld_month, ev.inworld_day);
+  const n = dateKey(at.year, at.month, at.day);
+  if (ev.inworld_year_end != null || ev.inworld_month_end != null || ev.inworld_day_end != null) {
+    return start <= n && n <= dateKey(ev.inworld_year_end ?? ev.inworld_year, ev.inworld_month_end ?? ev.inworld_month, ev.inworld_day_end ?? ev.inworld_day);
+  }
+  switch (ev.date_precision) {
+    case "century": return Math.floor((ev.inworld_year - 1) / 100) === Math.floor((at.year - 1) / 100);
+    case "decade": return Math.floor((ev.inworld_year - 1) / 10) === Math.floor((at.year - 1) / 10);
+    case "year": return ev.inworld_year === at.year;
+    case "month": return ev.inworld_year === at.year && ev.inworld_month === at.month;
+    default: return start === n;
+  }
+}
+
+export function campaignClock(campaign: { pinned_calendar_year: number | null; pinned_calendar_month: number | null }, sessions: readonly SessionSummary[]) {
+  if (campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null) {
+    return { now: { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month } as ChronicleNow, source: "закреплённый месяц" };
+  }
+  const dated = sessions.filter((s) => s.status === "held" && s.inworld_year != null).sort((a, b) =>
+    dateKey(b.inworld_year_end ?? b.inworld_year!, b.inworld_month_end ?? b.inworld_month ?? 1, b.inworld_day_end ?? b.inworld_day ?? 1) -
+    dateKey(a.inworld_year_end ?? a.inworld_year!, a.inworld_month_end ?? a.inworld_month ?? 1, a.inworld_day_end ?? a.inworld_day ?? 1) || b.id - a.id);
+  const last = dated[0];
+  return { now: last ? { year: last.inworld_year_end ?? last.inworld_year!, month: last.inworld_month_end ?? last.inworld_month ?? 1, day: last.inworld_day_end ?? last.inworld_day ?? undefined } : null,
+    source: last ? `по ${last.session_number ? `сессии №${last.session_number}` : "последней сессии"}` : "" };
 }
 
 /**

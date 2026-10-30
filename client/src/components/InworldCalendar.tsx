@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { CalendarMonth, CalendarWeekday, ImportantDate } from "../types";
 import { weekdayIndexFor } from "../inworldCalendar";
+import { timeTone, eventOccursOn, type TonedEvent, type ChronicleNow } from "./chronicle/time";
+import "./chronicle/chronicle.css";
 
 export interface InworldDatedItem {
   id: string;
@@ -10,9 +12,11 @@ export interface InworldDatedItem {
   label: string;
   kind: "session" | "event";
   important?: boolean;
+  event?: TonedEvent;
 }
 
 interface Props {
+  now?: ChronicleNow | null;
   months: CalendarMonth[];
   weekdays: CalendarWeekday[];
   items: InworldDatedItem[];
@@ -30,6 +34,7 @@ interface Props {
 }
 
 export function InworldCalendar({
+  now,
   months,
   weekdays,
   items,
@@ -84,7 +89,7 @@ export function InworldCalendar({
 
   const startWeekday = weekdayIndexFor(cursor.year, cursor.month, 1, months, weekdays.length);
 
-  const visibleItems = items.filter((it) => it.year === cursor.year && it.month === cursor.month);
+  const visibleItems = items;
 
   const expandedDates: { day: number; date: ImportantDate }[] = [];
   for (const d of importantDates ?? []) {
@@ -107,7 +112,7 @@ export function InworldCalendar({
   for (let d = 1; d <= dayCount; d++) cells.push({ day: d });
 
   return (
-    <div className="stack">
+    <div className="stack chr-old-calendar">
       <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
         <button onClick={goPrev}>← Пред</button>
         <div className="row" style={{ gap: 8 }}>
@@ -152,7 +157,9 @@ export function InworldCalendar({
         ))}
         {cells.map((c, i) => {
           if (c.day === null) return <div key={`empty-${i}`} className="day empty" />;
-          const dayItems = visibleItems.filter((it) => it.day === c.day);
+          const date = { year: cursor.year, month: cursor.month, day: c.day };
+          const dayItems = visibleItems.filter((item) => item.event ? eventOccursOn(item.event, date)
+            : item.year === date.year && item.month === date.month && item.day === date.day);
           const hasSession = dayItems.some((it) => it.kind === "session");
           const hasEvent = dayItems.some((it) => it.kind === "event");
           const dayImportant = expandedDates.filter((ed) => ed.day === c.day);
@@ -188,6 +195,12 @@ export function InworldCalendar({
               onTouchMove={clearLongPress}
             >
               <span className="num">{c.day}</span>
+              <span className="inworld-event-dots" aria-hidden="true">
+                {dayItems.map((item) => item.kind === "session"
+                  ? <span className="inworld-session-mark" key={item.id} title={item.label}>◇</span>
+                  : <span key={item.id} className="chr-calendar-dot" title={item.label}
+                    data-time-tone={timeTone(item.event ?? { inworld_year: item.year, inworld_month: item.month, inworld_day: item.day }, now ?? null)} />)}
+              </span>
               {hasImportant && <span className="important-dot" title={importantTitle} aria-hidden="true" style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: dayImportant[0].date.color || "var(--accent)", marginLeft: 3, verticalAlign: "middle" }} />}
             </div>
           );

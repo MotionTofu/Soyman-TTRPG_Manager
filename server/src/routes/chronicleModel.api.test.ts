@@ -129,3 +129,71 @@ describe("модель хроники кампании", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM generic_links WHERE to_type = 'campaign_event' AND to_id = ?").get(child)).toEqual({ n: 0 });
   });
 });
+
+describe("свои эпохи кампании", () => {
+  it("видны только своей кампании; сеттинг видит свои; чужая кампания — 400", async () => {
+    const other = Number(db.prepare("INSERT INTO campaigns (name, setting_id) VALUES ('Соседняя', ?)").run(settingId).lastInsertRowid);
+    const stranger = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Без сеттинга')").run().lastInsertRowid);
+    const worldEra = await api().post(`/api/settings/${settingId}/calendar-eras`).auth(gm, auth).send({ name: "Эпоха мира", start_year: 1400 });
+    const ownEra = await api().post(`/api/settings/${settingId}/calendar-eras`).auth(gm, auth).send({ name: "Поход", start_year: 1496, campaign_id: campaignId });
+    expect(ownEra.status).toBe(201);
+    expect(ownEra.body.campaign_id).toBe(campaignId);
+    const names = async (q = "") => ((await api().get(`/api/settings/${settingId}/calendar-eras${q}`).auth(gm, auth)).body as { name: string }[]).map((e) => e.name);
+    expect(await names()).toContain("Эпоха мира");
+    expect(await names()).not.toContain("Поход");
+    expect(await names(`?campaign=${campaignId}`)).toEqual(expect.arrayContaining(["Эпоха мира", "Поход"]));
+    expect(await names(`?campaign=${other}`)).not.toContain("Поход");
+    expect((await api().get(`/api/settings/${settingId}/calendar-eras?campaign=${stranger}`).auth(gm, auth)).status).toBe(400);
+    expect((await api().post(`/api/settings/${settingId}/calendar-eras`).auth(gm, auth).send({ name: "Чужая", start_year: 1, campaign_id: stranger })).status).toBe(400);
+    db.prepare("DELETE FROM campaigns WHERE id = ?").run(other);
+    expect(worldEra.body.campaign_id).toBeNull();
+  });
+
+  it("список событий кампании несёт участников с именами", async () => {
+    const id = await ownEvent({ title: "С участником" });
+    const location = Number(db.prepare("INSERT INTO setting_locations (setting_id, name) VALUES (?, 'Башня участника')").run(settingId).lastInsertRowid);
+    await api().post("/api/entity-relations").auth(gm, auth).send({ from_type: "campaign_event", from_id: id, to_type: "location", to_id: location });
+    const list = (await api().get(`/api/campaigns/${campaignId}/calendar-events`).auth(gm, auth)).body as { id: number; source: string; participants: unknown[] }[];
+    expect(list.find((e) => e.id === id && e.source === "campaign")?.participants).toEqual([{ type: "location", id: location, name: "Башня участника" }]);
+  });
+});
+
+
+describe("сведение Хроники кампании", () => {
+  it("событие из итогов связывается с сессией; чужая сессия не оставляет события", async () => {
+    const sid = session();
+    const id = await ownEvent({ title: "Из итогов", session_id: sid });
+    const linked = await api().get(`/api/sessions/${sid}/calendar-events`).auth(gm, auth);
+    expect(linked.body).toEqual([expect.objectContaining({ id, title: "Из итогов", source: "campaign" })]);
+    expect((await api().get(`/api/campaigns/calendar-events/${id}`).auth(gm, auth)).body.sessions[0].id).toBe(sid);
+    const foreignCampaign = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Чужая сессия')").run().lastInsertRowid);
+    const before = db.prepare("SELECT COUNT(*) as n FROM campaign_calendar_events").get();
+    expect((await api().post(`/api/campaigns/${campaignId}/calendar-events`).auth(gm, auth).send({ ...eventBody, session_id: session(foreignCampaign) })).status).toBe(400);
+    expect(db.prepare("SELECT COUNT(*) as n FROM campaign_calendar_events").get()).toEqual(before);
+    db.prepare("DELETE FROM campaigns WHERE id = ?").run(foreignCampaign);
+  });
+
+  it("линии времени изолированы; эпоха не ссылается на чужую; основа только чтение", async () => {
+    const neighbor = Number(db.prepare("INSERT INTO campaigns (name, setting_id) VALUES ('Сосед хроники', ?)").run(settingId).lastInsertRowid);
+    const create = (name: string, campaign?: number) => api().post(`/api/settings/${settingId}/calendar-timelines`).auth(gm, auth).send({ name, campaign_id: campaign });
+    const world = (await create("Линия мира")).body;
+    const own = (await create("Линия кампании", campaignId)).body;
+    const other = (await create("Чужая линия", neighbor)).body;
+    const lines = async (q = "") => (await api().get(`/api/settings/${settingId}/calendar-timelines${q}`).auth(gm, auth)).body as { id: number }[];
+    expect((await lines()).map((line) => line.id)).toContain(world.id);
+    expect((await lines()).map((line) => line.id)).not.toContain(own.id);
+    expect((await lines(`?campaign=${campaignId}`)).map((line) => line.id)).toEqual(expect.arrayContaining([world.id, own.id]));
+    expect((await lines(`?campaign=${campaignId}`)).map((line) => line.id)).not.toContain(other.id);
+    const eraPath = `/api/settings/${settingId}/calendar-eras`;
+    expect((await api().post(eraPath).auth(gm, auth).send({ name: "Нельзя", start_year: 1, timeline_id: other.id, campaign_id: campaignId })).status).toBe(400);
+    const era = (await api().post(eraPath).auth(gm, auth).send({ name: "Свой поход", start_year: 1496, timeline_id: own.id, campaign_id: campaignId })).body;
+    expect(era.campaign_id).toBe(campaignId);
+    const detached = await api().put(`/api/settings/calendar-eras/${era.id}?campaign=${campaignId}`).auth(gm, auth).send({ timeline_id: null });
+    expect(detached.body.timeline_id).toBeNull();
+    expect((await api().put(`/api/settings/calendar-timelines/${world.id}?campaign=${campaignId}`).auth(gm, auth).send({ name: "Порча" })).status).toBe(403);
+    expect((await api().delete(`/api/settings/calendar-timelines/${world.id}?campaign=${campaignId}`).auth(gm, auth)).status).toBe(403);
+    expect((await api().delete(`/api/settings/calendar-eras/${era.id}?campaign=${neighbor}`).auth(gm, auth)).status).toBe(403);
+    db.prepare("DELETE FROM campaigns WHERE id = ?").run(neighbor);
+    expect(db.prepare("SELECT 1 FROM setting_calendar_timelines WHERE id = ?").get(other.id)).toBeUndefined();
+  });
+});

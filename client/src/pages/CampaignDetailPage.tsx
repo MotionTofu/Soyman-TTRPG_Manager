@@ -1,20 +1,18 @@
 import type { InstanceSummary } from "../components/workbooks/model";
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import {EmbeddedWorkbook} from "./WorkbookPage";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
 import {
   campaignAdventureAffects,
-  campaignEventAffects,
   campaignFieldsAffects,
   campaignGroupAffects,
   campaignPaths,
   rosterAffects,
 } from "../data/campaigns";
 import { useQueries } from "@tanstack/react-query";
-import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
 import { vesselPaths, type VesselSummary } from "../data/campaignVessels";
 import { labelled } from "../data/notices";
@@ -51,12 +49,9 @@ import {
   RATE_SPLIT_OPTIONS,
   RATE_SPLIT_LABELS,
 } from "../paymentTypes";
-import { MentionTextarea } from "../components/mentions/MentionTextarea";
-import { syncMentionLinks } from "../mentions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
-import { dateFromElapsed, formatInworldDate, formatEventDate } from "../inworldCalendar";
-import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
+import { formatInworldDate } from "../inworldCalendar";
 import { EntityPage } from "../components/EntityPage";
 import { LoadErrorCard } from "../components/Loadable";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -67,13 +62,13 @@ import { useConfirm, useAlert, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
+  ImportantDate,
   StoryArc,
   CampaignDetail,
   CampaignEntry,
   CampaignGroup,
   CampaignType,
   Character,
-  ImportantDate,
   PaymentFrequency,
   PaymentType,
   Player,
@@ -82,18 +77,13 @@ import type {
   SessionStatus,
   SessionSummary,
   Setting,
-  SettingCalendarEra,
-  SettingCycle,
   System,
   CampaignDebt,
   WorldExplorationEntry,
   WorldExplorationKind,
   GmReminder,
 } from "../types";
-import { Timeline } from "../components/Timeline";
-import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
-import { SettingCyclePanel } from "../components/setting/SettingCyclePanel";
-import { SettingCycles } from "../components/SettingCycles";
+import { CampaignChronicle } from "../components/chronicle/CampaignChronicle";
 import { CutsceneBindings } from "../components/cutscenes/CutsceneBindings";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
@@ -176,12 +166,9 @@ const PLAYER_TAB_ALIASES = { "Хроника игр": "Сессии" } as const;
 const NO_SESSIONS: SessionSummary[] = [];
 const NO_PLAYERS: Player[] = [];
 const NO_DEBTS: CampaignDebt[] = [];
-const NO_CYCLES: SettingCycle[] = [];
-const NO_ERAS: SettingCalendarEra[] = [];
 const NO_SYSTEMS: System[] = [];
 const NO_SETTINGS: Setting[] = [];
 const NO_EVENTS: CampaignCalendarEvent[] = [];
-const NO_DATES: ImportantDate[] = [];
 
 /**
  * Папки кампании нет в хранилище. Полоса стоит в профиле, а не только на
@@ -279,14 +266,6 @@ export function CampaignDetailPage() {
     setStorySel({ section: "chapters", item: current ? String(current.id) : "all" });
   }, [chapStats, storySel]);
   const { deleteWithUndo } = useUndoDelete();
-  // Ось кампании — частный случай оси сеттинга (разбор 2026-10-02, Q1–Q4):
-  // панель циклов (сеттинга и свои), эпохи общего таймлайна сеттинга.
-  const cycles = useResource<SettingCycle[]>(campaign?.setting_id ? chroniclePaths.cycles(campaign.setting_id, campaignId) : null).data ?? NO_CYCLES;
-  const allEras = useResource<SettingCalendarEra[]>(campaign?.setting_id ? chroniclePaths.eras(campaign.setting_id) : null).data ?? NO_ERAS;
-  const eras = useMemo(() => allEras.filter((e) => e.timeline_id == null).sort((a, b) => a.start_year - b.start_year), [allEras]);
-  const [worldEraId, setWorldEraId] = useState<number | null>(null);
-  const cyclesRef = useRef<HTMLDivElement>(null);
-
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
   // «Редактировать» в шапке «Обзора»: счётчик щелчков для OverviewTab.
   const [editMainTick, setEditMainTick] = useState(0);
@@ -308,103 +287,10 @@ export function CampaignDetailPage() {
     null
   );
 
-  // Хроника кампании — свои события и события сеттинга живыми (спека
-  // campaign-paper, Q28). У событий сеттинга id из другой таблицы, поэтому в
-  // интерфейсе им дан сдвиг SETTING_EVENT_UID: ключи строк и оси не путаются
-  // со своими, а путь записи выбирает eventPath.
-  const rawEvents =
-    useResource<CampaignCalendarEvent[]>(invalidCampaignId ? null : campaignPaths.calendarEvents(campaignId)).data ?? NO_EVENTS;
-  const calendarEvents = useMemo(
-    () =>
-      rawEvents
-        .filter((e) => !e.hidden)
-        .map((e) => (e.source === "setting" ? { ...e, id: SETTING_EVENT_UID + e.id } : e)),
-    [rawEvents]
-  );
-  const hiddenEvents = useMemo(() => rawEvents.filter((e) => e.hidden), [rawEvents]);
-  const eventAffects = (id?: number) => [
-    ...campaignEventAffects(campaignId, id),
-    ...(campaign?.setting_id && id != null && isSettingEvent(id) ? [{ path: chroniclePaths.events(campaign.setting_id) }] : []),
-  ];
-  const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
-  const settingImportantDates =
-    useResource<ImportantDate[]>(campaign?.setting_id ? chroniclePaths.importantDates(campaign.setting_id) : null).data ?? NO_DATES;
-  const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
-    null
-  );
-  const [eventModal, setEventModal] = useState<{
-    id?: number;
-    year: number;
-    month: number;
-    day: number;
-    title: string;
-    description: string;
-    important: boolean;
-    precision: import("../types").DatePrecision;
-    status: import("../types").EventStatus;
-    year_end: string;
-    month_end: string;
-    day_end: string;
-    cancel_note: string;
-  } | null>(null);
-  const [worldFilter, setWorldFilter] = useState("");
-  const [worldSort, setWorldSort] = useState<"asc" | "desc">("asc");
-  const sortedCalendarEvents = useMemo(() => [...calendarEvents].sort((a, b) => {
-    if (!!a.important !== !!b.important) return a.important ? -1 : 1;
-    if (a.inworld_year !== b.inworld_year) return a.inworld_year - b.inworld_year;
-    if (a.inworld_month !== b.inworld_month) return a.inworld_month - b.inworld_month;
-    return a.inworld_day - b.inworld_day;
-  }), [calendarEvents]);
-  const worldFiltered = useMemo(() => {
-    const q = worldFilter.trim().toLowerCase();
-    let list = sortedCalendarEvents;
-    if (q) list = list.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
-    const era = eras.find((e) => e.id === worldEraId);
-    if (era) {
-      const endYear = eras.find((e) => e.start_year > era.start_year)?.start_year ?? Infinity;
-      list = list.filter((ev) => ev.inworld_year >= era.start_year && ev.inworld_year < endYear);
-    }
-    if (worldSort === "desc") list = [...list].reverse();
-    return list;
-  }, [sortedCalendarEvents, worldFilter, worldSort, eras, worldEraId]);
-  const timelineNow = useMemo(() => {
-    const held = sessions.filter((s) => s.status === "held" && s.inworld_year != null);
-    if (held.length > 0) {
-      const sorted = [...held].sort((a, b) => {
-        const aY = a.inworld_year_end ?? a.inworld_year!;
-        const bY = b.inworld_year_end ?? b.inworld_year!;
-        if (aY !== bY) return aY - bY;
-        const aM = a.inworld_month_end ?? a.inworld_month!;
-        const bM = b.inworld_month_end ?? b.inworld_month!;
-        if (aM !== bM) return aM - bM;
-        const aD = a.inworld_day_end ?? a.inworld_day!;
-        const bD = b.inworld_day_end ?? b.inworld_day!;
-        return aD - bD;
-      });
-      const last = sorted[sorted.length - 1];
-      return {
-        year: last.inworld_year_end ?? last.inworld_year!,
-        month: last.inworld_month_end ?? last.inworld_month!,
-        day: last.inworld_day_end ?? last.inworld_day!,
-      };
-    }
-    if (campaign?.pinned_calendar_year != null && campaign?.pinned_calendar_month != null) {
-      return { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month, day: 1 };
-    }
-    return null;
-  }, [sessions, campaign]);
-  const inworldTodayStr = useMemo(() => {
-    if (!calendar || !timelineNow) return null;
-    const monthName = calendar.months.find((m) => m.position === timelineNow.month)?.name ?? String(timelineNow.month);
-    return "Сегодня: " + timelineNow.day + " " + monthName + " " + timelineNow.year + (calendar.era ? " " + calendar.era : "");
-  }, [calendar, timelineNow]);
+  const [sessionMenu, setSessionMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const rawEvents = useResource<CampaignCalendarEvent[]>(invalidCampaignId ? null : campaignPaths.calendarEvents(campaignId)).data ?? NO_EVENTS;
   // Отменённые живут в Архиве, на вкладке их нет.
   const chronicleFiltered = useMemo(() => sessions.filter((s) => s.status !== "cancelled"), [sessions]);
-  const axisRef = useRef<HTMLDivElement>(null);
-  const calendarRef = useRef<HTMLDivElement>(null);
-  const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
-  const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
-
   if (invalidCampaignId) return <div className="stack" style={{ padding: 24 }}><p>Кампания не найдена</p><Link to="/campaigns">К списку кампаний →</Link></div>;
   if (campaignState.error && !campaign) return <div className="stack" style={{ padding: 24 }}><p className="muted">{campaignState.error}</p><button onClick={campaignState.reload}>Повторить</button></div>;
   if (!campaign) return <p className="muted">Загрузка…</p>;
@@ -420,217 +306,6 @@ export function CampaignDetailPage() {
     campaignRole: campaign.role,
     label: sessionLabel(s),
   }));
-
-  const inworldItems: InworldDatedItem[] = [
-    ...sessions
-      .filter((s) => s.inworld_year != null && s.inworld_month != null && s.inworld_day != null)
-      .map((s) => ({
-        id: `session-${s.id}`,
-        year: s.inworld_year!,
-        month: s.inworld_month!,
-        day: s.inworld_day!,
-        label: sessionLabel(s),
-        kind: "session" as const,
-      })),
-    ...calendarEvents.map((e) => ({
-      id: `event-${e.id}`,
-      year: e.inworld_year,
-      month: e.inworld_month,
-      day: e.inworld_day,
-      label: e.title,
-      kind: "event" as const,
-      important: !!e.important,
-    })),
-  ];
-
-  function openCreateEventModal(year: number, month: number, day: number) {
-    setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "" });
-    setCalendarMenu(null);
-  }
-
-  function openEditEventModal(ev: CampaignCalendarEvent) {
-    setEventModal({
-      id: ev.id,
-      year: ev.inworld_year,
-      month: ev.inworld_month,
-      day: ev.inworld_day,
-      title: ev.title,
-      description: ev.description,
-      important: !!ev.important,
-      precision: ev.date_precision ?? "day",
-      status: ev.status ?? "happened",
-      year_end: ev.inworld_year_end != null ? String(ev.inworld_year_end) : "",
-      month_end: ev.inworld_month_end != null ? String(ev.inworld_month_end) : "",
-      day_end: ev.inworld_day_end != null ? String(ev.inworld_day_end) : "",
-      cancel_note: ev.cancel_note ?? "",
-    });
-    setCalendarMenu(null);
-  }
-
-  async function deleteCalendarEvent(eventId: number) {
-    // Событие мира принадлежит сеттингу: кампания только прячет его у себя (Q28).
-    if (isSettingEvent(eventId)) {
-      setCalendarMenu(null);
-      await setEventHidden(eventId - SETTING_EVENT_UID, true);
-      return;
-    }
-    const ok = await confirm({ message: "Удалить событие?", confirmLabel: "Удалить", danger: true });
-    if (!ok) return;
-    setCalendarMenu(null);
-    await run(labelled("Событие хроники", () => write.del(eventPath(eventId))), {
-      affects: eventAffects(eventId),
-    });
-  }
-
-  async function setEventHidden(settingEventId: number, hidden: boolean) {
-    await run(
-      labelled("Событие мира", () => write.put(`/campaigns/${campaignId}/hidden-events/${settingEventId}`, { hidden })),
-      { affects: [...campaignEventAffects(campaignId), { path: `/player` }] }
-    );
-  }
-
-  async function toggleEventImportant(ev: CampaignCalendarEvent) {
-    await run(labelled("Событие хроники", () => write.put(eventPath(ev.id), { important: !ev.important })), {
-      affects: eventAffects(ev.id),
-    });
-  }
-
-  // Сдвиг события по оси: точность приходит от масштаба, на котором бросили.
-  async function moveCampaignEvent(
-    id: number,
-    date: { year: number; month: number; day: number; precision: string }
-  ) {
-    // Сессию по оси не двигают: её внутриигровая дата — часть записи о
-    // проведённой игре, и менять её мимо страницы сессии значило бы править
-    // историю жестом, который задумывался как «переставить план».
-    if (id < 0) return;
-    await run(
-      labelled("Событие хроники", () =>
-        write.put(eventPath(id), {
-          inworld_year: date.year,
-          inworld_month: date.month,
-          inworld_day: date.day,
-          date_precision: date.precision,
-        })
-      ),
-      { affects: eventAffects(id) }
-    );
-  }
-
-  async function pinCampaignCalendar(pinned: { year: number; month: number } | null) {
-    await run(
-      labelled("Месяц календаря", () =>
-        write.put(`/campaigns/${campaignId}/pinned-calendar`, {
-          year: pinned?.year ?? null,
-          month: pinned?.month ?? null,
-        })
-      ),
-      { affects: campaignFieldsAffects(campaignId) }
-    );
-  }
-
-  async function saveEventModal() {
-    if (!eventModal || !eventModal.title.trim()) return;
-    const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
-    // Валидация порядка start/end: конец периода не может быть раньше начала.
-    if (hasPeriod) {
-      const sy = Number(eventModal.year) || 0;
-      const ey = eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : sy;
-      const sm = Number(eventModal.month) || 1;
-      const em = eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : sm;
-      const sd = Number(eventModal.day) || 1;
-      const ed = eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : sd;
-      if (ey < sy || (ey === sy && em < sm) || (ey === sy && em === sm && ed < sd)) {
-        showAlert("Дата окончания периода раньше даты начала.");
-        return;
-      }
-    }
-    const payload: Record<string, unknown> = {
-      title: eventModal.title,
-      description: eventModal.description,
-      inworld_year: eventModal.year,
-      inworld_month: eventModal.month,
-      inworld_day: eventModal.day,
-      important: eventModal.important,
-      date_precision: eventModal.precision,
-      status: eventModal.status,
-      cancel_note: eventModal.cancel_note,
-      inworld_year_end: hasPeriod && eventModal.year_end.trim() !== "" ? Number(eventModal.year_end) : hasPeriod ? eventModal.year : null,
-      inworld_month_end: hasPeriod && eventModal.month_end.trim() !== "" ? Number(eventModal.month_end) : hasPeriod ? eventModal.month : null,
-      inworld_day_end: hasPeriod && eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : hasPeriod ? eventModal.day : null,
-    };
-    if (!hasPeriod) { payload.inworld_year_end = null; payload.inworld_month_end = null; payload.inworld_day_end = null; }
-    // Окно закрывается только после записи: при отказе набранное остаётся.
-    if (eventModal.id) {
-      const eventId = eventModal.id;
-      const original = calendarEvents.find((e) => e.id === eventId);
-      const saved = await run(
-        labelled("Событие хроники", () => write.put(eventPath(eventId), payload).then(() => true)),
-        { affects: eventAffects(eventId) }
-      );
-      if (!saved) return;
-      if (isSettingEvent(eventId))
-        await syncMentionLinks("setting_event", eventId - SETTING_EVENT_UID, original?.description ?? "", eventModal.description);
-      else await syncMentionLinks("campaign_event", eventId, original?.description ?? "", eventModal.description);
-    } else {
-      const created = await run(
-        labelled("Новое событие", () => write.post<CampaignCalendarEvent>(`/campaigns/${campaignId}/calendar-events`, payload)),
-        { affects: campaignEventAffects(campaignId), retry: false }
-      );
-      if (!created) return;
-      await syncMentionLinks("campaign_event", created.id, "", eventModal.description);
-    }
-    setEventModal(null);
-  }
-
-  function handleCalendarDayContextMenu(year: number, month: number, day: number, x: number, y: number) {
-    const dayEvents = calendarEvents.filter((ev) => ev.inworld_year === year && ev.inworld_month === month && ev.inworld_day === day);
-    const daySessions = sessions.filter((s) => s.inworld_year === year && s.inworld_month === month && s.inworld_day === day);
-    const items: import("../components/ContextMenu").ContextMenuItem[] = [];
-    if (dayEvents.length > 0) {
-      for (const ev of dayEvents) {
-        items.push({ label: `Событие: ${ev.title}`, onClick: () => openEditEventModal(ev) });
-      }
-    }
-    if (daySessions.length > 0) {
-      for (const s of daySessions) {
-        items.push({ label: `Сессия: ${sessionLabel(s)}`, onClick: () => navigate(`/sessions/${s.id}`) });
-      }
-    }
-    items.push({ label: "Создать событие", onClick: () => openCreateEventModal(year, month, day) });
-    setCalendarMenu({ x, y, items });
-  }
-
-  function handleCalendarItemContextMenu(item: InworldDatedItem, x: number, y: number) {
-    if (item.kind !== "event") return;
-    const ev = calendarEvents.find((e) => `event-${e.id}` === item.id);
-    if (!ev) return;
-    setCalendarMenu({
-      x,
-      y,
-      items: [
-        { label: "Редактировать", onClick: () => openEditEventModal(ev) },
-        isSettingEvent(ev.id)
-          ? { label: "Убрать из кампании", onClick: () => deleteCalendarEvent(ev.id) }
-          : { label: "Удалить", danger: true, onClick: () => deleteCalendarEvent(ev.id) },
-      ],
-    });
-  }
-
-  function handleCalendarItemClick(item: InworldDatedItem) {
-    if (item.kind === "session") {
-      navigate(`/sessions/${item.id.replace("session-", "")}`);
-    }
-  }
-
-  function toggleEventExpanded(eventId: number) {
-    setExpandedEvents((prev) => {
-      const next = new Set(prev);
-      if (next.has(eventId)) next.delete(eventId);
-      else next.add(eventId);
-      return next;
-    });
-  }
 
   async function createSession() {
     if (!creatingDate || creatingSession) return;
@@ -782,7 +457,7 @@ export function CampaignDetailPage() {
 
   function openSessionMenu(e: React.MouseEvent<HTMLElement>, s: SessionSummary) {
     const at = e.currentTarget.getBoundingClientRect();
-    setCalendarMenu({
+    setSessionMenu({
       x: at.left,
       y: at.bottom,
       items: [
@@ -805,7 +480,7 @@ export function CampaignDetailPage() {
   const tabCounts: Partial<Record<(typeof tabs)[number], number>> = {
     "Персонажи игроков": campaign.roster.length,
     "Сессии": sessions.length,
-    "Хроника мира": calendarEvents.length,
+    "Хроника мира": rawEvents.filter((event) => !event.hidden).length,
     "Тетрадь": workbooks.length,
   };
   return (
@@ -1097,218 +772,7 @@ export function CampaignDetailPage() {
 
       {tab === "Исследование Мира" && <WorldExplorationTab campaignId={campaignId} />}
 
-      {tab === "Хроника мира" && (
-        <div className="stack" style={{ gap: "var(--sp-7)" }}>
-          <div ref={axisRef} className="card stack" style={{ gap: 8 }}>
-            <Timeline
-              title="Ось времени"
-              action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>}
-              focusDate={timelineFocus}
-              events={[
-                ...sortedCalendarEvents.map((ev) => ({
-                  id: ev.id,
-                  title: ev.title,
-                  year: ev.inworld_year,
-                  month: ev.inworld_month,
-                  day: ev.inworld_day,
-                  precision: ev.date_precision,
-                  year_end: ev.inworld_year_end,
-                  month_end: ev.inworld_month_end,
-                  day_end: ev.inworld_day_end,
-                  status: ev.status,
-                  important: ev.important === 1,
-                  kind: "event" as const,
-                })),
-                ...sessions
-                  .filter((s) => s.inworld_year != null && s.status !== "cancelled")
-                  .map((s) => ({
-                    id: -s.id,
-                    title: sessionLabel(s),
-                    year: s.inworld_year as number,
-                    month: s.inworld_month ?? 1,
-                    day: s.inworld_day ?? 1,
-                    precision: "day" as const,
-                    year_end: s.inworld_year_end ?? null,
-                    month_end: s.inworld_month_end ?? null,
-                    day_end: s.inworld_day_end ?? null,
-                    status: "happened" as const,
-                    important: false,
-                    kind: "session" as const,
-                  })),
-              ]}
-              months={calendar?.months ?? []}
-              era={calendar?.era ?? ""}
-              eras={eras}
-              now={timelineNow}
-              below={(view) =>
-                campaign.setting_id ? (
-                  <SettingCyclePanel
-                    settingId={campaign.setting_id}
-                    campaignId={campaignId}
-                    cycles={cycles}
-                    view={view}
-                    onAddCycle={() => cyclesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    onDayMenu={(day, x, y) => {
-                      const date = dateFromElapsed(day, calendar?.months ?? []);
-                      setCalendarMenu({
-                        x,
-                        y,
-                        items: [{ label: "Событие на этот день", onClick: () => openCreateEventModal(date.year, date.month, date.day) }],
-                      });
-                    }}
-                  />
-                ) : null
-              }
-              importantDates={settingImportantDates}
-              onMoveEvent={moveCampaignEvent}
-              onNowChange={(date) => pinCampaignCalendar(date)}
-              onEventClick={(id) => {
-                if (id < 0) navigate(`/sessions/${-id}`);
-              }}
-            />
-          </div>
-          <div className="chronicle-split">
-            <div className="chronicle-left">
-              <details className="card res-group" open style={{ margin: 0 }}>
-                <summary className="res-group__band">
-                  <span className="res-group__title">События</span>
-                  <span className="res-group__count">{worldFiltered.length} из {sortedCalendarEvents.length}</span>
-                </summary>
-                <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
-                  <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                    <input placeholder="Поиск по хронике мира" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
-                    <button onClick={() => setWorldSort((s) => (s === "asc" ? "desc" : "asc"))}>{worldSort === "asc" ? "↑ Старые → новые" : "↓ Новые → старые"}</button>
-                    {eras.length > 0 && (
-                      <select value={worldEraId ?? ""} onChange={(e) => setWorldEraId(e.target.value ? Number(e.target.value) : null)} aria-label="Эпоха">
-                        <option value="">Все эпохи</option>
-                        {eras.map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {e.name} ({e.start_year})
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
-                  </div>
-                  {worldFiltered.length === 0 && sortedCalendarEvents.length > 0 ? <p className="muted">Ничего не найдено.</p> : null}
-                  <div className="stack">
-                    {worldFiltered.map((ev, i) => {
-                      // Как в хронике сеттинга: эпохи заголовками, строка — дата и название.
-                      const eraOf = (year: number) => eras.filter((e) => e.start_year <= year).pop();
-                      const era = eraOf(ev.inworld_year);
-                      const prev = i > 0 ? eraOf(worldFiltered[i - 1].inworld_year) : undefined;
-                      const world = isSettingEvent(ev.id);
-                      return (
-                        <Fragment key={ev.id}>
-                          {era && era !== prev && (
-                            <div className="chronicle-era">
-                              {era.name} <span>· с {era.start_year} года</span>
-                            </div>
-                          )}
-                          <SettingChronicleEventRow
-                            ev={ev}
-                            href={world ? `/events/${ev.id - SETTING_EVENT_UID}` : `/campaign-events/${ev.id}`}
-                            tag={world ? <span className="chronicle-source">мир</span> : null}
-                            expanded={expandedEvents.has(ev.id)}
-                            calendar={calendar}
-                            onToggleExpand={toggleEventExpanded}
-                            onToggleImportant={toggleEventImportant}
-                            onEdit={openEditEventModal}
-                            // Событие мира не удаляется, а убирается из кампании — под «…», чтобы не нажать случайно.
-                            onDelete={world ? undefined : deleteCalendarEvent}
-                            menu={world ? [{ label: "Убрать из кампании", onClick: () => void deleteCalendarEvent(ev.id) }] : undefined}
-                            onShowOnAxis={(e) => {
-                              setTimelineFocus({ year: e.inworld_year, month: e.inworld_month, day: e.inworld_day });
-                              axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                            }}
-                            onShowOnCalendar={(e) => {
-                              setCalendarFocus({ year: e.inworld_year, month: e.inworld_month });
-                              calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                            }}
-                          />
-                        </Fragment>
-                      );
-                    })}
-                    {hiddenEvents.length > 0 && (
-                      <details className="paper-fold">
-                        <summary>
-                          Убраны из кампании <span className="paper-fold__count">· {hiddenEvents.length}</span>
-                        </summary>
-                        <ul className="paper-rows">
-                          {hiddenEvents.map((ev) => (
-                            <li key={ev.id}>
-                              <span className="paper-rows__main">{ev.title}</span>
-                              <span className="paper-rows__sub">
-                                {calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}
-                              </span>
-                              <button className="comp-mini" onClick={() => void setEventHidden(ev.id, false)}>
-                                Вернуть
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    )}
-                    {calendarEvents.length === 0 && <EmptyState title="Хроника пуста" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>} />}
-                  </div>
-                </div>
-              </details>
-            </div>
-            <div ref={calendarRef} className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
-              <details className="card res-group" open>
-                <summary className="res-group__band">
-                  <span className="res-group__title">Календарь</span>
-                  <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{inworldTodayStr ?? "—"}</span>
-                </summary>
-                <div className="res-group__body" style={{ padding: 12 }}>
-                  {!campaign.setting_id ? (
-                    <p className="muted">У кампании не привязан сеттинг — календарь недоступен.</p>
-                  ) : !calendar ? (
-                    <p className="muted">Загрузка…</p>
-                  ) : calendar.months.length === 0 ? (
-                    <p className="muted">
-                      В сеттинге не настроен календарь.{" "}
-                      <Link to={`/settings/${campaign.setting_id}?tab=${encodeURIComponent("Календарь")}`}>
-                        Настроить →
-                      </Link>
-                    </p>
-                  ) : (
-                    <InworldCalendar
-                      months={calendar.months}
-                      weekdays={calendar.weekdays}
-                      items={inworldItems}
-                      importantDates={settingImportantDates}
-                      pinned={
-                        campaign.pinned_calendar_year != null && campaign.pinned_calendar_month != null
-                          ? { year: campaign.pinned_calendar_year, month: campaign.pinned_calendar_month }
-                          : null
-                      }
-                      focusDate={calendarFocus}
-                      onPin={pinCampaignCalendar}
-                      onDayContextMenu={handleCalendarDayContextMenu}
-                      onItemClick={handleCalendarItemClick}
-                      onItemContextMenu={handleCalendarItemContextMenu}
-                    />
-                  )}
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                    ПКМ — создать событие, посмотреть список событий и сессий на день.
-                  </span>
-                </div>
-              </details>
-            </div>
-          </div>
-          {campaign.setting_id && (
-            <div ref={cyclesRef}>
-              <SettingCycles
-                settingId={campaign.setting_id}
-                campaignId={campaignId}
-                months={calendar?.months ?? []}
-                now={{ year: campaign.pinned_calendar_year ?? null, month: campaign.pinned_calendar_month ?? null }}
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {tab === "Хроника мира" && <CampaignChronicle campaign={campaign} sessions={sessions} events={rawEvents} />}
 
       {menu && (
         <ContextMenu
@@ -1319,116 +783,8 @@ export function CampaignDetailPage() {
         />
       )}
 
-      {calendarMenu && (
-        <ContextMenu
-          x={calendarMenu.x}
-          y={calendarMenu.y}
-          items={calendarMenu.items}
-          onClose={() => setCalendarMenu(null)}
-        />
-      )}
 
-      {eventModal && (
-        <Modal onClose={() => setEventModal(null)}>
-          <h3>{eventModal.id ? "Редактировать событие" : "Новое событие"}</h3>
-          <div className="stack">
-            <input
-              placeholder="Название"
-              value={eventModal.title}
-              onChange={(e) => setEventModal({ ...eventModal, title: e.target.value })}
-            />
-            <MentionTextarea
-              value={eventModal.description}
-              onChange={(v) => setEventModal({ ...eventModal, description: v })}
-              rows={4}
-              placeholder="Описание"
-            />
-            <div className="row">
-              <label className="row">
-                Год
-                <input
-                  type="number"
-                  style={{ width: 80 }}
-                  value={eventModal.year}
-                  onChange={(e) => setEventModal({ ...eventModal, year: Number(e.target.value) })}
-                />
-              </label>
-              <label className="row">
-                Месяц
-                <select
-                  value={eventModal.month}
-                  onChange={(e) => setEventModal({ ...eventModal, month: Number(e.target.value) })}
-                >
-                  {(calendar?.months ?? []).map((m) => (
-                    <option key={m.id} value={m.position}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="row">
-                День
-                <input
-                  type="number"
-                  style={{ width: 70 }}
-                  value={eventModal.day}
-                  onChange={(e) => setEventModal({ ...eventModal, day: Number(e.target.value) })}
-                />
-              </label>
-            </div>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={eventModal.important}
-                onChange={(e) => setEventModal({ ...eventModal, important: e.target.checked })}
-              />
-              Важно
-            </label>
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <label className="row">
-                Точность
-                <select value={eventModal.precision} onChange={(e) => setEventModal({ ...eventModal, precision: e.target.value as import("../types").DatePrecision })}>
-                  <option value="day">День</option>
-                  <option value="month">Месяц</option>
-                  <option value="year">Год</option>
-                  <option value="decade">Десятилетие</option>
-                  <option value="century">Век</option>
-                </select>
-              </label>
-              <label className="row">
-                Статус
-                <select value={eventModal.status} onChange={(e) => setEventModal({ ...eventModal, status: e.target.value as import("../types").EventStatus })}>
-                  <option value="happened">Случилось</option>
-                  <option value="upcoming">Предстоит</option>
-                  <option value="cancelled">Отменено</option>
-                </select>
-              </label>
-            </div>
-            {eventModal.status === "cancelled" && (
-              <label className="stack" style={{ gap: 4 }}>
-                Чем отменилось
-                <input placeholder="Что игроки сделали, чтобы этого не произошло" value={eventModal.cancel_note} onChange={(e) => setEventModal({ ...eventModal, cancel_note: e.target.value })} />
-              </label>
-            )}
-            <details className="card" style={{ padding: 10 }}>
-              <summary>Период (если событие растянуто)</summary>
-              <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
-                <label className="row">Год до <input type="number" style={{ width: 90 }} placeholder="—" value={eventModal.year_end} onChange={(e) => setEventModal({ ...eventModal, year_end: e.target.value })} /></label>
-                <label className="row">Мес. до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.month_end} onChange={(e) => setEventModal({ ...eventModal, month_end: e.target.value })} /></label>
-                <label className="row">День до <input type="number" style={{ width: 70 }} placeholder="—" value={eventModal.day_end} onChange={(e) => setEventModal({ ...eventModal, day_end: e.target.value })} /></label>
-              </div>
-              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Оставьте пустым — событие точечное. Заполните — период («осада март–май»).</span>
-            </details>
-            <div className="row">
-              <button className="primary" onClick={saveEventModal}>
-                Сохранить
-              </button>
-              <button onClick={() => setEventModal(null)}>Отмена</button>
-            </div>
-          </div>
-        </Modal>
-       )}
-
+      {sessionMenu && <ContextMenu {...sessionMenu} onClose={() => setSessionMenu(null)} />}
       {confirmDialog}
       {alertDialog}
       {outcomeSessionId != null && <SessionOutcomeModal sessionId={outcomeSessionId} onClose={() => setOutcomeSessionId(null)} />}
@@ -2524,10 +1880,6 @@ function useCampaignGroups(campaignId: number) {
 const NO_GROUPS: CampaignGroup[] = [];
 
 /** Сдвиг id событий сеттинга в хронике кампании — см. calendarEvents. */
-const SETTING_EVENT_UID = 1_000_000_000;
-const isSettingEvent = (id: number) => id >= SETTING_EVENT_UID;
-const eventPath = (id: number) =>
-  isSettingEvent(id) ? `/settings/calendar-events/${id - SETTING_EVENT_UID}` : `/campaigns/calendar-events/${id}`;
 const NO_WORKBOOKS: InstanceSummary[] = [];
 const NO_CHARACTERS: Character[] = [];
 

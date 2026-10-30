@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { daysInYear, dateFromElapsed, elapsedDays, formatByPrecision } from "../inworldCalendar";
 import type { CalendarMonth, DatePrecision, EventStatus, ImportantDate, SettingCalendarEra } from "../types";
 import "../timeline.css";
+import { timeTone, type ChronicleNow } from "./chronicle/time";
 
 // Ось времени — общая для хроники мира и расписания кампании.
 //
@@ -81,7 +82,7 @@ export function Timeline({
   eras?: SettingCalendarEra[];
   selectedTimelineId?: number | null;
   /** «Сейчас» в мире. Рисуется красной стрелкой, её можно тянуть. */
-  now: { year: number; month: number; day?: number } | null;
+  now: ChronicleNow | null;
   importantDates?: ImportantDate[];
   onMoveEvent?: (id: number, date: { year: number; month: number; day: number; precision: DatePrecision }) => void;
   onNowChange?: (date: { year: number; month: number }) => void;
@@ -124,9 +125,12 @@ export function Timeline({
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    // На телефоне ось скрыта до выбора её язычка. Нулевая ширина дала бы
+    // pxPerDay = 0 и NaN в сдвиге, поэтому держим последний ненулевой замер.
+    const measure = () => { if (el.clientWidth > 0) setWidth(el.clientWidth); };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setWidth(el.clientWidth);
+    measure();
     return () => ro.disconnect();
   }, []);
 
@@ -226,7 +230,7 @@ export function Timeline({
     const out: { x: number; items: Placed[] }[] = [];
     for (const p of visible) {
       const last = out[out.length - 1];
-      if (last && p.x - last.x < CLUSTER_PX && p.width < CLUSTER_PX) last.items.push(p);
+      if (!p.event.important && last && !last.items.some((item) => item.event.important) && p.x - last.x < CLUSTER_PX && p.width < CLUSTER_PX) last.items.push(p);
       else out.push({ x: p.x, items: [p] });
     }
     return out;
@@ -499,6 +503,7 @@ export function Timeline({
             <EventBar
               key={c.items[0].event.id}
               placed={c.items[0]}
+              now={now}
               months={months}
               era={era}
               draggable={onMoveEvent != null}
@@ -549,6 +554,7 @@ export interface TimelineView {
 
 function EventBar({
   placed,
+  now,
   months,
   era,
   draggable,
@@ -556,6 +562,7 @@ function EventBar({
   onClick,
 }: {
   placed: Placed;
+  now: ChronicleNow | null;
   months: CalendarMonth[];
   era: string;
   draggable: boolean;
@@ -584,7 +591,10 @@ function EventBar({
 
   return (
     <button
-      className={classes}
+      className={`${classes}${e.kind === "session" ? "" : ` chr-tone--${timeTone({
+        inworld_year: e.year, inworld_month: e.month, inworld_day: e.day,
+        inworld_year_end: e.year_end, inworld_month_end: e.month_end, inworld_day_end: e.day_end, status: e.status,
+      }, now)}`}`}
       style={{ left: placed.x, width: placed.width }}
       title={`${e.title}\n${formatByPrecision(e.year, e.month, e.day, e.precision, months, era)}`}
       onClick={onClick}

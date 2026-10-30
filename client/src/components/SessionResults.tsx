@@ -1,3 +1,4 @@
+import { SessionChronicleEvents } from "./chronicle/SessionChronicleEvents";
 import { SessionMentionsButton } from "./SessionMentionsButton";
 import { SessionNotesChat } from "./SessionNotesChat";
 import { SessionOutcomesCard } from "./SessionPaperCards";
@@ -44,6 +45,7 @@ export function SessionResults({
 
       {/* Разбор встречи (ADR-0006, слой кампании): записи этой встречи и
           очередь черновиков. Оси «Что изменилось» выше остаются сводкой. */}
+      {!isPlayer && <SessionChronicleEvents session={session} campaignId={campaignId} settingId={settingId} />}
       {!isPlayer && <SessionRecordsReview campaignId={campaignId} sessionId={session.id} settingId={settingId} />}
     </>
   );

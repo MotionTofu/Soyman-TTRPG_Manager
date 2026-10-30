@@ -30,6 +30,7 @@ export function Chronicle<T extends string>({
   chips,
   children,
   calendar,
+  mobile,
 }: {
   /** Строка под заголовком — обычно `<ChronicleNowLine>`. */
   nowLine: ReactNode;
@@ -49,9 +50,10 @@ export function Chronicle<T extends string>({
   children: ReactNode;
   /** Полоса календаря — `<ChronicleMonthStrip>`. */
   calendar?: ReactNode;
+  mobile?: { view: "Список" | "Ось" | "Календарь"; onView: (view: "Список" | "Ось" | "Календарь") => void };
 }) {
   return (
-    <div className="chr">
+    <div className="chr" data-mobile-view={mobile?.view}>
       <div className="chr-head">
         <div>
           <h2>Хроника</h2>
@@ -59,6 +61,9 @@ export function Chronicle<T extends string>({
         </div>
         {actions && <div className="chr-head__acts">{actions}</div>}
       </div>
+      {mobile && <div className="chr-mobile-tabs" role="tablist" aria-label="Вид хроники">
+        {(["Список", "Ось", "Календарь"] as const).map((view) => <button key={view} type="button" className="d-btn" role="tab" aria-selected={mobile.view === view} onClick={() => mobile.onView(view)}>{view}</button>)}
+      </div>}
       {axis && <div className="d-block chr-axis">{axis}</div>}
       <div className="chr-segrow">
         {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
@@ -83,7 +88,7 @@ export function Chronicle<T extends string>({
         )}
       </div>
       {chips}
-      {children}
+      <div className="chr-content">{children}</div>
       {calendar}
     </div>
   );
@@ -99,6 +104,7 @@ export function ChronicleNowLine({
   months,
   source,
   season,
+  cycleLabels,
   ongoing,
   nearest,
   empty,
@@ -107,8 +113,9 @@ export function ChronicleNowLine({
   months: CalendarMonth[];
   source: string;
   season?: string | null;
+  cycleLabels?: string[];
   ongoing: number;
-  nearest?: { title: string; year: number; month: number; day: number } | null;
+  nearest?: { title: string; year: number; month: number; day: number; days?: number } | null;
   /** Что сказать, когда «сейчас» не задано. */
   empty: ReactNode;
 }) {
@@ -120,12 +127,11 @@ export function ChronicleNowLine({
         {monthName(months, now.month)} {now.year}
       </b>
       <span className="d-note">{source}</span>
-      {season && <span>· {season}</span>}
+      {(cycleLabels?.length || season) ? <span>· {[...new Set([season, ...(cycleLabels ?? [])].filter(Boolean))].join(" · ")}</span> : null}
       {ongoing > 0 && <span>· идёт {ongoing}</span>}
       {nearest && (
         <span>
-          · ближайшее — {nearest.title}, {nearest.day} {monthName(months, nearest.month)}
-          {nearest.year !== now.year ? ` ${nearest.year}` : ""}
+          · ближайшее — {nearest.title}, {nearest.days != null && nearest.days >= 0 ? `через ${nearest.days} дн.` : `${nearest.day} ${monthName(months, nearest.month)}${nearest.year !== now.year ? ` ${nearest.year}` : ""}`}
         </span>
       )}
     </>

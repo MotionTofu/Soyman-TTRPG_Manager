@@ -7527,6 +7527,17 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
         OR (to_type = '${kind}' AND to_id = OLD.id); END`);
   }
 
+  // Свои эпохи кампании (Хроника на общем каркасе, Q-B 2026-10-30): как у
+  // циклов — та же таблица, владелец — кампания; NULL — эпоха сеттинга.
+  if (!columnExists(database, "setting_calendar_eras", "campaign_id")) {
+    database.exec("ALTER TABLE setting_calendar_eras ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE");
+  }
+
+  // Линии времени кампании: NULL — основа сеттинга. Новый шаг в конце.
+  if (!columnExists(database, "setting_calendar_timelines", "campaign_id")) {
+    database.exec("ALTER TABLE setting_calendar_timelines ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
