@@ -82,7 +82,7 @@ describe("записи и создание в мире кампании", () => 
     const region = screen.getByRole("region", { name: "Черновики" });
     await within(region).findByText("4 черновика");
     expect(region.querySelectorAll(".world-record")).toHaveLength(4);
-    expect([...region.querySelectorAll("h4")].map((e) => e.textContent)).toEqual(["Под городом", "Сессия №21", "Без сессии"]);
+    expect([...region.querySelectorAll("h4")].map((e) => e.textContent)).toEqual(["Под городом · 18 октября", "Сессия №21 · 17 октября", "Без сессии"]);
     expect(within(region).getByText("без адреса")).toBeDefined();
     const links = within(region).getAllByRole("link", { name: "Разобрать ›" });
     expect(links.map((e) => e.getAttribute("href"))).toEqual(["/sessions/11?tab=%D0%98%D1%82%D0%BE%D0%B3%D0%B8", "/sessions/10?tab=%D0%98%D1%82%D0%BE%D0%B3%D0%B8"]);

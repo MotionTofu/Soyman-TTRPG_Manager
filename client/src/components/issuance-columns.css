@@ -1,45 +1,110 @@
-.issuance-roots { display: flex; gap: var(--sp-4); flex-wrap: wrap; align-items: center; margin-bottom: var(--sp-6); }
-.issuance-roots > button { border: var(--card-border-width-strong) solid var(--paper-ink); font-family: var(--font-ui); font-size: var(--fs-h3); font-weight: 600; padding: var(--sp-3) var(--sp-6); border-radius: 4px; }
-.issuance-roots > button.is-selected { background: var(--paper-ink); color: var(--paper-acid); }
-.issuance-roots > button.issuance-roots__add { margin-left: auto; border-style: dashed; font-size: var(--fs-data); }
-.paper-sheet .issuance-roots > button:not(.is-selected) { background: transparent; }
-.issuance-roots > .issuance-preview { margin-left: auto; }
-.paper-sheet .issuance-columns__row { font-family: var(--font-ui); font-size: var(--fs-body); }
-.paper-sheet .issuance-columns__row > span { font-weight: 500; }
-.paper-sheet .issuance-columns__row.is-selected > span { font-weight: 700; }
-.paper-sheet .issuance-columns__heading { font-family: var(--font-ui); font-size: var(--fs-meta); font-weight: 600; letter-spacing: 0.08em; }
-.issuance-columns { display: grid; grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) minmax(280px, 1.8fr); gap: var(--sp-5); align-items: start; }
-.issuance-columns__nav { border-right: var(--card-border-width) solid var(--paper-rule); padding-right: var(--sp-4); min-height: 360px; }
-.issuance-columns__heading { display: flex; justify-content: space-between; gap: var(--sp-2); margin: 0 0 var(--sp-4); font-size: var(--fs-meta); font-family: var(--font-display); text-transform: uppercase; color: var(--paper-muted); }
-.issuance-columns__row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); width: 100%; text-align: left; border: 0; border-radius: 0; border-bottom: var(--card-border-width) solid var(--paper-rule); background: transparent; color: var(--paper-ink); padding: var(--sp-3) var(--sp-2); margin-bottom: var(--sp-2); }
-.issuance-columns__row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.issuance-columns__row small { font-size: var(--fs-meta); flex-shrink: 0; color: var(--paper-muted); }
-.issuance-columns__row.is-selected { background: var(--paper-wash); border-bottom-color: transparent; border-radius: 3px; box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 5px var(--paper-acid); font-weight: 700; }
-.issuance-columns__preview { min-width: 0; border: var(--card-border-width-strong) solid var(--paper-ink); padding: var(--sp-5); border-radius: 2px; }
+/* «Выдача» в «Д» (макеты Camp-Issuance, Camp-Handout, Camp-Issuance-Phone):
+   сегмент подразделов, справа «Глазами игрока» или «+ Раздел»; колонки —
+   плашками, выбранная строка — кромкой слева, предпросмотр — блоком 1 px. */
+.issuance-roots { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); margin-bottom: var(--sp-5); }
+.issuance-roots > .issuance-preview, .issuance-roots > .issuance-roots__add { margin-left: auto; }
+.issuance-preview { display: flex; align-items: center; gap: var(--sp-4); }
+.issuance-preview .d-mono { font-size: var(--fs-micro); }
+.issuance-preview .d-select { height: 40px; min-width: 190px; font-size: var(--fs-data); }
+
+.issuance-world { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--sp-7); align-items: start; margin-top: var(--sp-6); }
+.issuance-world__rows { margin: 0; padding: 0; list-style: none; }
+.issuance-world__rows > li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  gap: var(--sp-5);
+  align-items: center;
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.issuance-world__glyph { display: grid; place-items: center; width: 40px; height: 40px; border: var(--edge-width) solid var(--edge); background: var(--ph); }
+.issuance-world__glyph .type-glyph { width: 22px; height: 22px; }
+.issuance-world__name { display: flex; flex-direction: column; min-width: 0; }
+.issuance-world__name a { color: var(--ink); font: 500 var(--fs-h3)/1.2 var(--font-display); text-decoration: none; }
+.issuance-world__name a:hover { text-decoration: underline; }
+.issuance-world__name .d-mono { font-size: var(--fs-micro); }
+.issuance-world__who { display: flex; flex-wrap: wrap; gap: var(--sp-2); justify-content: flex-end; }
+.issuance-world__empty { margin: var(--sp-6) 0; }
+/* Кому открыто: всем — кромкой, игроку — линией, никому — штрихом. */
+.issuance-chip { padding: var(--sp-0) var(--sp-3); border: 1px solid var(--edge); font-size: var(--fs-meta); white-space: nowrap; }
+.issuance-chip.is-one { border-color: var(--line); }
+.issuance-chip.is-none { border: 1px dashed var(--line); color: var(--muted); }
+
+.issuance-columns { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(170px, 1fr) minmax(260px, 1.5fr); gap: var(--sp-6); align-items: start; }
+.issuance-columns__nav { display: flex; flex-direction: column; min-width: 0; }
+.issuance-columns__heading {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--surface);
+  color: var(--on-surface);
+  font: 500 var(--fs-label)/1.2 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.issuance-columns__heading small { opacity: 0.6; font: 400 var(--fs-micro)/1 var(--font-mono); }
+.issuance-columns__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 400 var(--fs-data)/1.25 var(--font-body);
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+.issuance-columns__row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.issuance-columns__row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.issuance-columns__row small { flex-shrink: 0; color: var(--muted); font: 400 var(--fs-micro)/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.issuance-columns__row.is-selected { border-left-color: var(--edge); background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: none; font-weight: 600; }
+.issuance-columns__preview { min-width: 0; padding: var(--sp-6); border: 1px solid var(--line); border-radius: 0; }
 .issuance-columns__preview .gallery-grid { grid-template-columns: 1fr; }
 .issuance-columns__preview .gallery-thumb { max-height: 420px; object-fit: contain; }
-.issuance-added { display: block; font-size: var(--fs-meta); color: var(--paper-muted); margin-top: var(--sp-1); }
+.issuance-added { display: block; margin-top: var(--sp-1); color: var(--muted); font-size: var(--fs-meta); }
 .gallery-tab--focused .gallery-tab-header, .gallery-tab--focused .gallery-tab-hint, .gallery-tab--focused > .comp-mini { display: none; }
 .issuance-columns__preview .visibility-picker-panel { right: 0; left: auto; max-width: min(300px, 80vw); }
-@media (max-width: 1000px) { .issuance-columns { grid-template-columns: 1fr 1fr; } .issuance-columns__preview { grid-column: 1 / -1; } .issuance-columns__nav { min-height: 0; } }
-@media (max-width: 540px) { .issuance-columns { grid-template-columns: 1fr; } .issuance-columns__nav { border-right: 0; border-bottom: var(--card-border-width) solid var(--paper-rule); padding: 0 0 var(--sp-3); } }
+@media (max-width: 1000px) { .issuance-columns { grid-template-columns: 1fr 1fr; } .issuance-columns__preview { grid-column: 1 / -1; } }
+@media (max-width: 700px) {
+  .issuance-world { grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
+  .issuance-world .campaign-col { flex-direction: row; overflow-x: auto; }
+  .issuance-world .campaign-col > .d-plate { display: none; }
+  .issuance-world .campaign-col > button { flex: none; border-left: 0; border-bottom: 3px solid transparent; }
+  .issuance-world .campaign-col > button.is-on { border-bottom-color: var(--edge); }
+  .issuance-world__rows > li { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .issuance-world__who { grid-column: 2; justify-content: flex-start; }
+  .issuance-preview { width: 100%; margin-left: 0; }
+  .issuance-preview .d-select { flex: 1; }
+}
+@media (max-width: 540px) { .issuance-columns { grid-template-columns: 1fr; } }
 
 /* Управление раздаткой в строке названия раздела. */
 .issuance-section__header { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .issuance-section__header h2 { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; margin: 0; font: inherit; overflow-wrap: anywhere; }
-.issuance-section__count { font-family: var(--font-ui); font-size: var(--fs-meta); color: var(--paper-muted); }
+.issuance-section__count { font-family: var(--font-ui); font-size: var(--fs-meta); color: var(--muted); }
 .issuance-section__actions { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; flex-shrink: 0; letter-spacing: normal; text-transform: none; }
 .paper-sheet .issuance-columns__preview button { background-color: transparent; }
 .paper-sheet .issuance-columns__preview .issuance-frame-button {
   border: 0;
   border-radius: 0;
   background: url("/ui/plot-restyle/v1/kind-window.webp") center / 100% 100% no-repeat;
-  color: var(--paper-ink);
+  color: var(--ink);
   padding: var(--sp-2) var(--sp-4);
   box-shadow: none;
 }
-.paper-sheet .issuance-columns__preview .issuance-frame-button:hover { color: var(--paper-muted); }
-.paper-sheet .issuance-columns__preview button:focus-visible { outline: 2px solid var(--paper-ink); outline-offset: 2px; }
+.paper-sheet .issuance-columns__preview .issuance-frame-button:hover { color: var(--muted); }
+.paper-sheet .issuance-columns__preview button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 .paper-sheet .issuance-section__actions .row-icon {
   box-sizing: border-box;
@@ -63,7 +128,7 @@
 
 .issuance-section__moves { display: flex; gap: var(--sp-2); margin-right: var(--sp-4); }
 .issuance-section__moves .row-icon::after { content: none; }
-.issuance-article-row + .issuance-article-row { border-top: var(--card-border-width) solid var(--paper-rule); padding-top: var(--sp-4); }
+.issuance-article-row + .issuance-article-row { border-top: var(--card-border-width) solid var(--line); padding-top: var(--sp-4); }
 .paper-sheet .issuance-columns__preview .issuance-article-title {
   border: 0;
   border-radius: 0;
@@ -76,11 +141,10 @@
   white-space: normal;
 }
 .paper-sheet .issuance-columns__preview .visibility-picker-panel {
-  background: var(--paper-base) var(--skin-paper-tile) repeat;
-  background-blend-mode: multiply;
-  border-color: var(--paper-rule);
-  border-radius: 4px;
-  box-shadow: 0 1px 0 rgb(0 0 0 / 0.12), 0 6px 14px rgb(0 0 0 / 0.3);
+  background: var(--sheet);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  box-shadow: none;
   font-family: var(--font-body);
   font-size: var(--fs-meta);
   letter-spacing: normal;
@@ -88,7 +152,7 @@
 }
 .paper-sheet .issuance-columns__preview .visibility-picker-panel::before { content: none; }
 .paper-sheet .issuance-columns__preview .visibility-picker-panel button { border: 0; font-family: var(--font-body); }
-.paper-sheet .issuance-columns__preview .visibility-picker-panel button:hover { background: var(--paper-acid); }
+.paper-sheet .issuance-columns__preview .visibility-picker-panel button:hover { background: var(--tab); }
 
 .issuance-article-row > .row { align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap; }
 .issuance-article-row > .row > div:first-child { flex: 1 1 120px; min-width: 0; }
@@ -100,11 +164,11 @@
 
 .paper-sheet .issuance-columns__preview .collapsible-header.campaign-player-header:hover {
   background: none;
-  color: var(--paper-ink);
+  color: var(--ink);
 }
 
 .issuance-image-row { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
-.issuance-image-row + .issuance-image-row { border-top: var(--card-border-width) solid var(--paper-rule); padding-top: var(--sp-4); }
+.issuance-image-row + .issuance-image-row { border-top: var(--card-border-width) solid var(--line); padding-top: var(--sp-4); }
 .paper-sheet .issuance-columns__preview .issuance-image-thumb { flex: 0 0 64px; width: 64px; height: 64px; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
 .issuance-image-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .issuance-image-info { flex: 1 1 120px; min-width: 0; }
@@ -119,3 +183,13 @@
   height: auto;
   max-height: none;
 }
+
+/* Рамка броска из поиска: тонкий штрих, текст тихий (макет Camp-Issuance). */
+.issuance-summary .issuance-drop { padding: var(--sp-5); border: 1px dashed var(--line); border-radius: 0; background: none; color: var(--ink-2); font-size: var(--fs-label); text-align: center; }
+.issuance-summary .issuance-drop.is-over { border: var(--edge-width) dashed var(--edge); background: color-mix(in srgb, var(--acid) 25%, transparent); }
+/* Открытая статья раздатки: заголовок Oswald 26, как в макете Camp-Handout. */
+.issuance-columns__preview :is(h2, h3).issuance-article-heading,
+.issuance-columns__preview .issuance-section__header h2 { font: 500 var(--fs-h2)/1.1 var(--font-display); letter-spacing: 0; text-transform: none; }
+.issuance-columns__preview .campaign-player-header .entry-title { font: 500 var(--fs-h2)/1.1 var(--font-display); letter-spacing: 0; text-transform: none; }
+.issuance-columns__preview .campaign-player-header { padding: 0 0 var(--sp-4); border-bottom: 1px solid var(--line); background: none; color: var(--ink); }
+.issuance-columns__preview > .card, .issuance-columns__preview .card.stack { padding: 0; border: 0; background: none; box-shadow: none; }

@@ -26,7 +26,7 @@ afterEach(cleanup);
 
 function mountHandouts() {
   render(<MemoryRouter><CampaignIssuanceTab campaignId={1} settingId={1} roster={[]} /></MemoryRouter>);
-  fireEvent.click(screen.getByRole("button", { name: "Раздатка" }));
+  fireEvent.click(screen.getByRole("tab", { name: /^Раздатка/ }));
 }
 describe("колонки выдачи кампании", () => {
   it("hides archived handouts and offers no local archive buttons", () => {
@@ -56,12 +56,11 @@ describe("колонки выдачи кампании", () => {
     fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
     expect((select as HTMLSelectElement).value).toBe("");
   });
-  it("показывает сводку мест и превью выбранной сущности", () => {
+  // Макет Camp-Issuance: превью сущности сбоку нет — имя строки ведёт в профиль.
+  it("показывает сводку мест строками со ссылкой на сущность", () => {
     render(<MemoryRouter><CampaignIssuanceTab campaignId={1} settingId={1} roster={[]} /></MemoryRouter>);
-    expect(screen.getByText("Сущностей: 1")).toBeTruthy();
-    fireEvent.click(within(screen.getByRole("navigation", { name: "Содержимое раздела" })).getByRole("button", { name: "Район Доков" }));
-    expect(screen.getByText("Описание доков")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Открыть сущность →" }).getAttribute("href")).toBe("/locations/31");
+    expect(within(screen.getByRole("navigation", { name: "Виды сущностей" })).getByRole("button", { name: /Места/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Район Доков" }).getAttribute("href")).toBe("/locations/31");
   });
   it("открывает сводку по разделу и тело по статье; действия раздела доступны в сводке", () => {
     mountHandouts();

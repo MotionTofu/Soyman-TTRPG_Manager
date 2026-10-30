@@ -64,7 +64,7 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
           <Link className="world-row__name" to={`${group.path}/${e.entity_id}?campaign=${campaignId}`}>{e.name}</Link>
           {tone && <button type="button" className={`world-state world-state--${tone}`} aria-label={`Состояние ${e.name}: ${campaignEntityStateLabel(e.entity_type, e.state)}. Изменить`} aria-haspopup="menu" aria-expanded={!!menu?.state} onClick={(event) => openMenu(event, true)}>{campaignEntityStateLabel(e.entity_type, e.state)} ▾</button>}
         </div>
-        <p className="world-row__category">{group.kind}{category ? ` · ${category.toLowerCase()}` : ""}</p>
+        <p className="world-row__category d-mono">{group.kind}{category ? ` · ${category.toLowerCase()}` : ""}</p>
         <p className={`world-row__text${e.summary.from_setting ? " world-row__text--basis" : ""}`}>
           {e.summary.from_setting && <span className="world-row__source">из сеттинга · </span>}{stripMentions(e.summary.text)}
         </p>
@@ -72,13 +72,13 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
       </div>
       <div className="world-row__changes">
         {e.aspects.length ? <>
-          <span className="world-row__label">Изменено:</span>
+          <span className="world-row__label d-mono">Изменено:</span>
           <ul>{e.aspects.slice(0, 3).map((a) => <li key={a.key}>{aspectLabel(e.entity_type, a.key).toLowerCase()}{a.key === "state" && a.text ? ` (${a.text})` : ""}</li>)}</ul>
           {e.aspects.length > 3 && <span className="world-row__extra">ещё {e.aspects.length - 3}</span>}
         </> : <p className="world-row__empty">пока без записей · <button type="button" className="world-text-action" onClick={() => onRecord(e)}>+ Запись</button></p>}
         {e.last_session && <Link className="world-row__session" to={`/sessions/${e.last_session.id}`}>{sessionLabel(session ?? e.last_session)} · {formatDateKeyRu(e.last_session.date)}</Link>}
       </div>
-      <button type="button" className="world-row__more" aria-label={`Действия: ${e.name}`} aria-haspopup="menu" aria-expanded={!!menu && !menu.state} onClick={(event) => openMenu(event, false)}>⋯</button>
+      <button type="button" className="d-dots world-row__more" aria-label={`Действия: ${e.name}`} aria-haspopup="menu" aria-expanded={!!menu && !menu.state} onClick={(event) => openMenu(event, false)}>⋯</button>
       {expanded && <div className="campaign-world__card world-row__records" onContextMenu={(event) => event.stopPropagation()}>{records}</div>}
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.state ? `Состояние: ${e.name}` : e.name} ariaLabel={menu.state ? `Состояние: ${e.name}` : `Действия: ${e.name}`} items={menu.state ? stateItems : actions} onClose={closeMenu} />}
     </li>

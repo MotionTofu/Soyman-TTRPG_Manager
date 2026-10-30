@@ -96,15 +96,20 @@ export function CampaignWorldTab({
   const settingLink = <Link to={`/settings/${settingId}`}>как в сеттинге ›</Link>;
   return (
     <section className={`campaign-world ${expand ? "campaign-world--compact" : "campaign-world--catalog"}`} aria-label="Мир кампании">
-      {!expand && <header className="campaign-world__head">
-        <div>
+      {/* Голова «Д» (макеты Camp-World, Camp-World-Drafts): у слухов и
+          черновиков — свои заголовок и пояснение, без кнопок добавления. */}
+      {!expand && <header className="d-head campaign-world__head">
+        {kind === "draft" || kind === "rumor" ? <div>
+          <h2>{kind === "draft" ? "Черновики" : "Слухи"}</h2>
+          <div className="d-head__sub">{kind === "draft" ? "Записанное за столом наспех — разобрать в «Итогах» сессии" : "Что говорят в мире — может оказаться неправдой"}</div>
+        </div> : <div>
           <h2>Мир кампании</h2>
-          <p>Только то, что кампания задействовала или изменила. Остальное — {settingLink}</p>
-        </div>
-        <div className="campaign-world__actions">
-          <button type="button" className="campaign-world__add" onClick={() => setPicking(true)}>+ Добавить из сеттинга</button>
-          <button type="button" className="campaign-world__new" onClick={() => setCreating(true)}>Новая в сеттинге<span>появится и в сеттинге</span></button>
-        </div>
+          <div className="d-head__sub">Только то, что кампания задействовала или изменила. Остальное — {settingLink}</div>
+        </div>}
+        {kind !== "draft" && kind !== "rumor" && <div className="d-head__acts campaign-world__actions">
+          <button type="button" className="d-btn campaign-world__new" onClick={() => setCreating(true)}>Новая в сеттинге<span>появится и в сеттинге</span></button>
+          <button type="button" className="d-btn d-btn--primary" onClick={() => setPicking(true)}>+ Добавить из сеттинга</button>
+        </div>}
         <button ref={addTrigger} type="button" className="campaign-world__mobile-add" aria-label="Добавить в мир кампании" aria-haspopup="menu" aria-expanded={!!addMenu} onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
           setAddMenu({ x: rect.right, y: rect.bottom });
@@ -121,7 +126,7 @@ export function CampaignWorldTab({
         <div className="campaign-world__results">
           <label className="campaign-world__search"><NavIcon name="search" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск в мире кампании" placeholder="Поиск по названию или тексту…" /></label>
           {kind === "rumor" || kind === "draft" ? <CampaignWorldRecords campaignId={campaignId} mode={kind} sessions={sessions} query={query} /> : <>
-          <p className="campaign-world__count">{visible.length} в кампании</p>
+          <p className="campaign-world__count d-mono">{visible.length} в кампании · по изменению</p>
           {visible.length ? <ul className="campaign-world__rows">{visible.map((e) => {
             const key = `${e.entity_type}:${e.entity_id}`;
             return <CampaignWorldRow key={key} entity={e} campaignId={campaignId}

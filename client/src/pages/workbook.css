@@ -4,16 +4,9 @@
    страница, язычки сверху, «Записи» последней закладкой.
    Бумага говорит токенами paper.css (.paper-scope), ассеты — переменными skin. */
 
-/* Тетрадь и в тёмной теме — обычная бумага, без приглушения профилей (решение владельца 2026-10-01).
-   Значения — светлые из paper.css; селектор сильнее [data-theme-mode="dark"] .paper-scope. */
-[data-theme-mode="dark"] .paper-scope:is(.wb-book, .wb-pages, .wb-card, .workbook-dock, .workbook-tile) {
-  --paper-base: #eee7d6;
-  --paper-ink-soft: #3a332a;
-  --paper-muted: #6b6253;
-  --paper-rule: rgb(31 26 20 / 0.22);
-  --paper-wash: rgb(255 253 245 / 0.42);
-  --on-surface-muted: #cfc6b0;
-}
+/* Тетрадь в тёмной теме — по токенам темы, как на тёмной доске Camp-Workbook
+   (блок «Кампании», 2026-10-30). Прежнее правило «и в тёмной — обычная бумага»
+   (владелец, 2026-10-01) снято принятым макетом. */
 
 .workbook { min-width: 0; }
 .workbook--popout { padding: var(--sp-6); height: 100dvh; overflow: auto; }
@@ -433,3 +426,148 @@
   .mastering-reader__actions .mastering-reader__workbook[aria-pressed="true"] { display: none; }
 }
 .reader-mode-switch [aria-pressed="true"] { background: var(--paper-acid, #e2f25a); color: #141414; font-weight: 600; }
+
+/* ── Вид «Д» (макет Camp-Workbook, блок «Кампании» 2026-10-30) ──────────
+   Поверх растрового разворота: без обложки, корешка и нарисованных язычков.
+   Язычки — номерами над листом, активный выше и с кислотной полосой; разворот
+   «форма | записи» в кромке 2 px; заголовок листа — Oswald, подписи —
+   машинописью. Цвета — токены темы: в тёмной теме тетрадь тёмная, как на
+   тёмной доске макета. */
+.wb-popout-head { align-items: flex-end; }
+.wb-popout-head > div > strong { display: block; font: 500 var(--fs-h2)/1 var(--font-display); }
+.wb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); margin-top: var(--sp-2); }
+.wb-template, .wb-status { color: var(--muted); font-size: var(--fs-label); }
+.wb-status > span { width: 8px; height: 8px; border: 1px solid var(--edge); border-radius: 0; background: var(--acid); }
+.wb-status.is-pending > span { background: transparent; }
+.wb-menu > summary { font: 500 var(--fs-label)/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; }
+.wb-menu > summary::after { content: " ▾"; }
+.wb-menu__list { border: var(--edge-width) solid var(--edge); background: var(--sheet); box-shadow: none; }
+
+.wb-spread { gap: var(--sp-5); max-width: none; }
+.wb-book {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: none;
+  filter: none;
+}
+.wb-book:not(.wb-book--single) { margin-right: 0; }
+.wb-book > .wb-tabs { order: -1; }
+.wb-tabs,
+.wb-book--single .wb-tabs {
+  position: static;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--sp-1);
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: none;
+}
+.wb-tab,
+.wb-book--single .wb-tab {
+  --tw: auto;
+  --th: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: auto;
+  min-width: 38px;
+  max-width: none;
+  height: 32px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: none;
+  color: var(--ink-2);
+  font: 400 var(--fs-data)/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.wb-book--single .wb-tab::before { content: none; }
+.wb-tab.is-active,
+.wb-book--single .wb-tab.is-active {
+  height: 38px;
+  border: var(--edge-width) solid var(--edge);
+  border-bottom: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 4px 0 var(--acid);
+}
+.wb-tab:hover:not(.is-active) { color: var(--ink); }
+/* Номер листа и в развороте: название — в подсказке и на самом листе. */
+.wb-tab__num { display: inline; }
+.wb-tab__title { display: none; }
+.wb-tab:first-child { border: 0; }
+.wb-book--single .wb-tab--notes { margin-left: auto; padding: 0 var(--sp-5); color: var(--ink); font: 500 var(--fs-label)/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; }
+
+.wb-pages {
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  box-shadow: none;
+}
+.wb-page,
+.wb-book--single > .wb-page {
+  background: var(--sheet);
+  color: var(--ink);
+  border-radius: 0;
+}
+.wb-pages > .wb-page--form { width: 60%; }
+.wb-pages > .wb-page--notes { width: 40%; border-left: 1px solid var(--line); }
+.wb-spine { display: none; }
+.workbook--embedded .wb-book--single,
+.workbook-page .wb-book--single { border: 0; border-radius: 0; }
+.wb-book--single > .wb-page { border: var(--edge-width) solid var(--edge); }
+.wb-book--single .wb-footer { padding: var(--sp-4) 0 0; background: none; color: var(--ink); }
+
+.wb-contents { border: var(--edge-width) solid var(--edge); background: var(--sheet); color: var(--ink); box-shadow: none; }
+.wb-contents button[aria-current] { background: color-mix(in srgb, var(--ink) 8%, transparent); box-shadow: inset 3px 0 0 var(--edge); }
+.wb-contents :is(small, .wb-contents__part) { color: var(--muted); }
+
+/* Низ: «01 / 12» машинописью, переход к следующему листу — ссылкой. */
+.wb-footer__progress { font-family: var(--font-mono); font-size: var(--fs-meta); letter-spacing: 0.06em; }
+.wb-footer > .wb-next, .wb-next {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: 500 var(--fs-lead)/1.2 var(--font-display);
+  letter-spacing: 0.06em;
+  text-decoration: underline;
+  text-transform: uppercase;
+  text-underline-offset: 4px;
+}
+
+.wb-page .paper-label, .wb-card .paper-label { color: var(--muted); font: 400 var(--fs-micro)/1.3 var(--font-mono); letter-spacing: 0.08em; }
+.wb-sheet-head h2, .wb-card__title h2 { font: 500 var(--fs-h2)/1.05 var(--font-display); color: var(--ink); }
+.wb-card__title input { font: 500 var(--fs-h2)/1.1 var(--font-display); color: var(--ink); border-bottom-color: var(--edge); }
+.wb-page .workbook-heading, .wb-card .workbook-heading { color: var(--ink); font-family: var(--font-display); }
+.wb-label { color: var(--ink); }
+:is(.wb-page, .wb-card) :is(textarea, select, input:not([type="checkbox"], .sr-only)) { border-bottom-color: var(--line); }
+.wb-page :is(.wb-ruled, .wb-line, .wb-cell):focus { background-color: color-mix(in srgb, var(--acid) 30%, transparent); box-shadow: inset 0 -2px 0 var(--edge); }
+.wb-check { width: 18px; height: 18px; border: var(--edge-width) solid var(--edge); background: transparent; }
+.wb-check:checked { background: var(--ink); }
+.wb-card-button { border: var(--edge-width) solid var(--edge); border-radius: 0; background: transparent; }
+.wb-card-button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.wb-card-add { border-radius: 0; border-color: var(--line); }
+.wb-card { border: var(--edge-width) solid var(--edge); border-radius: 0; background: var(--sheet); color: var(--ink); box-shadow: none; }
+
+/* Записи листа: тонкие строки, мета машинописью, цитата — кислотной чертой. */
+.wb-note { padding: var(--sp-4) 0; border-bottom: 1px solid var(--line); font-size: var(--fs-data); }
+.wb-note--taped { margin-top: 0; padding-top: var(--sp-4); background: none; transform: none; box-shadow: none; }
+.wb-note--taped::before { content: none; }
+.wb-note__meta { color: var(--muted); font: 400 var(--fs-micro)/1.3 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.wb-note blockquote, .wb-note q { margin: 0; padding-left: var(--sp-4); border-left: 3px solid var(--acid); }
+.wb-to-field { border: var(--edge-width) solid var(--edge); border-radius: 0; background: transparent; color: var(--ink); }
+.wb-empty-notes__art { display: none; }
+
+.workbook-tile { border: 1px solid var(--line); border-radius: 0; background: var(--sheet); color: var(--ink); box-shadow: none; }
+.workbook-tile h3 { font: 500 var(--fs-h2)/1.1 var(--font-display); }
+.workbook-tile h3 a { color: var(--ink); }
+.workbook-tile__bar { border-radius: 0; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.workbook-tile__bar::-webkit-progress-value { background: var(--ink); }
+.workbook-tile__bar::-moz-progress-bar { background: var(--ink); }

@@ -22,7 +22,7 @@ function WorkbookEditor({id,popout,embedded=false}:{id:string;popout:boolean;emb
  // Разворот или одна страница — по месту под тетрадь, а не по окну: боковые панели съедают ширину.
  const box=useRef<HTMLDivElement>(null),[narrow,setNarrow]=useState(false);
  const loaded=!!editor.document;
- useEffect(()=>{const el=box.current;if(!el)return;const ro=new ResizeObserver(([e])=>setNarrow(e.contentRect.width<880));ro.observe(el);return()=>ro.disconnect();},[loaded]);
+ useEffect(()=>{const el=box.current;if(!el)return;const ro=new ResizeObserver(([e])=>setNarrow(e.contentRect.width<700));ro.observe(el);return()=>ro.disconnect();},[loaded]);
  const {document,answers,conflict,error,status}=editor;
  const [upgrade,setUpgrade]=useState(false);
  const [importing,setImporting]=useState(false),[source,setSource]=useState("");
@@ -37,10 +37,12 @@ function WorkbookEditor({id,popout,embedded=false}:{id:string;popout:boolean;emb
   setImporting(true);try{const result=await write.post<{added:number;instance:WorkbookInstance}>(`/workbooks/instances/${id}/activity-import`,{revision:document!.revision,source_id:Number(source)});editor.replace(result.instance);setSource("");}
   catch(e){editor.setError((e as Error).message);}finally{setImporting(false);}
  }
+ // Шаблон и сохранность — строкой под названием (макет Camp-Workbook), в окне страницы — рядом с действиями.
+ const meta=<><span className="wb-template">по шаблону «{template.title}»</span>
+  <span className={`wb-status${saved?"":" is-pending"}`}><span aria-hidden="true"/>{status||"Сохранено"}</span></>;
  const actions=<div className="wb-toolbar">
-  <span className="wb-template">по шаблону «{template.title}»</span>
-  <span className={`wb-status${saved?"":" is-pending"}`}><span aria-hidden="true"/>{status||"Сохранено"}</span>
-  {!popout&&<button type="button" onClick={()=>openSecondWindow(`/workbook-window/${id}?sheet=${sheetKey??""}`)}>Отдельное окно</button>}
+  {!popout&&!embedded&&meta}
+  {!popout&&<button type="button" className="d-btn d-btn--sm" onClick={()=>openSecondWindow(`/workbook-window/${id}?sheet=${sheetKey??""}`)}>Отдельное окно</button>}
   <details className="wb-menu"><summary>Ещё</summary><div className="wb-menu__list">
    <button type="button" onClick={()=>downloadWorkbook(`${document.title}.md`,workbookMarkdown(template,document.title,answers,{type:document.project_type,id:document.project_id}),"text/markdown")}>Экспорт в Markdown</button>
    <button type="button" disabled={editor.dirty()} onClick={async()=>{try{const bundle=await readOnce(`/workbooks/instances/${id}/export`);downloadWorkbook(`${document.title}.workbook.json`,JSON.stringify(bundle,null,2));}catch(e){editor.setError((e as Error).message);}}}>Экспорт с шаблоном</button>
@@ -51,7 +53,7 @@ function WorkbookEditor({id,popout,embedded=false}:{id:string;popout:boolean;emb
   {!popout&&!embedded&&<Link className="wb-close" to="/workbooks" aria-label="Закрыть тетрадь" title="К тетрадям"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></Link>}
  </div>;
  const content=<div ref={box} className={`workbook${popout?" workbook--popout":""}${embedded?" workbook--embedded":""}`}>
-  {(popout||embedded)&&<header className="wb-popout-head"><strong>{document.title}</strong>{actions}</header>}
+  {(popout||embedded)&&<header className="wb-popout-head"><div><strong>{document.title}</strong><div className="wb-meta">{meta}</div></div>{actions}</header>}
   {error&&<div className="workbook-error" role="alert"><p>{error}</p>{!conflict&&<button onClick={()=>void editor.retry().catch(e=>editor.setError(e.message))}>Повторить сохранение</button>}</div>}
   {conflict&&<div className="card stack"><h2>Объединение ответов</h2><p>Разные поля объединятся автоматически. Для совпадающих выбери ответ.</p>{conflict.merge.conflicts.map(c=><label key={`${c.sheet}/${c.field}`}>{template.sheets.find(s=>s.key===c.sheet)?.fields.find(f=>f.key===c.field)?.label??`${c.sheet}/${c.field}`}<select onChange={e=>{const result=structuredClone(conflict.merge.answers);result[c.sheet][c.field]=e.target.value==="mine"?c.mine:c.theirs;editor.setConflict({...conflict,merge:{...conflict.merge,answers:result}});}}><option value="mine">Из этого окна: {JSON.stringify(c.mine)?.slice(0,150)}</option><option value="theirs">Из другого окна: {JSON.stringify(c.theirs)?.slice(0,150)}</option></select></label>)}<button className="primary" onClick={editor.resolve}>Сохранить объединённые ответы</button><button onClick={()=>downloadWorkbook(`${document.title}-несохранённое.json`,JSON.stringify({template,answers:editor.current()},null,2))}>Скачать мою копию</button></div>}
   {upgrade&&<UpgradePanel doc={document} answers={answers} dirty={editor.dirty()||importing||bindingBusy} onDone={saved=>{setUpgrade(false);editor.replace(saved);}} onError={editor.setError}/>}

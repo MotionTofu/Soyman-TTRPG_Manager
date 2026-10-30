@@ -4,13 +4,13 @@ import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { readResource } from "../data/imperative";
 import { campaignPaths, grantAffects } from "../data/campaigns";
-import { IssuanceColumns } from "./IssuanceColumns";
-import { MentionText } from "./mentions/MentionText";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { Modal } from "./Modal";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { buildSettingReaderGroups } from "./player/settingReaderEntries";
 import { CampaignPlayerSectionsTab } from "./CampaignPlayerSectionsTab";
+import { DSeg } from "./DSeg";
+import { TypeGlyph } from "./TypeGlyph";
 import type { PlayerPreview, PlayerSection, RosterPlayer, SearchResult, VisibilityTargetType } from "../types";
 
 // «Выдача» кампании (спека campaign-paper, Q30/Q34/Q35/Q40/Q41; доска 44):
@@ -31,12 +31,12 @@ interface SummaryItem {
   players: { id: number; name: string; access_level: string }[];
 }
 
-const GROUPS: { type: VisibilityTargetType; label: string; to?: (id: number) => string }[] = [
-  { type: "setting_location", label: "Места", to: (id) => `/locations/${id}` },
-  { type: "setting_being", label: "Существа", to: (id) => `/beings/${id}` },
-  { type: "setting_community", label: "Сообщества", to: (id) => `/communities/${id}` },
-  { type: "setting_artifact", label: "Артефакты", to: (id) => `/artifacts/${id}` },
-  { type: "setting_calendar_event", label: "События", to: (id) => `/events/${id}` },
+const GROUPS: { type: VisibilityTargetType; label: string; one: string; glyph: string; to?: (id: number) => string }[] = [
+  { type: "setting_location", label: "Места", one: "место", glyph: "location", to: (id) => `/locations/${id}` },
+  { type: "setting_being", label: "Существа", one: "существо", glyph: "being", to: (id) => `/beings/${id}` },
+  { type: "setting_community", label: "Сообщества", one: "сообщество", glyph: "community", to: (id) => `/communities/${id}` },
+  { type: "setting_artifact", label: "Артефакты", one: "артефакт", glyph: "artifact", to: (id) => `/artifacts/${id}` },
+  { type: "setting_calendar_event", label: "События", one: "событие", glyph: "setting_event", to: (id) => `/events/${id}` },
 ];
 
 /** Вид результата поиска → цель выдачи. Чего тут нет, игрокам пока не открыть. */
@@ -53,13 +53,20 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   const [creatingSection, setCreatingSection] = useState(false);
   const summaryState = useResource<SummaryItem[]>(campaignPaths.grantSummary(campaignId));
   const summary = summaryState.data;
+  // Подразделы сегментом (макеты Camp-Issuance, Camp-Handout); справа — то,
+  // что нужно подразделу: «Глазами игрока» или «+ Раздел».
+  const sections = useResource<PlayerSection[]>(campaignPaths.playerSections(campaignId)).data;
   return (
     <div className="stack">
-      <div className="issuance-roots" aria-label="Разделы выдачи">
-        <button type="button" className={sel.section === "summary" ? "is-selected" : ""} aria-pressed={sel.section === "summary"} onClick={() => setSel({ section: "summary" })}>Сущности мира</button>
-        <button type="button" className={sel.section === "gm" ? "is-selected" : ""} aria-pressed={sel.section === "gm"} onClick={() => setSel({ section: "gm" })}>Раздатка</button>
+      <div className="issuance-roots">
+        <DSeg
+          label="Разделы выдачи"
+          items={[{ id: "summary", label: "Сущности мира" }, { id: "gm", label: "Раздатка", count: sections?.length }]}
+          value={sel.section}
+          onChange={(section) => setSel({ section })}
+        />
         {sel.section === "summary" && <PlayerPreviewBar campaignId={campaignId} roster={roster} />}
-        {sel.section === "gm" && <button type="button" className="issuance-roots__add" onClick={() => setCreatingSection(v => !v)} aria-expanded={creatingSection}>+ Раздел</button>}
+        {sel.section === "gm" && <button type="button" className="d-btn d-btn--sm issuance-roots__add" onClick={() => setCreatingSection(v => !v)} aria-expanded={creatingSection}>+ Раздел</button>}
       </div>
       {sel.section === "summary" ? (
         summaryState.error ? <p role="alert">Не удалось загрузить выдачу. <button onClick={summaryState.reload}>Повторить</button></p> : <IssuanceSummary campaignId={campaignId} roster={roster} items={summary} />
@@ -72,7 +79,6 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
 
 function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; roster: RosterPlayer[]; items: SummaryItem[] | undefined }) {
   const [category, setCategory] = useState<VisibilityTargetType>("setting_location");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
   const run = useAction();
   const [over, setOver] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -108,6 +114,8 @@ function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; ro
 
   const byType = new Map<VisibilityTargetType, SummaryItem[]>();
   for (const i of items ?? []) byType.set(i.target_type, [...(byType.get(i.target_type) ?? []), i]);
+  const current = GROUPS.find((g) => g.type === category)!;
+  const list = byType.get(category) ?? [];
 
   return (
     <div className="issuance-summary">
@@ -128,46 +136,49 @@ function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; ro
           {note}
         </p>
       )}
-      <IssuanceColumns
-        sections={GROUPS.map(g => ({ id: g.type, label: g.label, count: byType.get(g.type)?.length ?? 0 }))}
-        selectedSection={category}
-        onSection={id => { setCategory(id as VisibilityTargetType); setSelectedId(null); }}
-        items={(byType.get(category) ?? []).map(i => ({ id: String(i.target_id), label: i.name }))}
-        selectedItem={selectedId == null ? undefined : String(selectedId)}
-        onItem={id => setSelectedId(Number(id))}
-        title={GROUPS.find(g => g.type === category)?.label ?? "Сущности"}
-        loading={!items}
-      >
-        {selectedId != null && byType.get(category)?.some(i => i.target_id === selectedId) ? (
-          <WorldEntityPreview key={`${category}:${selectedId}`} item={byType.get(category)!.find(i => i.target_id === selectedId)!} campaignId={campaignId} roster={roster} />
-        ) : <div className="stack">
-          <h2 className="paper-group__head">{GROUPS.find(g => g.type === category)?.label}</h2>
-          <p className="muted">Сущностей: {byType.get(category)?.length ?? 0}</p>
-          <ul className="paper-rows">{(byType.get(category) ?? []).map(i => <li key={i.target_id}>
-            <div className="paper-rows__main"><button className="ghost" onClick={() => setSelectedId(i.target_id)}>{i.name}</button><span className="issuance-added">{i.all ? "Всем игрокам" : i.players.map(p => p.name).join(", ")}</span></div>
-            <PlayerVisibilityPicker campaignId={campaignId} targetType={i.target_type} targetId={i.target_id} roster={roster} />
-          </li>)}</ul>
-        </div>}
-      </IssuanceColumns>
+      {/* Две колонки (макет Camp-Issuance): виды слева, выданное справа
+          строками — знак, имя, кому открыто и «глаз» с числом. */}
+      <div className="issuance-world">
+        <nav className="campaign-col" aria-label="Виды сущностей">
+          <h3 className="d-plate">Разделы</h3>
+          {GROUPS.map((g) => (
+            <button key={g.type} type="button" className={g.type === category ? "is-on" : ""} aria-pressed={g.type === category} onClick={() => setCategory(g.type)}>
+              <TypeGlyph type={g.glyph} />
+              <span>{g.label}</span>
+              <span className="campaign-col__n">{byType.get(g.type)?.length ?? 0}</span>
+            </button>
+          ))}
+        </nav>
+        <section>
+          <div className="d-gh">
+            <h3 className="d-plate">{current.label}</h3>
+            <span className="d-note">{list.length} · всем {list.filter((i) => i.all).length}</span>
+          </div>
+          {!items ? (
+            <p className="muted">Загрузка…</p>
+          ) : list.length === 0 ? (
+            <p className="muted issuance-world__empty">Игрокам пока ничего не открыто — бросьте сущность из поиска в рамку выше.</p>
+          ) : (
+            <ul className="issuance-world__rows">
+              {list.map((i) => (
+                <li key={i.target_id}>
+                  <span className="issuance-world__glyph"><TypeGlyph type={current.glyph} /></span>
+                  <span className="issuance-world__name">
+                    {current.to ? <Link to={current.to(i.target_id)}>{i.name}</Link> : i.name}
+                    <span className="d-mono">{current.one}</span>
+                  </span>
+                  <span className="issuance-world__who">
+                    {i.all ? <span className="issuance-chip">Всем игрокам</span> : i.players.length ? i.players.map((p) => <span key={p.id} className="issuance-chip is-one">{p.name}</span>) : <span className="issuance-chip is-none">никому</span>}
+                  </span>
+                  <PlayerVisibilityPicker campaignId={campaignId} targetType={i.target_type} targetId={i.target_id} roster={roster} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
-}
-
-const WORLD_PATHS: Partial<Record<VisibilityTargetType, string>> = {
-  setting_location: "/setting-locations", setting_being: "/setting-beings", setting_community: "/setting-communities",
-  setting_artifact: "/artifacts", setting_calendar_event: "/settings/calendar-events",
-};
-function WorldEntityPreview({ item, campaignId, roster }: { item: SummaryItem; campaignId: number; roster: RosterPlayer[] }) {
-  const detail = useResource<Record<string, unknown>>(`${WORLD_PATHS[item.target_type]}/${item.target_id}`);
-  const value = detail.data;
-  const body = value ? [value.description, value.history, value.player_text].filter((v): v is string => typeof v === "string" && !!v).join("\n\n") : "";
-  const to = GROUPS.find(g => g.type === item.target_type)?.to?.(item.target_id);
-  return <div className="stack">
-    <h2 className="paper-group__head">{item.name}</h2>
-    <PlayerVisibilityPicker campaignId={campaignId} targetType={item.target_type} targetId={item.target_id} roster={roster} />
-    {detail.loading ? <p className="muted">Загрузка…</p> : detail.error ? <p role="alert">Не удалось загрузить сущность. <button onClick={detail.reload}>Повторить</button></p> : <div className="reading-text"><MentionText text={body || "Описание пока не заполнено."} /></div>}
-    {to && <Link className="primary" to={to}>Открыть сущность →</Link>}
-  </div>;
 }
 
 // «Глазами игрока»: превью считается ТЕМ ЖЕ кодом, что выдача игроку
@@ -209,8 +220,9 @@ function PlayerPreviewBar({ campaignId, roster }: { campaignId: number; roster: 
   }
   return (
     <div className="issuance-preview">
-      <span className="paper-label">Глазами игрока</span>
+      <span className="d-mono">Глазами игрока</span>
       <select
+        className="d-select"
         value={playerId}
         onChange={(e) => {
           const id = e.target.value ? Number(e.target.value) : "";

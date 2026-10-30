@@ -38,7 +38,7 @@ export function CampaignWorldRecords({ campaignId, mode, sessions, query }: {
       {!records.length ? <p className="campaign-world__empty">{search ? "Ничего не подходит." : mode === "rumor" ? "В кампании пока нет слухов." : "В кампании пока нет черновиков."}</p> : mode === "rumor" ? <ul className="world-records__rows">{records.map((r) => <RecordRow key={r.id} record={r} session={r.session_id != null ? sessionById.get(r.session_id) : undefined} rumor />)}</ul> : orderedGroups.map(([sessionId, rows]) => {
         const session = sessionId != null ? sessionById.get(sessionId) : undefined;
         return <section className="world-records__group" key={sessionId ?? "none"} aria-label={session ? sessionLabel(session) : sessionId != null ? "Сессия" : "Без сессии"}>
-          <header><h4>{session ? sessionLabel(session) : sessionId != null ? "Сессия" : "Без сессии"}</h4><span>· {rows.length} {plural(rows.length, "черновик", "черновика", "черновиков")}</span>{sessionId != null && <Link to={`/sessions/${sessionId}?tab=${encodeURIComponent("Итоги")}`}>Разобрать ›</Link>}</header>
+          <header><h4>{session ? `${sessionLabel(session)} · ${formatDateKeyRu(session.date)}` : sessionId != null ? "Сессия" : "Без сессии"}</h4><span className="d-mono">{rows.length} {plural(rows.length, "черновик", "черновика", "черновиков")}</span>{sessionId != null && <Link className="d-btn d-btn--sm" to={`/sessions/${sessionId}?tab=${encodeURIComponent("Итоги")}`}>Разобрать ›</Link>}</header>
           <ul className="world-records__rows">{rows.map((r) => <RecordRow key={r.id} record={r} session={session} />)}</ul>
         </section>;
       })}
