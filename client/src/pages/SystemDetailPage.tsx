@@ -1,3 +1,4 @@
+import "./system-d.css";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
@@ -139,7 +140,7 @@ export function SystemDetailPage() {
   async function archiveSystem() {
     const ok = await confirm({
       title: "Архивировать систему?",
-      message: "Отправить систему в архив?",
+      message: `Отправить систему «${system!.name}» в архив?`,
       confirmLabel: "Архивировать",
       danger: true,
     });
@@ -206,6 +207,8 @@ export function SystemDetailPage() {
       ]}
       overlays={
         <>
+          {confirmDialog}
+          {alertDialog}
           <SectionBackground />
           {/* Импорт — файловое поле; пункт меню щёлкает по нему. */}
           <input
@@ -225,8 +228,6 @@ export function SystemDetailPage() {
     >
       {activeTab === "overview" && (
         <div className="stack">
-          {confirmDialog}
-          {alertDialog}
           {/* Обзор — макет «Д» Roll-OS-Overview: название на листе (над
               ярлыками его на этой вкладке нет), справки, описание с правкой,
               тамбнейл справа; ниже состав справочника крупными числами. */}

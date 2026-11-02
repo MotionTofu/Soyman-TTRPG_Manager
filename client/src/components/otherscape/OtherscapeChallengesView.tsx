@@ -9,9 +9,10 @@ import "./otherscape-views.css";
 
 /** «Испытания» Otherscape — макет «Д» Roll-OS-Challenges: слева дерево
  *  категорий, справа досье выбранного испытания в главном блоке. */
-export function OtherscapeChallengesView({ entries, query, selectedId, onSelect }: {
+export function OtherscapeChallengesView({ entries, query, difficulty = "", selectedId, onSelect }: {
   entries: CompendiumEntry[];
   query: string;
+  difficulty?: string;
   selectedId: number | undefined;
   onSelect: (id: number) => void;
 }) {
@@ -25,13 +26,15 @@ export function OtherscapeChallengesView({ entries, query, selectedId, onSelect 
     return map;
   }, [entries]);
   const needle = query.trim().toLocaleLowerCase("ru");
-  const matches = (e: CompendiumEntry) => !needle
-    || e.name.toLocaleLowerCase("ru").includes(needle)
-    || (e.name_original ?? "").toLocaleLowerCase("ru").includes(needle);
+  const matches = (e: CompendiumEntry) => {
+    if (difficulty && String(parseChallengePresentation(e.description ?? "", e.name_original ?? "")?.difficulty) !== difficulty) return false;
+    return !needle || e.name.toLocaleLowerCase("ru").includes(needle)
+      || (e.name_original ?? "").toLocaleLowerCase("ru").includes(needle);
+  };
   const categories = (children.get(null) ?? []).map((category) => ({
     category,
     items: (children.get(category.id) ?? []).filter(matches),
-  })).filter((c) => !needle || c.items.length > 0);
+  })).filter((c) => !(needle || difficulty) || c.items.length > 0);
   const all = categories.flatMap((c) => c.items);
   const item = all.find((e) => e.id === selectedId) ?? all[0];
   const itemCategory = item && categories.find((c) => c.category.id === item.parent_id)?.category;
@@ -42,7 +45,7 @@ export function OtherscapeChallengesView({ entries, query, selectedId, onSelect 
     [item]
   );
 
-  if (!all.length) return <p className="muted">{needle ? "Ничего не найдено." : "Испытаний пока нет."}</p>;
+  if (!all.length) return <p className="muted">{needle || difficulty ? "Ничего не найдено." : "Испытаний пока нет."}</p>;
 
   return (
     <div className="os-challenges">
@@ -85,12 +88,12 @@ export function OtherscapeChallengesView({ entries, query, selectedId, onSelect 
               >
                 В мешок
               </button>
-              <Link className="d-btn d-btn--sm" to={`/systems/${item.system_id}/entries/${item.id}`}>Профиль</Link>
+              <Link className="d-btn d-btn--sm" to={`/systems/${item.system_id}?section=${item.section_id}&entry=${item.id}&view=list`}>Профиль</Link>
             </span>
           </div>
           <div className="otherscape-dossier">
             {challenge
-              ? <OtherscapeChallengeBody name={item.name} originalName={item.name_original ?? ""} challenge={challenge} />
+              ? <OtherscapeChallengeBody catalog name={item.name} originalName={item.name_original ?? ""} challenge={challenge} />
               : <><h3 className="os-challenge__title">{item.name}</h3><MentionText text={item.description ?? ""} /></>}
           </div>
         </section>

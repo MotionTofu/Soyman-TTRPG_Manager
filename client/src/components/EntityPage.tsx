@@ -189,6 +189,9 @@ export function EntityPage({
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
+  // Разделы системы и счётчики приходят отдельно от её имени: наблюдатель
+  // должен подключиться и к кнопкам, появившимся после первого рендера.
+  const tabsLayoutKey = JSON.stringify([tabs, hiddenTabs, tab ? hiddenTabCounts?.[tab] : undefined, promoteHiddenTab]);
   useEffect(() => {
     const nav = tabsRef.current;
     if (!nav) return;
@@ -204,7 +207,7 @@ export function EntityPage({
     observer?.observe(nav);
     for (const button of nav.querySelectorAll("button")) observer?.observe(button);
     return () => observer?.disconnect();
-  }, [tab]);
+  }, [tab, tabsLayoutKey]);
   const moreTabsRef = useRef<HTMLButtonElement>(null);
   const [tabsMenuAt, setTabsMenuAt] = useState<{ x: number; y: number } | null>(
     null,

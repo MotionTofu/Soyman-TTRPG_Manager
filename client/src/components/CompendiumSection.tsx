@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { DSeg } from "./DSeg";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys, type Affect } from "../data/entities";
@@ -517,7 +518,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     return dir === "desc" ? "desc" : "asc";
   });
   const [dragId, setDragId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useCompendiumViewMode(section.id, "grid");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [storedViewMode, storeViewMode] = useCompendiumViewMode(section.id, "grid");
+  // Ссылка из каталога открывает существующее раскрытие записи, в том числе
+  // в новом окне. После ручного выбора вида предпочтение снова хранится хуком.
+  const viewMode = searchParams.get("view") === "list" ? "list" : storedViewMode;
+  const setViewMode = (mode: "grid" | "list") => {
+    storeViewMode(mode);
+    setSearchParams((params) => { params.delete("view"); return params; }, { replace: true });
+  };
   // Совместимость: старый ключ снаряжения уже мигрирован хуком, оставляем алиас
   const equipmentViewMode = viewMode;
   const setEquipmentViewMode = setViewMode;
@@ -641,7 +650,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   // умолчанию — список слева, карточка справа; выбранное — в адресе (?entry=).
   const osThemes = isOtherscapeThemesSection(systemCode, section.name);
   const osChallenges = isOtherscapeChallengesSection(systemCode, section.name);
-  const [, setSearchParams] = useSearchParams();
+  const [themeGrouping, setThemeGrouping] = useState<"might" | "alpha">("might");
+  const [challengeDifficulty, setChallengeDifficulty] = useState("");
+  const osCatalog = (osThemes || osChallenges) && viewMode === "grid";
   const selectEntry = (id: number) => setSearchParams((params) => {
     params.set("entry", String(id));
     return params;
@@ -1544,11 +1555,17 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           <input
             type="search"
             aria-label="Поиск по названию"
-            placeholder={isSpellSection ? "Найти заклинание…" : isClassSection ? "Найти класс или подкласс…" : "Поиск по названию…"}
+            placeholder={osThemes ? "Найти тему, набор или тег…" : osChallenges ? "Найти испытание…" : isSpellSection ? "Найти заклинание…" : isClassSection ? "Найти класс или подкласс…" : "Поиск по названию…"}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </label>
+        {osThemes && osCatalog && <DSeg label="Группировка тем" value={themeGrouping} onChange={setThemeGrouping}
+          items={[{ id: "might", label: "По типу силы" }, { id: "alpha", label: "А–Я" }]} />}
+        {osChallenges && osCatalog && <select className="d-select" aria-label="Сложность испытания" value={challengeDifficulty} onChange={(e) => setChallengeDifficulty(e.target.value)}>
+          <option value="">Любая сложность</option>
+          {[1, 2, 3, 4, 5].map((n) => <option key={n} value={String(n)}>Сложность {n}</option>)}
+        </select>}
         {isEquipmentSection && (
           <select className="d-select" aria-label="Категория" value={filterEquipmentCategory} onChange={(e) => setFilterEquipmentCategory(e.target.value)}>
             <option value="">Все категории</option>
@@ -1683,9 +1700,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         )}
       </div>
       <div className="d-bar">
-        <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>
+        {!osCatalog && <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>}
         <span className="d-end d-bar">
-          <span className="d-seg" role="group" aria-label="Сортировка">
+          {!osCatalog && <span className="d-seg" role="group" aria-label="Сортировка">
             {sortButton("alpha", sortMode === "alpha" && sortDir === "desc" ? "Я–А" : "А–Я")}
             <button type="button" className={sortMode === "manual" ? "active" : ""} aria-pressed={sortMode === "manual"} onClick={() => changeSortMode("manual")}>
               Вручную
@@ -1695,7 +1712,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             {isMagicItemSection && sortButton("type", "Тип")}
             {isMagicItemSection && sortButton("rarity", "Редкость")}
             {isEquipmentSection && sortButton("type", "Категория")}
-          </span>
+          </span>}
           {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection || osThemes || osChallenges) && (
             <span className="d-seg" role="group" aria-label="Вид">
               <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>
@@ -1711,9 +1728,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
 
       <div className="comp-list">
         {osThemes && viewMode === "grid" ? (
-          <OtherscapeThemesView entries={entries} query={searchQuery} selectedId={focusEntryId} onSelect={selectEntry} />
+          <OtherscapeThemesView entries={entries} query={searchQuery} grouping={themeGrouping} selectedId={focusEntryId} onSelect={selectEntry} />
         ) : osChallenges && viewMode === "grid" ? (
-          <OtherscapeChallengesView entries={entries} query={searchQuery} selectedId={focusEntryId} onSelect={selectEntry} />
+          <OtherscapeChallengesView entries={sortForDisplay(entries)} query={searchQuery} difficulty={challengeDifficulty} selectedId={focusEntryId} onSelect={selectEntry} />
         ) : isSpellSection && viewMode === "grid" ? (
           <SpellTable
             entries={filteredTopLevel}

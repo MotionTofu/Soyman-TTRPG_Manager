@@ -128,3 +128,40 @@
   .os-book { grid-template-columns: minmax(0, 1fr); }
   .os-challenges { grid-template-columns: minmax(0, 1fr); }
 }
+
+.os-themes__cols.is-alpha { grid-template-columns: minmax(0, 1fr); }
+.os-col { min-width: 0; }
+.os-col > button > span { flex: none; }
+.os-challenge__acts { flex-wrap: wrap; }
+.os-book__parts a { gap: var(--sp-4); }
+.os-book__parts > .d-plate { align-self: flex-start; }
+
+/* В каталоге досье компактно по Roll-OS-Challenges: одна рамка, пределы
+   перед правилами, заголовки плашками. Полный «Список» сохраняет свой вид. */
+.os-challenge .oc-dossier-header { align-items: center; flex-wrap: wrap; gap: var(--sp-5); }
+.os-challenge .oc-dossier-header h2 { font-size: var(--fs-h2); margin: 0; }
+.os-challenge .oc-original-name { font-size: var(--fs-meta); }
+.os-challenge .oc-profile-metrics .oc-difficulty { display: flex; flex-direction: row; align-items: baseline; gap: var(--sp-3); border: 0; padding: 0; min-width: 0; }
+.os-challenge .oc-difficulty > span { order: -1; font-size: var(--fs-micro); }
+.os-challenge .oc-difficulty > strong { font-size: var(--fs-h2); }
+.os-challenge .oc-flavor { margin: var(--sp-4) 0 var(--sp-6); padding: 0; border: 0; background: none; font-style: normal; }
+.os-challenge .oc-flavor > span[aria-hidden] { display: none; }
+.os-challenge .oc-flavor .oc-text { font-style: normal; }
+.os-challenge .oc-mechanics { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); border: 0; padding: 0; background: none; }
+.os-challenge .oc-limits { grid-row: 1; display: block; border: 0; padding: 0; min-width: 0; }
+.os-challenge .oc-limit-label { flex-basis: 100%; }
+.os-challenge .oc-limit-value { display: inline-flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--sp-3); margin: 0 var(--sp-7) var(--sp-4) 0; }
+.os-challenge .oc-limit-value > strong { display: none; }
+.os-challenge .oc-limit-translation { order: -1; font-size: var(--fs-data); }
+.os-challenge .oc-limit-value > span { font-size: var(--fs-h3); }
+.oc-limit-boxes { display: flex; gap: var(--sp-1); }
+.oc-limit-boxes > i { width: 16px; height: 16px; border: var(--edge-width) solid var(--edge); }
+.os-challenge .oc-main-rules > section > h3,
+.os-challenge .oc-limit-label,
+.os-challenge .oc-consequences > h3 { width: max-content; max-width: 100%; padding: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); background: var(--surface); color: var(--on-surface); font-family: var(--font-ui); font-size: var(--fs-label); font-weight: 500; text-transform: uppercase; }
+.os-challenge .oc-main-rules .oc-special h3 { font-size: var(--fs-h3); }
+.os-challenge .oc-section-original { display: none; }
+.os-challenge .oc-dossier { min-width: 0; }
+.os-challenge .oc-dossier p { overflow-wrap: anywhere; }
+.os-challenge__acts { flex-shrink: 0; }
+.os-challenge > .d-plate-row { align-items: flex-start; }

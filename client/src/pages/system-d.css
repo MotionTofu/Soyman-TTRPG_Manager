@@ -1,0 +1,32 @@
+/* Roll-OS-Overview / Themes / Challenges и общие каталоги систем.
+   Узкая рабочая область учитывается даже при раскрытой правой панели. */
+.entity-page[data-entity-type="system"] > .d-tabbed { min-width: 0; }
+.entity-page[data-entity-type="system"] > .d-tabbed > .d-sheet { container-type: inline-size; }
+.entity-page[data-entity-type="system"] .entity-type-chip { display: none; }
+.entity-page[data-entity-type="system"] .entity-page__title-row { flex-wrap: wrap; min-width: 0; }
+.entity-page[data-entity-type="system"] .entity-page__title-row h1 { overflow-wrap: anywhere; }
+.entity-page[data-entity-type="system"] .sys-hero2 { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.entity-page[data-entity-type="system"] .sys-counts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.entity-page[data-entity-type="system"] .sys-counts button { min-width: 0; }
+.entity-page[data-entity-type="system"] .sys-counts span { overflow-wrap: anywhere; }
+.entity-page[data-entity-type="system"] .comp-section,
+.entity-page[data-entity-type="system"] .comp-list,
+.entity-page[data-entity-type="system"] .monster-section,
+.entity-page[data-entity-type="system"] .class-catalog { min-width: 0; }
+.entity-page[data-entity-type="system"] .monster-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.entity-page[data-entity-type="system"] .class-catalog .dc-tile-caption { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+
+@container (max-width: 760px) {
+  .entity-page[data-entity-type="system"] .sys-hero2,
+  .entity-page[data-entity-type="system"] .os-book,
+  .entity-page[data-entity-type="system"] .os-challenges { grid-template-columns: minmax(0, 1fr); }
+  .entity-page[data-entity-type="system"] .sys-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .entity-page[data-entity-type="system"] .os-themes__cols { grid-template-columns: minmax(0, 1fr); }
+  .entity-page[data-entity-type="system"] .d-bar__grow { min-width: 0; }
+}
+@media (max-width: 700px) {
+  .app-content:has(.entity-page[data-entity-type="system"]) { padding-inline: var(--sp-4); }
+  .app-content:has(.entity-page[data-entity-type="system"]) .shell-crumbs__storage { display: none; }
+  .entity-page[data-entity-type="system"] > .d-tabbed > .d-sheet { padding: var(--sp-5); }
+  .entity-page[data-entity-type="system"] .sys-stamp { max-width: 100%; overflow-wrap: anywhere; }
+}

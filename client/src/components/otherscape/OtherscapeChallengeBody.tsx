@@ -5,10 +5,11 @@ import { displayLimitName } from "./powerSetPresentation";
 import type { ChallengePresentation } from "./challengePresentation";
 import "./otherscape-power-sets.css";
 
-export function OtherscapeChallengeBody({ name, originalName, challenge }: {
+export function OtherscapeChallengeBody({ name, originalName, challenge, catalog = false }: {
   name: string;
   originalName: string;
   challenge: ChallengePresentation;
+  catalog?: boolean;
 }) {
   const main = challenge.sections.filter(section => !["Limits", "Threats / Consequences"].includes(section.key));
   return <article className="oc-dossier" aria-label={`${name} [${originalName}]`}>
@@ -25,6 +26,7 @@ export function OtherscapeChallengeBody({ name, originalName, challenge }: {
       <div className="oc-main-rules">
         {main.map((section, index) => <section key={index}>
           {section.key === "Specials" && challenge.specials ? <>
+            {catalog && <h3>Особые правила</h3>}
             {challenge.specialIntroduction && <div className="oc-special-introduction"><OtherscapeText text={challenge.specialIntroduction} /></div>}
             {challenge.specials.map((special, n) => <section className="oc-special" key={n}>
               <h3>{special.title}</h3><OtherscapeText text={special.text} />
@@ -33,9 +35,11 @@ export function OtherscapeChallengeBody({ name, originalName, challenge }: {
         </section>)}
       </div>
       <aside className="oc-limits" aria-label="Пределы — Limits">
-        <div className="oc-limit-label">Пределы [Limits]</div>
+        <div className="oc-limit-label">{catalog ? "Пределы" : "Пределы [Limits]"}</div>
         {challenge.limits?.map((limit, index) => <div className="oc-limit-value" key={index}>
-          <strong>{displayLimitName(limit.name)}</strong><span>{limit.value ?? "–"}</span>
+          <strong>{displayLimitName(limit.name)}</strong>
+          {catalog && limit.value !== null && limit.value > 0 && limit.value <= 10 && <i className="oc-limit-boxes" aria-hidden="true">{Array.from({ length: limit.value }, (_, n) => <i key={n} />)}</i>}
+          <span>{limit.value ?? "–"}</span>
           <div className="oc-limit-translation">{limit.label}{limit.value === null ? " · иммунитет" : ""}</div>
         </div>)}
         {challenge.limitNotes && <OtherscapeText text={challenge.limitNotes} />}

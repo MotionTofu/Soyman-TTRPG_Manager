@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { searchableText } from "../../compendium";
 import { addToBag } from "../../bag";
 import { MentionText } from "../mentions/MentionText";
 import type { CompendiumEntry } from "../../types";
@@ -16,9 +17,10 @@ function kitWord(n: number): string {
 
 /** «Темы персонажа» Otherscape — макет «Д» Roll-OS-Themes: три колонки
  *  типов силы со списком книг тем, ниже главный блок выбранной книги. */
-export function OtherscapeThemesView({ entries, query, selectedId, onSelect }: {
+export function OtherscapeThemesView({ entries, query, grouping = "might", selectedId, onSelect }: {
   entries: CompendiumEntry[];
   query: string;
+  grouping?: "might" | "alpha";
   selectedId: number | undefined;
   onSelect: (id: number) => void;
 }) {
@@ -32,15 +34,39 @@ export function OtherscapeThemesView({ entries, query, selectedId, onSelect }: {
     return map;
   }, [entries]);
   const needle = query.trim().toLocaleLowerCase("ru");
-  const matches = (e: CompendiumEntry) => !needle
-    || e.name.toLocaleLowerCase("ru").includes(needle)
-    || (e.name_original ?? "").toLocaleLowerCase("ru").includes(needle);
+  const matches = (book: CompendiumEntry) => {
+    if (!needle) return true;
+    const pending = [book];
+    const seen = new Set<number>();
+    while (pending.length) {
+      const entry = pending.pop()!;
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      if (`${searchableText(entry)} ${(entry.description ?? "").toLocaleLowerCase("ru")}`.includes(needle)) return true;
+      pending.push(...(children.get(entry.id) ?? []));
+    }
+    return false;
+  };
   const groups = (children.get(null) ?? []).map((group) => ({
     group,
     books: (children.get(group.id) ?? []).filter(matches),
   }));
   const allBooks = groups.flatMap((g) => g.books);
-  const book = allBooks.find((b) => b.id === selectedId) ?? allBooks[0];
+  const columns = grouping === "alpha"
+    ? [{ group: null, books: [...allBooks].sort((a, b) => a.name.localeCompare(b.name, "ru")) }]
+    : groups;
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  // Возврат из части книги в Каталог сохраняет ту же книгу.
+  const book = allBooks.find((b) => {
+    let current = selectedId === undefined ? undefined : byId.get(selectedId);
+    const seen = new Set<number>();
+    while (current && !seen.has(current.id)) {
+      if (current.id === b.id) return true;
+      seen.add(current.id);
+      current = current.parent_id === null ? undefined : byId.get(current.parent_id);
+    }
+    return false;
+  }) ?? allBooks[0];
   const bookGroup = book && groups.find((g) => g.group.id === book.parent_id)?.group;
   const kits = (b: CompendiumEntry) => {
     const kitGroup = (children.get(b.id) ?? []).find((c) => /theme kits/i.test(c.description ?? "") || c.name === "Готовые наборы");
@@ -52,12 +78,12 @@ export function OtherscapeThemesView({ entries, query, selectedId, onSelect }: {
 
   return (
     <div className="os-themes">
-      <div className="os-themes__cols">
-        {groups.map(({ group, books }) => (
-          <section key={group.id} className="os-col" aria-label={group.name}>
+      <div className={`os-themes__cols${grouping === "alpha" ? " is-alpha" : ""}`}>
+        {columns.map(({ group, books }) => (
+          <section key={group?.id ?? "alpha"} className="os-col" aria-label={group?.name ?? "Темы по алфавиту"}>
             <header>
-              <h2 className="d-plate">{group.name}</h2>
-              <p>{groupLead(group.description)}</p>
+              <h2 className="d-plate">{group?.name ?? "А–Я"}</h2>
+              {group && <p>{groupLead(group.description)}</p>}
             </header>
             {books.map((b) => {
               const n = kits(b);
@@ -91,7 +117,7 @@ export function OtherscapeThemesView({ entries, query, selectedId, onSelect }: {
             {(children.get(book.id) ?? []).map((part) => {
               const n = (children.get(part.id) ?? []).length;
               return (
-                <Link key={part.id} to={`/systems/${part.system_id}/entries/${part.id}`}>
+                <Link key={part.id} to={`/systems/${part.system_id}?section=${part.section_id}&entry=${part.id}&view=list`}>
                   {part.name}
                   {n > 0 && <span>{n}</span>}
                 </Link>
