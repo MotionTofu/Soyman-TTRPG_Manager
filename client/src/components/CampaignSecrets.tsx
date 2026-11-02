@@ -8,6 +8,7 @@ import { MentionText } from "./mentions/MentionText";
 import "./campaign-secrets.css";
 import type { CampaignGrouped, StorySecret } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { LoadErrorCard } from "./Loadable";
 
 export const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
@@ -43,7 +44,8 @@ export function CampaignSecrets({
   onStats?: (s: SecretsNavStats) => void;
 }) {
   const path = campaignPaths.secrets(campaignId);
-  const data = useResource<CampaignGrouped<StorySecret>>(path).data ?? EMPTY;
+  const source = useResource<CampaignGrouped<StorySecret>>(path);
+  const data = source.data ?? EMPTY;
   const client = useQueryClient();
 
   // Как и у вех: отметка «раскрыто» правит одну строку на месте, а не
@@ -92,6 +94,12 @@ export function CampaignSecrets({
 
   const showOwn = groupId == null || groupId === "own";
   const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
+
+  // Группы монтируются после чтения: иначе временное EMPTY раскрывает
+  // форму «пустой группы», даже когда следом приходят существующие записи.
+  if (!source.data) return source.error
+    ? <LoadErrorCard message={source.error} onRetry={source.reload} />
+    : <p className="muted" role="status">Загрузка…</p>;
 
   return (
     <div className="campaign-check-groups">

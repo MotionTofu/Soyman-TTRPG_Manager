@@ -200,8 +200,16 @@
   font-size: var(--fs-data);
 }
 /* Полоса фактов не влезает между заголовком и кнопкой — уходит строкой ниже,
-   кнопка остаётся справа от заголовка (как на телефоне в макете). */
+   кнопка остаётся справа от заголовка; телефон — отдельным правилом ниже. */
 @container (max-width: 820px) {
   .campaign-dossier__header .d-strip { order: 3; }
   .campaign-dossier__header .d-head__acts { order: 2; }
+}
+
+@container (max-width: 520px) {
+  .campaign-dossier__header > :first-child { width: 100%; }
+  .campaign-dossier__header .d-strip { order: 2; width: 100%; flex-wrap: nowrap; }
+  .campaign-dossier__header .d-strip > div { flex: 1; min-width: 0; }
+  .campaign-dossier__header .d-head__acts { order: 3; width: 100%; margin-left: 0; }
+  .campaign-dossier__header .d-btn--primary { width: 100%; }
 }

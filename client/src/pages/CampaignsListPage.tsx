@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { resourceQuery, useResource } from "../data/hooks";
+import { resourceQuery, useResource, useAction, write } from "../data/hooks";
 import { invalidateAffects } from "../data/entities";
-import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
+import { campaignGroupAffects, campaignFieldsAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
+import { EntityMenuButton } from "../components/PageContextMenu";
+import { entityMark, openEntityMenu } from "../pageMenu";
+import type { ContextMenuItem } from "../components/ContextMenu";
+import { usePrompt } from "../hooks/useConfirm";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
@@ -33,6 +37,15 @@ const NO_GROUPS: CampaignGroup[] = [];
 
 export function CampaignsListPage() {
   const client = useQueryClient();
+  const run = useAction();
+  const [promptDialog, prompt] = usePrompt();
+  function menuFor(campaign: Campaign): ContextMenuItem[] {
+    return campaign.folder_missing ? [] : [{ label: "Переименовать", onClick: async () => {
+      const name = (await prompt({ title: "Переименовать кампанию", message: "Название", defaultValue: campaign.name, confirmLabel: "Сохранить" }))?.trim();
+      if (!name || name === campaign.name) return;
+      await run(() => write.put(campaignPaths.detail(campaign.id), { name }), { affects: campaignFieldsAffects(campaign.id), retry: false });
+    } }];
+  }
   const campaignsState = useResource<Campaign[]>(campaignPaths.list());
   const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
   const loading = campaignsState.loading;
@@ -99,6 +112,7 @@ export function CampaignsListPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
+      {promptDialog}
       <ListPage
         headingSection="campaigns"
         title="Кампании"
@@ -141,13 +155,13 @@ export function CampaignsListPage() {
                 </div>
                 <div className="campaign-dtiles">
                   {active.map((c) => (
-                    <CampaignDTile key={c.id} campaign={c} />
+                    <CampaignDTile key={c.id} campaign={c} menuFor={menuFor} />
                   ))}
                 </div>
               </section>
             )}
-            {paused.length > 0 && <CampaignRows title="На паузе" list={paused} />}
-            {completed.length > 0 && <CampaignRows title="Завершённые" list={completed} />}
+            {paused.length > 0 && <CampaignRows title="На паузе" list={paused} menuFor={menuFor} />}
+            {completed.length > 0 && <CampaignRows title="Завершённые" list={completed} menuFor={menuFor} />}
             {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
               <button
                 type="button"
@@ -214,7 +228,7 @@ const monthYear = new Intl.DateTimeFormat("ru", { month: "long", year: "numeric"
 
 // Плитка «Д»: обложка с плашкой системы, имя Oswald, ближайшая игра
 // машинописью. Обложка — как у CampaignCoverTile (тот остаётся на Главной).
-function CampaignDTile({ campaign: c }: { campaign: Campaign }) {
+function CampaignDTile({ campaign: c, menuFor }: { campaign: Campaign; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
   const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
   const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
   const authBlob = useAuthenticatedFileUrl(imageUrl);
@@ -223,7 +237,8 @@ function CampaignDTile({ campaign: c }: { campaign: Campaign }) {
     ? `${formatNearestDate(c.next_planned_date)} · сессия №${(c.held_sessions_count ?? 0) + 1}`
     : "нет запланированных";
   return (
-    <Link to={`/campaigns/${c.id}`} className="campaign-dtile" title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}>
+    <article className="campaign-dtile" {...entityMark("campaign", c.id, c.name)} onContextMenu={(event) => { if (event.shiftKey) return; event.preventDefault(); openEntityMenu({ type: "campaign", id: c.id, name: c.name }, event.clientX, event.clientY, menuFor(c)); }}>
+    <Link to={`/campaigns/${c.id}`} className="campaign-dtile__link" title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}>
       <span className={`campaign-dtile__cover${bg ? "" : " is-empty"}`} style={bg ? { backgroundImage: bg } : undefined}>
         {c.system_name && <span className="d-plate">{c.system_name}</span>}
       </span>
@@ -232,10 +247,12 @@ function CampaignDTile({ campaign: c }: { campaign: Campaign }) {
         <span className="d-mono">{next}</span>
       </span>
     </Link>
+    <EntityMenuButton entity={{ type: "campaign", id: c.id, name: c.name }} local={menuFor(c)} />
+    </article>
   );
 }
 
-function CampaignRows({ title, list }: { title: string; list: Campaign[] }) {
+function CampaignRows({ title, list, menuFor }: { title: string; list: Campaign[]; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
   return (
     <section>
       <div className="d-gh">
@@ -244,11 +261,12 @@ function CampaignRows({ title, list }: { title: string; list: Campaign[] }) {
       </div>
       <ul className="campaign-drows">
         {list.map((c) => (
-          <li key={c.id}>
+          <li key={c.id} {...entityMark("campaign", c.id, c.name)} onContextMenu={(event) => { if (event.shiftKey) return; event.preventDefault(); openEntityMenu({ type: "campaign", id: c.id, name: c.name }, event.clientX, event.clientY, menuFor(c)); }}>
             <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
             <span className="d-mono">{c.system_name ?? "—"}</span>
             <span className="d-mono">{c.type === "oneshot" ? "ваншот" : `сыграно ${c.held_sessions_count ?? 0}`}</span>
             <span className="d-mono">{c.last_played_date ? monthYear.format(parseDateKey(c.last_played_date)).replace(" г.", "") : ""}</span>
+            <EntityMenuButton entity={{ type: "campaign", id: c.id, name: c.name }} local={menuFor(c)} />
           </li>
         ))}
       </ul>

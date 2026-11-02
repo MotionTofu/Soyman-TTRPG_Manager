@@ -1,0 +1,81 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { CampaignsListPage } from "./CampaignsListPage";
+import { ENTITY_MENU_EVENT } from "../pageMenu";
+
+const campaigns = [
+  { id: 1, name: "Эстария", role: "gm", status: "active", system_name: "D&D", setting_name: "Север" },
+  { id: 2, name: "Цена вопроса", role: "player", status: "completed", system_name: "City of Mist", setting_name: "Город" },
+  { id: 3, name: "Дозоры", role: "gm", status: "paused", system_name: "D&D", setting_name: "Север" },
+];
+const mocks = vi.hoisted(() => ({ prompt: vi.fn(), put: vi.fn().mockResolvedValue({}) }));
+vi.mock("../data/hooks", () => ({ useAfterWrite: () => vi.fn(), useAction: () => (fn: () => Promise<unknown>) => fn(), write: { put: mocks.put }, resourceQuery: () => ({}),
+  useResource: (path: string) => ({ loading: false, data: path === "/campaigns" ? campaigns : [] }) }));
+vi.mock("../hooks/useConfirm", () => ({ useConfirm: () => [null, vi.fn()], useAlert: () => [null, vi.fn()], usePrompt: () => [null, mocks.prompt] }));
+vi.mock("../components/SectionBackground", () => ({ SectionBackground: () => null }));
+vi.mock("../utils/fileUrl", () => ({ useAuthenticatedFileUrl: () => null }));
+afterEach(cleanup);
+
+function show() {
+  return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CampaignsListPage /></MemoryRouter></QueryClientProvider>);
+}
+describe("список кампаний в Д", () => {
+  it("ищет по имени, системе и сеттингу, сбрасывает запрос и сохраняет выбранную роль", () => {
+    show();
+    const search = screen.getByRole("searchbox", { name: "Поиск по кампаниям" });
+    fireEvent.change(search, { target: { value: "  город  " } });
+    expect(screen.queryByRole("link", { name: /Эстария/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Цена вопроса" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Я мастер/ }));
+    fireEvent.change(search, { target: { value: "D&D" } });
+    expect(screen.getByRole("link", { name: /Эстария/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Дозоры" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Цена вопроса" })).toBeNull();
+    fireEvent.change(search, { target: { value: "несуществующая" } });
+    expect(screen.queryByRole("link", { name: /Эстария/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить" }));
+    expect(screen.getByRole("tab", { name: /Я мастер/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("link", { name: "Цена вопроса" })).toBeNull();
+  });
+  it("открывает общее меню нужной кампании из плитки, паузы и завершённых без перехода по ссылке", () => {
+    const opened = vi.fn();
+    window.addEventListener(ENTITY_MENU_EVENT, opened);
+    try {
+      const shown = show();
+      for (const campaign of campaigns) {
+        const button = screen.getByRole("button", { name: `Действия: ${campaign.name}` });
+        expect(button.closest("a")).toBeNull();
+        fireEvent.click(button);
+        expect(opened.mock.lastCall?.[0].detail.entity).toEqual({ type: "campaign", id: campaign.id, name: campaign.name });
+        expect(shown.container.querySelector(`[data-entity-id="${campaign.id}"]`)).toBeTruthy();
+      }
+    } finally { window.removeEventListener(ENTITY_MENU_EVENT, opened); }
+  });
+  it("даёт одинаковую правку через ⋯ и ПКМ, переименовывает и учитывает отмену", async () => {
+    const opened = vi.fn();
+    window.addEventListener(ENTITY_MENU_EVENT, opened);
+    mocks.put.mockClear();
+    try {
+      const shown = show();
+      fireEvent.click(screen.getByRole("button", { name: "Действия: Дозоры" }));
+      const rename = opened.mock.lastCall?.[0].detail.local[0];
+      expect(rename.label).toBe("Переименовать");
+      mocks.prompt.mockResolvedValueOnce("  Дозоры Севера  ");
+      await rename.onClick();
+      expect(mocks.put).toHaveBeenCalledWith("/campaigns/3", { name: "Дозоры Севера" });
+      const row = shown.container.querySelector('[data-entity-id="3"]')!;
+      fireEvent.contextMenu(row);
+      expect(opened.mock.lastCall?.[0].detail.local[0].label).toBe("Переименовать");
+      mocks.prompt.mockResolvedValueOnce(null);
+      await opened.mock.lastCall?.[0].detail.local[0].onClick();
+      expect(mocks.put).toHaveBeenCalledTimes(1);
+      opened.mockClear();
+      fireEvent.contextMenu(row, { shiftKey: true });
+      expect(opened).not.toHaveBeenCalled();
+    } finally { window.removeEventListener(ENTITY_MENU_EVENT, opened); }
+  });
+});

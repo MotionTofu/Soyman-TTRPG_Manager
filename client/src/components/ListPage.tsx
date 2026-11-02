@@ -100,7 +100,7 @@ export interface ListPageProps {
   /** Содержимое: сетка плиток, строки, рабочий экран — что угодно (Q50). */
   children: ReactNode;
   /** Вид «Д» (макет Camp-List): кислотная кнопка, лист в рамке тушью, группы
-   *  сегментом с «+ Группа» и счётчиком справа; поиска нет — он в колонке.
+   *  сегментом с «+ Группа», поиском и счётчиком справа.
    *  Пока только у «Кампаний»: остальные списки переводят свои блоки. */
   ds?: boolean;
 }
@@ -295,7 +295,14 @@ export function ListPage({
               + Группа
             </button>
           ))}
-        <span className="d-mono list-page__count">
+        {!hideToolbar && <>
+          <input type="search" className="d-input list-page__search"
+            placeholder={searchPlaceholder ?? "Поиск…"} aria-label={searchLabel ?? "Поиск"}
+            value={search} onChange={(event) => onSearch(event.target.value)} />
+          {toolbarExtra}
+          {resetVisible && <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={onResetSearch} title={resetTitle ?? "Сбросить поиск"}>Сбросить</button>}
+        </>}
+        <span className="d-mono list-page__count" aria-live="polite">
           {filteredCount} / {totalCount}
         </span>
       </div>

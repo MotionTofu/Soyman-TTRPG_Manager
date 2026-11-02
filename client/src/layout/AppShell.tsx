@@ -31,7 +31,9 @@ import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
 import { NavigationHistoryProvider } from "./NavigationHistory";
 import { useConfirm } from "../hooks/useConfirm";
 import { sessionLabel } from "../sessionLabel";
-import type { CampaignDetail, SessionDetail } from "../types";
+import type { CampaignDetail, Character, Player, SessionDetail } from "../types";
+import { campaignPaths } from "../data/campaigns";
+import { statusOf } from "../characterStatus";
 import { workspaceMode } from "./workspaceMode";
 import { MapWorkspaceRail, onMapSearchRequest } from "../maps/workspace/MapWorkspace";
 import { MapWorkspaceContext, type MapPlacementController } from "../maps/workspace/workspaceContext";
@@ -493,6 +495,12 @@ export function AppShell() {
   // place to keep creature/location previews visible instead of the app
   // nav they're not using mid-session.
   const { pathname, search } = useLocation();
+  const profileId = !isPlayer ? pathname.match(/^\/campaigns\/(\d+)$/)?.[1] : undefined;
+  const profileCampaign = useEntity<CampaignDetail>("campaign", profileId ? Number(profileId) : null).data;
+  const playerProfileId = profileCampaign?.role === "player" ? profileCampaign.id : null;
+  const profileSelf = useResource<Player>(playerProfileId ? campaignPaths.selfPlayer() : null).data;
+  const profileCharacters = useResource<Character[]>(playerProfileId ? campaignPaths.characters(playerProfileId) : null).data;
+  const profileCharacter = profileCharacters?.find((c) => c.player_id === profileSelf?.id && statusOf(c) === "active");
   const workbookCrumbs = useWorkbookCrumbs(pathname);
   const cutsceneCrumbs = useCutsceneCrumbs(pathname, gm);
   const mode = workspaceMode(pathname, user?.role);
@@ -881,9 +889,9 @@ export function AppShell() {
             <div className="shell-crumbs__trail">
               <Breadcrumbs items={cutsceneCrumbs ?? workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
             </div>
-            {!isPlayer && activeStorageName && !isLivePult && (
-              <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
-                {activeStorageName}
+            {!isPlayer && (playerProfileId || activeStorageName) && !isLivePult && (
+              <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title={playerProfileId ? "Роль в кампании" : "Активное хранилище"}>
+                {playerProfileId ? `я игрок${profileCharacter ? ` · ${profileCharacter.character_name}` : ""}` : activeStorageName}
               </span>
             )}
             {/* «Сбросить раскладку» пульта — в «⋯» его верхней строки (Q11). */}

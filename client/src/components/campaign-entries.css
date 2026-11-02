@@ -20,6 +20,8 @@
 .entry-card__acts { display: flex; gap: var(--sp-4); }
 
 @container (max-width: 640px) {
+  .entry-cards > .d-head > .d-head__acts { width: 100%; margin-left: 0; }
+  .entry-cards > .d-head > .d-head__acts > .d-btn--primary { width: 100%; }
   .entry-cards__grid { grid-template-columns: minmax(0, 1fr); }
   .entry-cards__search { width: 100%; margin-left: 0; }
 }

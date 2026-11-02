@@ -299,3 +299,11 @@
 @media (max-width: 700px) {
   .exploration__form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* На телефоне лист занимает ширину экрана, как Camp-*-Phone:
+   десктопные поля paper-sheet не должны повторяться внутри оболочки. */
+@media (max-width: 700px) {
+  .app-content:has(.entity-page[data-entity-type="campaign"]) { padding-inline: var(--sp-4); }
+  .entity-page[data-entity-type="campaign"] > :is(.tabs, .paper-sheet) { margin-inline: 0; }
+  .app-content:has(.entity-page[data-entity-type="campaign"]) .shell-crumbs__storage { display: none; }
+}

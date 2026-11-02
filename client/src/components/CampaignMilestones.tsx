@@ -8,6 +8,7 @@ import { MentionText } from "./mentions/MentionText";
 import "./campaign-secrets.css";
 import type { CampaignGrouped, StoryMilestone } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { LoadErrorCard } from "./Loadable";
 
 // Раздел «Вехи» кампании: ключевые точки сюжета, разложенные по приключениям,
 // плюс собственные вехи кампании. Тексты вех приключения принадлежат сеттингу
@@ -34,7 +35,8 @@ export function CampaignMilestones({
   onStats?: (s: MilestonesNavStats) => void;
 }) {
   const path = campaignPaths.milestones(campaignId);
-  const data = useResource<CampaignGrouped<StoryMilestone>>(path).data ?? EMPTY;
+  const source = useResource<CampaignGrouped<StoryMilestone>>(path);
+  const data = source.data ?? EMPTY;
   const client = useQueryClient();
 
   // Отметка «достигнута» меняет ровно одну строку — перечитывать из-за неё
@@ -88,6 +90,12 @@ export function CampaignMilestones({
 
   const showOwn = groupId == null || groupId === "own";
   const showGroups = visibleGroups.filter((g) => groupId == null || groupId === String(g.arc.id));
+
+  // Группы монтируются после чтения: иначе временное EMPTY раскрывает
+  // форму «пустой группы», даже когда следом приходят существующие записи.
+  if (!source.data) return source.error
+    ? <LoadErrorCard message={source.error} onRetry={source.reload} />
+    : <p className="muted" role="status">Загрузка…</p>;
 
   return (
     <div className="campaign-check-groups">
