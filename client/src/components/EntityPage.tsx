@@ -112,6 +112,9 @@ export interface EntityPageProps {
    *  не зависит никогда — она прокручивается вбок (см. `.tabs` в index.css),
    *  и порядок вкладок один и тот же на любом окне. */
   hiddenTabs?: readonly string[];
+  /** Set-*: открытая редкая вкладка становится кнопкой меню со счётчиком. */
+  promoteHiddenTab?: boolean;
+  hiddenTabCounts?: Partial<Record<string, number>>;
   /** Подпись справа у пункта «Ещё» — счётчик или «должны 2». */
   hiddenTabHints?: Partial<Record<string, string>>;
   /** «+» в конце полосы — завести вкладку. Нет — кнопки нет. */
@@ -162,6 +165,8 @@ export function EntityPage({
   backdrop,
   tabs,
   hiddenTabs,
+  promoteHiddenTab = false,
+  hiddenTabCounts,
   hiddenTabHints,
   onAddTab,
   addTabLabel,
@@ -211,9 +216,9 @@ export function EntityPage({
   const openedHidden = tab && hiddenTabs?.includes(tab) ? tab : null;
   const shownTabs: EntityPageTab[] = [
     ...(tabs ?? []).map((t) => (typeof t === "string" ? { id: t } : t)),
-    ...(openedHidden ? [{ id: openedHidden }] : []),
+    ...(openedHidden && !promoteHiddenTab ? [{ id: openedHidden }] : []),
   ];
-  const restTabs = hiddenTabs?.filter((t) => t !== openedHidden) ?? [];
+  const restTabs = hiddenTabs?.filter((t) => promoteHiddenTab || t !== openedHidden) ?? [];
 
   function openMenu() {
     const r = moreRef.current?.getBoundingClientRect();
@@ -277,14 +282,17 @@ export function EntityPage({
         <button
           ref={moreTabsRef}
           type="button"
-          className="entity-page__tabs-more"
+          className={`entity-page__tabs-more${promoteHiddenTab && openedHidden ? " active" : ""}`}
+          role={promoteHiddenTab && openedHidden ? "tab" : undefined}
+          aria-selected={promoteHiddenTab && openedHidden ? true : undefined}
           aria-haspopup="menu"
           onClick={() => {
             const r = moreTabsRef.current?.getBoundingClientRect();
             if (r) setTabsMenuAt({ x: r.right, y: r.bottom });
           }}
         >
-          Ещё ▾
+          {promoteHiddenTab && openedHidden ? `${openedHidden} ▾` : "Ещё ▾"}
+          {promoteHiddenTab && openedHidden && !!hiddenTabCounts?.[openedHidden] && <b>{hiddenTabCounts[openedHidden]}</b>}
         </button>
       )}
       {onAddTab && (

@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
 import { MasteringShelf } from "../mastering/MasteringShelf";
-import { ProjectWorkbooks } from "../workbooks/ProjectWorkbooks";
+
 import { LIBRARY_AFFECTS, type LibraryCatalog } from "../mastering/libraryTypes";
 import "../../pages/mastering-library.css";
 
@@ -35,15 +35,19 @@ export function SettingLibraryTab({ settingId }: { settingId: number }) {
     });
   }
 
+  async function startWorkbook() {
+    const result = await run(() => write.post<{ id: number }>(`/workbooks/projects/setting/${settingId}/notebook`, {}), { affects: [{ path: "/workbooks" }, { path: "/book-library" }], retry: false });
+    if (result) navigate(`/workbooks/${result.id}`);
+  }
+
   return (
     <div className="setting-library">
-      <ProjectWorkbooks type="setting" id={settingId}/>
-      {[{role:"projects",title:"Тетради"},{role:"campaigns",title:"Тетради кампаний"}].map(({role,title})=><MasteringShelf key={role} shelf={null} title={title} shelfKey={`setting-${settingId}-${role}`} books={notebooks.filter(b=>b.workbook_role===role)} search={false} covers={NO_COVERS} bookmarked={NO_BOOKMARKS} dragging={null} dragOver={false} onDrag={()=>{}} onDrop={()=>{}} onAdd={()=>navigate("/workbooks")} onOpen={id=>{const book=notebooks.find(b=>b.id===id);if(book)navigate(`/workbooks/${book.source_id}`);}}/>)}
+      {[{role:"projects",title:"Тетради"},{role:"campaigns",title:"Тетради кампаний"}].map(({role,title})=><MasteringShelf key={role} shelf={null} title={title} shelfKey={`setting-${settingId}-${role}`} books={notebooks.filter(b=>b.workbook_role===role)} search={false} covers={NO_COVERS} bookmarked={NO_BOOKMARKS} dragging={null} dragOver={false} onDrag={()=>{}} onDrop={()=>{}} onAdd={()=>role === "projects" ? void startWorkbook() : navigate("/workbooks")} onOpen={id=>{const book=notebooks.find(b=>b.id===id);if(book)navigate(`/workbooks/${book.source_id}`);}}/>)}
       <div className="population__toolbar">
         <span className="muted">PDF и Markdown этого сеттинга</span>
         <span className="population__spacer" />
         <Link to="/mastering">Открыть в Библиотеке ›</Link>
-        <button type="button" className="population__create" onClick={() => upload.current?.click()}>
+        <button type="button" className="d-btn" onClick={() => upload.current?.click()}>
           PDF или Markdown
         </button>
         <input

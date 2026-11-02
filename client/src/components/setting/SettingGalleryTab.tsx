@@ -273,15 +273,15 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
           Слоты «Фон» и «Обложка»
         </button>
         <Link to="/gallery">Открыть в Галерее ›</Link>
-        <button type="button" className="population__create" onClick={() => upload.current?.click()}>
-          Загрузить
-        </button>
         <input ref={upload} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => {
           void uploadFile(e.target.files?.[0]);
           e.target.value = "";
         }} />
       </div>
 
+        <button type="button" className="d-btn d-btn--primary setting-gallery__upload" onClick={() => upload.current?.click()}>
+          Загрузить
+        </button>
       {slotsOpen && (
         <div className="setting-gallery__slots">
           <Slot label="Фон профиля" wide url={setting.background_image_url} hint="ПКМ по картинке ниже — «Сделать фоном»" onClear={() => clearSlot("background")} />
@@ -358,7 +358,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
       {images.length === 0 ? (
         <EmptyState title="Картинок пока нет" hint="Референсы, скетчи, карты этого мира. Загруженное здесь появится и в общей «Галерее»." />
       ) : (
-        <>
+        <section className="d-focal setting-gallery__album">
           <div className="setting-gallery__head">
             {q ? (
               <h3>Найдено</h3>
@@ -394,7 +394,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
               ))}
             </ul>
           )}
-        </>
+        </section>
       )}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}

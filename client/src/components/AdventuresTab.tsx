@@ -260,7 +260,7 @@ export function AdventuresTab({
       {promptDialog}
       {!campaignId && (
         <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <button className="primary" onClick={() => setWizardOpen(true)}>
+          <button className="d-btn d-btn--primary" onClick={() => setWizardOpen(true)}>
             + Приключение
           </button>
           <button onClick={() => fileRef.current?.click()} disabled={busy != null}>
@@ -299,7 +299,7 @@ export function AdventuresTab({
           hint="Приключение — блок подготовленного сюжета внутри сеттинга (книга, ваншот, арка). Внутри него главы, сцены, вехи, тайны и зацепки. Кампании наследуют эти приключения и могут править сцены у себя, не трогая оригинал."
           action={
             !campaignId ? (
-              <button className="primary" onClick={() => setWizardOpen(true)}>
+              <button className="d-btn d-btn--primary" onClick={() => setWizardOpen(true)}>
                 + Приключение
               </button>
             ) : undefined

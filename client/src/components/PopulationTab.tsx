@@ -1,3 +1,5 @@
+import { Modal } from "./Modal";
+import { DSeg } from "./DSeg";
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAction, useAfterWrite, useEntity, useResource, write } from "../data/hooks";
@@ -67,12 +69,12 @@ function parseRoles(raw: unknown): string[] {
   }
 }
 
-function Avatar({ name, url, size }: { name: string; url: string | null; size: "l" | "m" | "s" }) {
+function Avatar({ url, size }: { name: string; url: string | null; size: "l" | "m" | "s" }) {
   return url ? (
     <img className={`pop-avatar is-${size}`} src={url} alt="" />
   ) : (
     <span className={`pop-mono is-${size}`} aria-hidden="true">
-      {(name.trim()[0] ?? "?").toUpperCase()}
+      <TypeGlyph type="being" />
     </span>
   );
 }
@@ -158,10 +160,7 @@ function Toolbar({
         aria-label="Поиск"
       />
       {chips}
-      <select value={sort} onChange={(e) => onSort(e.target.value as "name" | "recent")} aria-label="Сортировка">
-        <option value="name">А–Я</option>
-        <option value="recent">Недавние</option>
-      </select>
+      <DSeg label="Сортировка" value={sort} onChange={onSort} items={[{ id: "name", label: "А–Я" }, { id: "recent", label: "Недавние" }]} />
       {extra}
       <span className="population__spacer" />
       {menuItems && menuItems.length > 0 && (
@@ -180,7 +179,7 @@ function Toolbar({
       {menuAt && menuItems && (
         <ContextMenu x={menuAt.x} y={menuAt.y} items={menuItems} onClose={() => setMenuAt(null)} />
       )}
-      <button type="button" className="population__create" onClick={onCreate}>
+      <button type="button" className="d-btn d-btn--primary population__create" onClick={onCreate}>
         + {createLabel}
       </button>
     </div>
@@ -205,6 +204,18 @@ function Aside({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const [phone, setPhone] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(max-width: 700px)").matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(max-width: 700px)");
+    const changed = () => setPhone(query.matches);
+    query.addEventListener("change", changed);
+    return () => query.removeEventListener("change", changed);
+  }, []);
+  if (phone) return open ? <Modal onClose={onClose} ariaLabel="Карточка выбранного" className="population-sheet paper-scope" closeOnBackdropClick>
+    <div className="population-sheet__grip" aria-hidden="true" />
+    {children}
+  </Modal> : null;
   return (
     <aside className={`population__aside${open ? " is-open" : ""}`} aria-label="Карточка выбранного">
       <button type="button" className="population__sheet-close" aria-label="Закрыть карточку" onClick={onClose} />
@@ -248,21 +259,9 @@ export function PopulationTab({ settingId }: { settingId: number }) {
   };
 
   return (
-    <div className="paper-sheet paper-scope population" id="population">
-      <div className="population__subnav" role="tablist" aria-label="Подразделы населения">
-        {SECTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            role="tab"
-            aria-selected={section === s}
-            className="population__subtab"
-            onClick={() => setSection(s)}
-          >
-            {counts[s] != null ? `${s} · ${counts[s]}` : s}
-          </button>
-        ))}
-      </div>
+    <div className="population" id="population">
+      <DSeg label="Подразделы населения" value={section} onChange={setSection}
+        items={SECTIONS.map((s) => ({ id: s, label: s, count: counts[s] ?? undefined }))} />
       {section === "Личности" && <PeopleSection settingId={settingId} />}
       {section === "Бестиарий" && <BestiarySection settingId={settingId} />}
       {section === "Сообщества" && <CommunitiesSection settingId={settingId} />}
@@ -627,7 +626,7 @@ function PeopleSection({ settingId }: { settingId: number }) {
             {groups.map((g) => (
               <section key={g.key}>
                 <h3 className="pop-group__head">
-                  {g.label} <span className="pop-group__count">{g.items.length}</span>
+                  <span className="d-plate">{g.label}</span> <span className="pop-group__count">{g.items.length}</span>
                 </h3>
                 {grouping === "weight" && g.key === "key_figure" ? (
                   <div className="pop-keys">{g.items.map(keyCard)}</div>
@@ -641,7 +640,7 @@ function PeopleSection({ settingId }: { settingId: number }) {
           </div>
           <Aside open={sel.selId != null} onClose={() => sel.setSelId(null)}>
             {sel.selId != null ? (
-              <CreatureCardLoader key={sel.selId} type="being" id={sel.selId} variant="page" />
+              <CreatureCardLoader key={sel.selId} type="being" id={sel.selId} variant="page" tableHeading />
             ) : (
               <RecentList settingId={settingId} onPick={(id) => navigate(`/beings/${id}`)} />
             )}
@@ -746,7 +745,7 @@ function BestiarySection({ settingId }: { settingId: number }) {
             {groups.map((g) => (
               <section key={g.key}>
                 <h3 className="pop-group__head">
-                  {g.label} <span className="pop-group__count">{g.items.length}</span>
+                  <span className="d-plate">{g.label}</span> <span className="pop-group__count">{g.items.length}</span>
                 </h3>
                 <ul className="pop-rows">
                   {g.items.map((b) => {
@@ -788,7 +787,7 @@ function BestiarySection({ settingId }: { settingId: number }) {
           </div>
           <Aside open={sel.selId != null} onClose={() => sel.setSelId(null)}>
             {sel.selId != null ? (
-              <CreatureCardLoader key={sel.selId} type="being" id={sel.selId} variant="page" />
+              <CreatureCardLoader key={sel.selId} type="being" id={sel.selId} variant="page" tableHeading />
             ) : (
               <div className="pop-recent">
                 <span className="paper-label">Бестиарий</span>

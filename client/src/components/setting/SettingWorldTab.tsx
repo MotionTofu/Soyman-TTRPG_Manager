@@ -143,12 +143,12 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
       {categories ? (
         <div className="set-world__bar">{addButton}</div>
       ) : (
-        <div className="set-head">
+        <div className="d-head">
           <div>
             <h2>Мир</h2>
-            <div className="set-head__sub">Правила, традиции и напряжения — короткими записями. Игрокам видно только отмеченное глазом.</div>
+            <div className="d-head__sub">Правила, традиции и напряжения — короткими записями. Игрокам видно только отмеченное глазом.</div>
           </div>
-          <div className="set-head__acts">{addButton}</div>
+          <div className="d-head__acts">{addButton}</div>
         </div>
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}

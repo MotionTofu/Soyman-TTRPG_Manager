@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ContextMenu } from "./ContextMenu";
 import { Link } from "react-router-dom";
 import { useResource } from "../data/hooks";
 import { chapterWord, sceneWord } from "../sceneKinds";
@@ -27,6 +29,7 @@ export function AdventurePreview({
   onArchive: () => void;
   onExport: () => void;
 }) {
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   // Превью — под ключами слоя: правка приключения (`{ kind: "adventure", id }`)
   // задевает и карточку, и список его кампаний.
   const detailState = useResource<StoryArcDetail>(`/story/arcs/${arc.id}`);
@@ -167,18 +170,15 @@ export function AdventurePreview({
       </div>
 
       <div className="row" style={{ flexWrap: "wrap" }}>
-        <button className="primary" onClick={onOpen}>
+        <button className="d-btn" onClick={onOpen}>
           Открыть
         </button>
         <button onClick={onExport}>Выгрузить в файл</button>
-        {editable && (
-          <>
-            <button onClick={onRename}>Переименовать</button>
-            <button className="danger" onClick={onArchive}>
-              Архивировать
-            </button>
-          </>
-        )}
+        {editable && <button type="button" className="d-btn d-btn--quiet" aria-label={`Действия: ${arc.name}`} aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.right, y: r.bottom }); }}>⋯</button>}
+        {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} ariaLabel="Действия приключения" onClose={() => setMenuAt(null)} items={[
+          { label: "Переименовать", onClick: onRename },
+          { label: "Архивировать", danger: true, onClick: onArchive },
+        ]} />}
         <OpenProjectWorkbook type="adventure" id={arc.id} />
       </div>
     </div>

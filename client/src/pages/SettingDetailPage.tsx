@@ -1,3 +1,7 @@
+import { EmbeddedWorkbook } from "./WorkbookPage";
+import type { LibraryCatalog } from "../components/mastering/libraryTypes";
+import type { SoundSetSummary } from "../sound/types";
+import { DSeg } from "../components/DSeg";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -65,6 +69,7 @@ import { plural } from "../sceneKinds";
 import { loadSideLayout, SIDE_NARROW_EVENT } from "../layout/sideLayout";
 import type { InstanceSummary } from "../components/workbooks/model";
 import "./setting-profile.css";
+import "./setting-d.css";
 
 import type { System } from "../types";
 import type {
@@ -136,7 +141,7 @@ export function SettingDetailPage() {
   const [tab, selectTab] = useTabState(TABS, "Обзор", TAB_ALIASES);
   // Хронике (ось и полоса месяцев) нужна ширина — правая панель приложения
   // свёрнута, пока вкладка открыта; уходя, возвращаем как было.
-  const wideTab = tab === "Хроника";
+  const wideTab = tab === "Хроника" || tab === "География" || tab === "Население";
   useEffect(() => {
     if (!wideTab || loadSideLayout().narrow) return;
     // Такт отсрочки: при открытии страницы сразу на Хронике панель ещё не
@@ -158,6 +163,12 @@ export function SettingDetailPage() {
   const onChronicle = tab === "Хроника";
   const counts = useResource<SettingCounts>(`/settings/${settingId}/counts`).data ?? null;
   const workbooks = useResource<InstanceSummary[]>(`/workbooks/instances?project_type=setting&project_id=${settingId}`).data ?? NO_WORKBOOKS;
+  const treasuryCount = useResource<Artifact[]>(tab === "Сокровищница" ? settingPaths.inSetting("artifact", settingId) : null).data?.length;
+  const libraryCount = useResource<LibraryCatalog>(tab === "Библиотека" ? `/book-library/books?setting=${settingId}&include_unplaced=1&limit=200` : null).data?.books.filter((b) => b.source_type !== "workbook").length;
+  const audioCount = useResource<SoundSetSummary[]>(tab === "Аудиотека" ? "/sound-sets" : null).data?.filter((s) => s.setting_id === settingId).length;
+  const graphQuery = new URLSearchParams({ types: SETTING_SCOPED_TYPES.join(","), setting_id: String(settingId), view: "world" });
+  const graphCount = useResource<GraphData>(tab === "Граф связей" ? settingPagePaths.graph(graphQuery.toString()) : null).data?.nodes.length;
+
   const onTags = dialog === "groups";
   const allGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groups() : null).data ?? NO_GROUPS;
   const settingGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groupsOf(settingId) : null).data ?? NO_GROUPS;
@@ -614,6 +625,7 @@ export function SettingDetailPage() {
   return (
     <EntityPage
       paper
+      hideIdent
       crumbs={[{ label: "Сеттинги", to: "/settings" }, { label: setting.name }]}
       entityType="setting"
       title={setting.name}
@@ -646,6 +658,8 @@ export function SettingDetailPage() {
       ]}
       tabs={shownTabs.map((t) => ({ id: t, count: tabCounts[t] || undefined }))}
       hiddenTabs={hiddenTabs}
+      promoteHiddenTab
+      hiddenTabCounts={{ Сокровищница: treasuryCount, Библиотека: libraryCount, Аудиотека: audioCount, "Граф связей": graphCount }}
       tab={tab}
       onTab={(t) => selectTab(t as Tab)}
       overlays={
@@ -761,7 +775,7 @@ export function SettingDetailPage() {
       {tab === "География" && <GeographyTab settingId={settingId} />}
       {tab === "Население" && <PopulationTab settingId={settingId} />}
       {tab === "Приключения" && (
-        <div className="card stack">
+        <div className="setting-adventures">
           <AdventuresTab settingId={settingId} />
         </div>
       )}
@@ -1029,11 +1043,11 @@ export function SettingDetailPage() {
       {tab === "Библиотека" && <SettingLibraryTab settingId={settingId} />}
       {tab === "Аудиотека" && <SettingAudioTab settingId={settingId} />}
       {tab === "Тетрадь" && (
-        // Привязка тетради — шаг 4 тетрадей; пока вкладка ведёт в привязанные.
+        // Одна тетрадь — разворотом в профиле, несколько — выбором, как у кампании.
         <section className="paper-groups" aria-label="Тетрадь сеттинга">
-          <ul className="paper-rows">
-            {workbooks.map((w) => (
-              <li key={w.id}>
+          <div className="setting-workbooks">
+            {workbooks.length === 1 ? <EmbeddedWorkbook id={workbooks[0].id} /> : workbooks.map((w) => (
+              <div className="setting-workbooks__row" key={w.id}>
                 <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
                   {w.title} →
                 </Link>
@@ -1041,9 +1055,9 @@ export function SettingDetailPage() {
                   {w.template_title}
                   {w.progress ? ` · заполнено ${w.progress.filled} из ${w.progress.total}` : ""}
                 </span>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
@@ -1249,7 +1263,7 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
   const graph = useResource<GraphData>(settingPagePaths.graph(params.toString()));
 
   return (
-    <div className="card stack">
+    <div className="setting-graph stack">
       {graph.error && (
         <div className="error-banner">
           {graph.error}
@@ -1291,19 +1305,8 @@ function GeographyTab({ settingId }: { settingId: number }) {
       /* ignore */
     }
   }
-  const tab = (id: GeographyView, label: React.ReactNode) => (
-    <button type="button" aria-pressed={view === id} onClick={() => pick(id)}>
-      {label}
-    </button>
-  );
-  // Переключатель вида — сегментом, как на остальных вкладках бумаги (доска 16).
-  const seg = (
-    <div className="population__seg" role="group" aria-label="Вид географии">
-      {tab("columns", "Колонки")}
-      {tab("list", "Список")}
-      {tab("tree", "Дерево")}
-    </div>
-  );
+  const seg = <DSeg label="Вид географии" value={view} onChange={pick}
+    items={[{ id: "columns", label: "Колонки" }, { id: "list", label: "Список" }, { id: "tree", label: "Дерево" }]} />;
   return (
     <div className="stack">
       {view === "columns" && <LocationMiller key={`m-${settingId}`} settingId={settingId} lead={seg} />}
@@ -1479,10 +1482,10 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   ].join("|"));
 
   return (
-    <div className="card stack">
+    <div className="setting-treasury stack">
       {confirmDialog}
       <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <button className="primary" onClick={() => setCreating(true)}>
+        <button className="d-btn" onClick={() => setCreating(true)}>
           + Предмет
         </button>
         <input
@@ -1491,7 +1494,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           onChange={(e) => setQuery(e.target.value)}
           style={{ flex: 1, minWidth: 150 }}
         />
-        <div className="row" style={{ gap: 2 }}>
+        <div className="d-seg" role="group" aria-label="Группировка предметов">
           {([
             ["item_class", "По типу"],
             ["rarity", "По редкости"],
@@ -1554,7 +1557,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           title="Сокровищница пуста"
           hint="Особые предметы сеттинга, имеющие значение для приключений"
           action={
-            <button className="primary" onClick={() => setCreating(true)}>
+            <button className="d-btn" onClick={() => setCreating(true)}>
               + Создать первый предмет
             </button>
           }
@@ -1569,8 +1572,10 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           selection={artSel}
           onSelect={setArtSel}
           workspaceKey={settingId}
+          plates
+          phoneSelect
           navFooter={
-            <button className="primary" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
+            <button className="d-btn" onClick={() => setCreating(true)} style={{ alignSelf: "flex-start" }}>
               + Предмет
             </button>
           }
@@ -1580,7 +1585,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
               <EntityPreviewContent key={`${selItem.id}-${rev}`} type="artifact" id={selItem.id} />
               <div className="card">
                 <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                  <Link to={`/artifacts/${selItem.id}`} className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>
+                  <Link to={`/artifacts/${selItem.id}`} className="d-btn" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>
                     Открыть профиль
                   </Link>
                   <button onClick={() => setEditing(selItem)}>Редактировать</button>

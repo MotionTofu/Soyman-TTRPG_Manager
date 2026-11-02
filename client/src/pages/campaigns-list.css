@@ -1,24 +1,6 @@
 /* «Кампании» в «Д» (макет Camp-List): лист в рамке тушью, сегмент групп со
    счётчиком справа; активные — плитки 4 в ряд с плашкой системы на обложке,
    прочие — строки: имя Oswald, система, сыграно, месяц последней игры. */
-.list-page--d .list-page__sheet {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-7);
-  padding: var(--sp-7) var(--sp-8) var(--sp-8);
-  border: var(--edge-width) solid var(--edge);
-  outline: 1px solid var(--edge);
-  outline-offset: -8px;
-  background: var(--sheet);
-  container-type: inline-size;
-}
-.list-page--d .list-page__content { display: flex; flex-direction: column; gap: var(--sp-7); }
-.list-page__dbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
-.list-page__dbar .d-seg button { height: 40px; }
-.list-page__search { flex: 1 1 220px; min-width: 0; max-width: 320px; }
-.list-page__group-new { display: flex; gap: var(--sp-3); }
-.list-page__count { margin-left: auto; font-size: var(--fs-meta); }
-
 .campaign-dtiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-5); }
 .campaign-dtile { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); text-decoration: none; }
 .campaign-dtile__link { display: flex; flex: 1; flex-direction: column; min-width: 0; color: inherit; text-decoration: none; }
@@ -48,5 +30,4 @@
 }
 @media (max-width: 700px) {
   .campaign-drows .entity-dots, .campaign-dtile > .entity-dots { opacity: 1; width: 40px; height: 40px; }
-  .list-page--d .list-page__sheet { padding: var(--sp-6) var(--sp-5); outline-offset: -6px; }
 }

@@ -78,7 +78,7 @@ export function SettingAudioTab({ settingId }: { settingId: number }) {
                   {current.battle_playlist && <span className="muted">боевая тема «{current.battle_playlist.name}»</span>}
                   <span className="population__spacer" />
                   {engine && (
-                    <button type="button" className="primary" disabled={playing === current.id} onClick={() => engine.setSet(current.id)}>
+                    <button type="button" className="d-btn" disabled={playing === current.id} onClick={() => engine.setSet(current.id)}>
                       {playing === current.id ? "Включён" : "Включить набор"}
                     </button>
                   )}

@@ -864,87 +864,6 @@
 /* ══ Блок «Сеттинги» в «Д» (макеты Set-*, приняты 2026-10-30) ══════════ */
 
 /* ── Список (Set-List) ─────────────────────────────────────────────── */
-/* Каркас списка (ListPage) ещё без вида «Д»: его полоса групп здесь
-   перекрашена в сегмент и посажена на лист, кнопка создания — в кислоту.
-   Локальная копия: после слияния ds-pilot — проп `ds` у ListPage, а это
-   убрать. */
-.settings-list .page-head button.primary,
-.settings-list .page-head button.primary:hover {
-  height: 48px;
-  padding: 0 var(--sp-7);
-  border: 0;
-  border-radius: 0;
-  background: var(--acid) var(--skin-acid-wash) center / 360px;
-  color: var(--acid-text);
-  font-family: var(--font-ui);
-  font-size: var(--fs-data);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  -webkit-mask-box-image: var(--skin-torn-mask) 48 / 5px round;
-}
-.settings-list .list-page > .tabs {
-  position: relative;
-  z-index: 1;
-  align-self: flex-start;
-  flex-wrap: nowrap;
-  max-width: calc(100% - 2 * var(--sp-8) - 80px);
-  gap: 0;
-  margin: var(--sp-5) 0 calc(-1 * (30px + 2 * var(--edge-width) + var(--sp-7) + var(--sp-5))) var(--sp-8);
-  padding: calc(var(--sp-7) + var(--edge-width)) 0 0;
-  border: 0;
-  box-shadow: none;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.settings-list .list-page > .tabs > button[role="tab"] {
-  flex: none;
-  height: calc(30px + 2 * var(--edge-width));
-  margin: 0 0 0 calc(-1 * var(--edge-width));
-  padding: 0 var(--sp-5);
-  border: var(--edge-width) solid var(--edge);
-  border-radius: 0;
-  clip-path: none;
-  background: var(--sheet);
-  color: var(--ink-2);
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  box-shadow: none;
-}
-.settings-list .list-page > .tabs > button[role="tab"]:first-child { margin-left: 0; }
-.settings-list .list-page > .tabs > button[role="tab"].active { background: var(--ink); color: var(--sheet); }
-.settings-list .list-page__tab-count {
-  margin-left: var(--sp-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  opacity: 0.75;
-}
-/* «+» каркаса — тихой кнопкой «+ Группа» за сегментом. */
-.settings-list .list-page > .tabs > button[aria-label="Новая группа"] {
-  margin-left: var(--sp-5);
-  border-color: transparent;
-  background: transparent;
-  color: var(--ink);
-}
-.settings-list .list-page > .tabs > button[aria-label="Новая группа"]::after { content: " Группа"; }
-.settings-list .list-page > .tabs > button[aria-label="Новая группа"].active { background: transparent; color: var(--ink); text-decoration: underline; }
-.settings-list .setting-group-create-inline { display: flex; flex: none; align-items: center; gap: var(--sp-3); margin-left: var(--sp-4); }
-.settings-list .list-page__content {
-  position: relative;
-  padding: calc(var(--sp-7) + 30px + 2 * var(--edge-width) + var(--sp-5)) var(--sp-8) var(--sp-8);
-  border: var(--edge-width) solid var(--edge);
-  outline: 1px solid var(--edge);
-  outline-offset: -8px;
-  background: var(--sheet);
-}
-.set-list__count {
-  position: absolute;
-  top: calc(var(--sp-7) + var(--sp-3));
-  right: var(--sp-8);
-}
 .set-list__genres { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .set-list__genres > .d-mono { margin-right: var(--sp-2); font-size: var(--fs-micro); }
 /* Жанр — метка машинописью с кромкой; выбранный — заливка чернилами. */
@@ -1040,17 +959,6 @@ button.set-gch:hover { background: var(--tab); }
 .set-arch__rows { margin: 0; padding: 0; list-style: none; }
 .set-arch__rows li { display: flex; align-items: center; gap: var(--sp-5); min-height: 44px; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); }
 .set-arch__rows li > span:first-child { flex: 1; min-width: 0; font-size: var(--fs-data); }
-@media (max-width: 700px) {
-  .settings-list .list-page > .tabs { margin-left: var(--sp-5); max-width: calc(100% - 2 * var(--sp-5)); }
-  .settings-list .list-page__content { padding-inline: var(--sp-5); }
-  .set-list__count { display: none; }
-}
-
-/* ── Профиль: общее ────────────────────────────────────────────────── */
-/* Имя с жанрами — только на герое «Обзора», на остальных вкладках имя в
-   крошках. Каркас ставит его первой строкой листа — прячем. Локальная
-   копия: после слияния ds-pilot — проп `hideIdent` у EntityPage. */
-.entity-page[data-entity-type="setting"] > .paper-sheet > .entity-page__ident { display: none; }
 /* ── Обзор (Set-Overview) ──────────────────────────────────────────── */
 .set-hero {
   display: grid;
@@ -1196,19 +1104,6 @@ button.set-gch:hover { background: var(--tab); }
 @media (max-width: 700px) {
   .set-passport.d-focal { padding: var(--sp-6); outline-offset: -6px; }
 }
-
-/* Тихая кнопка (§6.5) — локальная копия `.d-btn--quiet` из ds-pilot; после
-   слияния её даёт d-system.css, эту убрать. */
-.d-btn--quiet,
-.d-btn--quiet:hover { border-color: transparent; background: transparent; }
-.d-btn--quiet:hover { text-decoration: underline; }
-
-/* Голова раздела во вкладке: заголовок 26 с пояснением, действия справа
-   (как `.d-head` ds-pilot; после слияния — заменить). */
-.set-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-5) var(--sp-6); margin-bottom: var(--sp-6); }
-.set-head h2 { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 500; line-height: 1; letter-spacing: 0; text-transform: none; }
-.set-head__sub { margin-top: var(--sp-2); color: var(--muted); font-size: var(--fs-label); }
-.set-head__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-left: auto; }
 
 /* Колонка разделов слева (макет Camp-World / Set-World). */
 .set-cols { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-7); align-items: start; }

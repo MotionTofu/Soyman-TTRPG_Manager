@@ -33,6 +33,7 @@
 // ПРИНУЖДЕНИЕ. `client/scripts/check-list.mjs`: каталог из списка обязан
 // идти через каркас, своя `res-toolbar` вне каркаса запрещена, свои скелет
 // и карточка ошибки — по всему `src`.
+import "./list-page.css";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useAfterWrite, write } from "../data/hooks";
 import { ContextMenu } from "./ContextMenu";

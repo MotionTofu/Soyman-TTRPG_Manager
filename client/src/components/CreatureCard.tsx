@@ -295,6 +295,7 @@ export function CreatureCard({
   embedded,
   onEdit,
   forceExtras,
+  tableHeading,
 }: {
   data: CreatureCardPayload;
   // Показ игрокам: секрет и тактика НЕ рендерятся вовсе — свёрнутый блок
@@ -320,6 +321,8 @@ export function CreatureCard({
   // Правка по месту — только в профиле (Q8); в трекере и на Полотне её нет.
   onEdit?: () => void;
   forceExtras?: ForceExtras;
+  /** Население сеттинга: заголовок быстрого взгляда из Set-Population. */
+  tableHeading?: boolean;
 }) {
   const [statblockOpen, setStatblockOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ mechanics: true, description: true });
@@ -471,6 +474,7 @@ export function CreatureCard({
         </div>
       )}
 
+      {!collapsed && tableHeading && <h3 className="d-plate creature-card__table-heading">За столом</h3>}
       {!collapsed && showForce && <ForceBlock force={force} wide={variant === "page"} extras={forceExtras} />}
       {/* Пустой двигатель у личности — приглашение (Q5), но только там, где
           его можно заполнить: в трекере и на Полотне правки нет. */}
@@ -604,6 +608,7 @@ export function CreatureCardLoader({
   embedded,
   onEdit,
   forceExtras,
+  tableHeading,
 }: {
   type: string;
   id: number;
@@ -621,6 +626,8 @@ export function CreatureCardLoader({
   embedded?: boolean;
   onEdit?: () => void;
   forceExtras?: ForceExtras;
+  /** Население сеттинга: заголовок быстрого взгляда из Set-Population. */
+  tableHeading?: boolean;
 }) {
   const query = useQuery(creatureCardQuery(type, id, statblockId));
   const data = query.isPending ? undefined : (query.data ?? null);
@@ -644,6 +651,7 @@ export function CreatureCardLoader({
       embedded={embedded}
       onEdit={onEdit}
       forceExtras={forceExtras}
+      tableHeading={tableHeading}
     />
   );
 }

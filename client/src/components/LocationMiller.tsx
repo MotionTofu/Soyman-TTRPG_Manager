@@ -10,6 +10,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Modal } from "./Modal";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { EntityWizard } from "./entityWizard/EntityWizard";
+import { TypeGlyph } from "./TypeGlyph";
 import { PlaceCard } from "./PlaceCard";
 import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
@@ -463,6 +464,7 @@ export function LocationMiller({ settingId, lead }: { settingId: number; lead?: 
         }}
       >
         {/* Строка доски 16: имя, справа тип у листа или число детей со стрелкой. */}
+        <TypeGlyph type="location" />
         <span className="miller-item__name">{l.name}</span>
         {partyByPlace.has(l.id) && (
           <span className="miller-item__party" title={`Партия: ${partyByPlace.get(l.id)!.join(", ")}`}>
@@ -576,7 +578,8 @@ export function LocationMiller({ settingId, lead }: { settingId: number; lead?: 
                       setQuery("");
                     }}
                   >
-                    <span className="miller-item__name">{l.name}</span>
+                    <TypeGlyph type="location" />
+        <span className="miller-item__name">{l.name}</span>
                     <span className="miller-item__badge">{badgeFor(l)}</span>
                   </button>
                 </li>

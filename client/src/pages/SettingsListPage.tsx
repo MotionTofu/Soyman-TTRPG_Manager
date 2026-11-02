@@ -181,6 +181,7 @@ export function SettingsListPage() {
         }}
       />
       <ListPage
+        ds
         headingSection="settings"
         title="Сеттинги"
         groups={groups.map((g) => ({ id: String(g.id), label: g.name, count: groupCount(String(g.id)) }))}
@@ -203,9 +204,6 @@ export function SettingsListPage() {
         totalCount={settings.length}
         hideToolbar
       >
-        <span className="d-mono set-list__count">
-          {filteredSettings.length} / {settings.length}
-        </span>
         <div className="set-list__genres" role="group" aria-label="Жанр">
           <span className="d-mono">жанр</span>
           {GENRE_CATEGORIES.map((cat) => (
