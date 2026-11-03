@@ -46,7 +46,7 @@ type Request =
   | { kind: "image"; src: string }
   | { kind: "text"; text: string }
   | { kind: "field"; field: HTMLInputElement | HTMLTextAreaElement }
-  | { kind: "page" };
+  | { kind: "page"; local?: ContextMenuItem[] };
 
 const ARCHIVABLE = new Set(["campaign", "setting", "player", "session", "character", "location", "being", "artifact", "community", "adventure", "scene"]);
 const TEXT_INPUTS = new Set(["text", "search", "email", "url", "tel", "number", ""]);
@@ -179,7 +179,7 @@ export function PageContextMenu() {
   function entityItems(entity: EntityRef, local: ContextMenuItem[]): ContextMenuItem[] {
     const route = entityRoute(entity);
     return join([
-      local,
+      local.filter((item) => !item.danger),
       group([
         route && { label: "Открыть", onClick: () => navigate(route) },
         route && { label: "Открыть вторым окном", onClick: () => openSecondWindow(route) },
@@ -192,7 +192,7 @@ export function PageContextMenu() {
           onClick: () => void buildMentionToken(entity.type, entity.id, entity.name).then((t) => { if (t) void clip.writeText(t); }),
         },
       ]),
-      group([isGm && ARCHIVABLE.has(entity.type) && { label: "В архив", danger: true, onClick: () => void archive(entity) }]),
+      group([...local.filter((item) => item.danger), isGm && ARCHIVABLE.has(entity.type) && { label: "В архив", danger: true, onClick: () => void archive(entity) }]),
     ]);
   }
 
@@ -248,6 +248,7 @@ export function PageContextMenu() {
       case "page": {
         const here = pathname + search;
         return join([
+          m.local ?? [],
           group([{ label: "Открыть вторым окном", onClick: () => openSecondWindow(here) }]),
           group([
             { label: "Закрепить страницу", onClick: () => pin(here, buildPageLabel(pathname, search)) },

@@ -16,6 +16,11 @@ export function entityMark(type: string, id: number, name: string) {
   return { "data-entity-type": type, "data-entity-id": id, "data-entity-name": name };
 }
 
+/** Местные действия фона дополняют общие действия страницы. */
+export function openPageMenu(x: number, y: number, local: ContextMenuItem[]) {
+  window.dispatchEvent(new CustomEvent(ENTITY_MENU_EVENT, { detail: { kind: "page", local, x, y } }));
+}
+
 /** Открыть меню сущности: из «⋯» или из своего onContextMenu страницы, с местным блоком. */
 export function openEntityMenu(entity: EntityRef, x: number, y: number, local: ContextMenuItem[] = []) {
   window.dispatchEvent(new CustomEvent(ENTITY_MENU_EVENT, { detail: { kind: "entity", entity, local, x, y } }));

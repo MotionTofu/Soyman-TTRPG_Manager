@@ -392,7 +392,7 @@
     flex-direction: column;
   }
   .canvas-flow {
-    min-height: 320px;
+    min-height: 0;
   }
   .canvas-props {
     width: auto;
@@ -401,8 +401,8 @@
     border-top: var(--card-border-width) solid var(--line);
     max-height: 45%;
   }
-  /* Ниже порога холсту остаётся 360 px в ширину и 320 в высоту. MiniMap
-     (204 px) и легенда занимали бы больше половины нижней полосы, а нужны
+  /* На узком полотне MiniMap (204 px) и легенда занимали бы больше
+     половины нижней полосы, а нужны
      обе для обзора, которого на такой ширине всё равно нет: MiniMap
      показывает схему в масштабе, где нода — пиксель, легенда объясняет
      разъёмы, которые здесь не соединяют. Остаются только органы управления. */
@@ -1977,3 +1977,38 @@
   pointer-events: none;
 }
 .canvas-thread-label-input { width: 96px; }
+
+/* Вход в местные действия одинаков для мыши, клавиатуры и касания. */
+.canvas-node-actions {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  z-index: 1001;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  pointer-events: all;
+  opacity: 0;
+}
+.react-flow__node:is(:hover, :focus-within) > .canvas-node-actions { opacity: 1; }
+.canvas-node--card .canvas-node__band { padding-right: var(--sp-8); }
+.react-flow__node-pin > .canvas-node-actions { left: calc(100% + var(--sp-2)); right: auto; }
+.canvas-dialog { width: min(100%, 480px); min-width: 0; padding: var(--sp-6); max-height: calc(100dvh - var(--sp-8)); overflow-y: auto; }
+@media (pointer: coarse), (max-width: 700px) {
+  .canvas-node-actions { opacity: 1; }
+}
+@container (max-width: 700px) {
+  .canvas-flow { min-width: 0; }
+  .canvas-tool__add { flex-wrap: wrap; margin-left: 0; }
+  .canvas-tool__end { flex-wrap: wrap; margin-left: 0; }
+}
+
+/* У мобильной навигации и мини-плеера свой резерв, без десктопного
+   --player-bar-height: свойства доски должны заканчиваться выше них. */
+@media (max-width: 860px) {
+  .app-content.has-player:has(.canvas-page--board) { padding-bottom: calc(var(--sp-6) + 132px); }
+}

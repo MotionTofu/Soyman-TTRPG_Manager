@@ -20,6 +20,25 @@ import path from "path";
 import { ensureSubfolder, toFileUrl, VAULT_ROOT, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 
 export const canvasRouter = Router();
+
+// Только новые объекты: сохранённые стили и импорт старых досок не меняются.
+const NEW_PIN_SHAPE = "skull";
+const NEW_THREAD_WIDTH = 3.5;
+const NEW_THREAD_COLOR = "";
+
+/** Та же цель, что у frameAtPoint клиента: самая маленькая раскрытая рамка. */
+function placeCanvasObject(boardId: number, type: string, id: number, x: number, y: number) {
+  const parent = db.prepare(`
+    SELECT f.id FROM canvas_frames f
+    LEFT JOIN canvas_nodes n ON n.board_id=f.board_id AND n.node_type='frame' AND n.node_id=f.id
+    WHERE f.board_id=@board AND COALESCE(f.collapsed,0)=0
+      AND @x BETWEEN COALESCE(n.x,f.x) AND COALESCE(n.x,f.x)+f.w
+      AND @y BETWEEN COALESCE(n.y,f.y) AND COALESCE(n.y,f.y)+f.h
+    ORDER BY f.w*f.h, f.id LIMIT 1
+  `).get({ board: boardId, x, y }) as { id: number } | undefined;
+  db.prepare("INSERT INTO canvas_nodes (board_id,node_type,node_id,x,y,parent_key) VALUES (?,?,?,?,?,?)")
+    .run(boardId,type,id,x,y,parent ? `frame:${parent.id}` : null);
+}
 const ALLOWED_CANVAS_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2440,8 +2459,8 @@ canvasRouter.post("/free-boards/:id/preset", (req, res) => {
       // Пин заводится теми же дефолтами, что и поставленный рукой: цвет и
       // форма живут в палитре клиента (блок B1), второго места им не заводим.
       const info = db
-        .prepare("INSERT INTO canvas_pins (board_id, name, x, y, z_index) VALUES (?,?,?,?,?)")
-        .run(board.id, p.name, p.x, p.y, z);
+        .prepare("INSERT INTO canvas_pins (board_id, name, x, y, z_index, shape) VALUES (?,?,?,?,?,?)")
+        .run(board.id, p.name, p.x, p.y, z, NEW_PIN_SHAPE);
       const pid = Number(info.lastInsertRowid);
       db.prepare(
         "INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)"
@@ -2450,8 +2469,8 @@ canvasRouter.post("/free-boards/:id/preset", (req, res) => {
     });
     for (const [a, b] of spec.threads) {
       db.prepare(
-        "INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id) VALUES (?,?,?)"
-      ).run(board.id, Math.min(ids[a], ids[b]), Math.max(ids[a], ids[b]));
+        "INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color) VALUES (?,?,?,?,?)"
+      ).run(board.id, Math.min(ids[a], ids[b]), Math.max(ids[a], ids[b]), NEW_THREAD_WIDTH, NEW_THREAD_COLOR);
     }
     return ids.length;
   });
@@ -2467,7 +2486,7 @@ canvasRouter.post("/stickers", (req, res) => {
   const nt = note ?? "";
   const info = db.prepare("INSERT INTO canvas_stickers (board_id, text, name, note, color) VALUES (?,?,?,?,?)").run(board_id_r, text ?? n, n, nt, color ?? "paper");
   const sid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id_r, "sticker", sid, Number(x) || 0, Number(y) || 0);
+  placeCanvasObject(board_id_r, "sticker", sid, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: sid });
 });
 canvasRouter.put("/stickers/:id", (req, res) => {
@@ -2544,9 +2563,10 @@ canvasRouter.post("/pins", (req, res) => {
   if (!board_id) return res.status(400).json({ error: "board_id required" });
   const board_id_r = resolveFreeBoardId(board_id);
   const maxZ = (db.prepare("SELECT MAX(z_index) as m FROM canvas_pins WHERE board_id=?").get(board_id_r) as { m: number | null }).m ?? 1000;
-  const info = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?,?,?,?,?,?,?,?)").run(board_id_r, name ?? "Пин", Number(x) || 0, Number(y) || 0, size ?? "M", color ?? "#2C3E50", shape ?? "circle", maxZ + 1);
+  const info = db.prepare("INSERT INTO canvas_pins (board_id, name, x, y, size, color, shape, z_index) VALUES (?,?,?,?,?,?,?,?)").run(board_id_r, name ?? "Пин", Number(x) || 0, Number(y) || 0, size ?? "M", color ?? "#2C3E50", shape ?? NEW_PIN_SHAPE, maxZ + 1);
   const pid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y, z_index) VALUES (?,?,?,?,?,?)").run(board_id_r, "pin", pid, Number(x) || 0, Number(y) || 0, maxZ + 1);
+  placeCanvasObject(board_id_r, "pin", pid, Number(x) || 0, Number(y) || 0);
+  db.prepare("UPDATE canvas_nodes SET z_index=? WHERE board_id=? AND node_type='pin' AND node_id=?").run(maxZ + 1, board_id_r, pid);
   res.status(201).json(db.prepare("SELECT * FROM canvas_pins WHERE id=?").get(pid));
 });
 canvasRouter.put("/pins/:id", (req, res) => {
@@ -2606,7 +2626,7 @@ canvasRouter.post("/threads", (req, res) => {
   const toRow = db.prepare("SELECT board_id FROM canvas_pins WHERE id=?").get(b) as { board_id: number } | undefined;
   if (!fromRow || !toRow || fromRow.board_id !== board_id_r || toRow.board_id !== board_id_r) return res.status(400).json({ error: "pins not on board" });
   try {
-    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color, label) VALUES (?,?,?,?,?,?)").run(board_id_r, a, b, Number(width) || 2, color ?? "#2C3E50", String(label ?? "").trim());
+    const info = db.prepare("INSERT INTO canvas_threads (board_id, from_pin_id, to_pin_id, width, color, label) VALUES (?,?,?,?,?,?)").run(board_id_r, a, b, Number(width) || NEW_THREAD_WIDTH, color ?? NEW_THREAD_COLOR, String(label ?? "").trim());
     res.status(201).json(db.prepare("SELECT * FROM canvas_threads WHERE id=?").get(info.lastInsertRowid));
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -2654,27 +2674,41 @@ canvasRouter.get("/routes", (req, res) => {
   );
 });
 canvasRouter.post("/routes", (req, res) => {
-  const { board_id, x, y } = req.body as { board_id?: number; x?: number; y?: number };
+  const { board_id, x, y, from_key = "", to_key = "", kind = "transition", role = "" } = req.body as {
+    board_id?: number; x?: number; y?: number; from_key?: string; to_key?: string; kind?: string; role?: string;
+  };
   if (!board_id) return res.status(400).json({ error: "board_id required" });
-  const board_id_r = resolveFreeBoardId(board_id);
-  // Пустой рераут: вход (from_key) и выходы (canvas_route_outputs) подводятся
-  // потом, когда Мастер тянет к нему рёбра. Висящий одноконцовый допустим.
-  const info = db
-    .prepare("INSERT INTO canvas_routes (board_id, from_key, kind, role) VALUES (?,?,?,?)")
-    .run(board_id_r, "", "transition", "");
-  const id = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(
-    board_id_r,
-    "route",
-    id,
-    Number(x) || 0,
-    Number(y) || 0
-  );
-  res.status(201).json(
-    db
-      .prepare("SELECT id, from_key, kind, role FROM canvas_routes WHERE id=?")
-      .get(id)
-  );
+  const boardId = resolveFreeBoardId(board_id);
+  if (typeof from_key !== "string" || typeof to_key !== "string" || typeof role !== "string" || !ROUTE_KIND_RE.test(kind))
+    return res.status(400).json({ error: "invalid route" });
+  const attached = !!(from_key || to_key);
+  if (attached && (!from_key || !to_key || !isValidRouteKey(from_key) || !isValidRouteKey(to_key) || from_key === to_key || from_key.startsWith("pin:") || to_key.startsWith("pin:") || kind === "thread"))
+    return res.status(400).json({ error: "invalid route endpoints" });
+  const routeAt = (key: string) => key.startsWith("route:")
+    ? db.prepare("SELECT id,board_id,from_key,kind FROM canvas_routes WHERE id=?").get(Number(key.slice(6))) as { id: number; board_id: number; from_key: string; kind: string } | undefined
+    : null;
+  const before = routeAt(from_key), after = routeAt(to_key);
+  if ((from_key.startsWith("route:") && (!before || before.board_id !== boardId || before.kind !== kind)) ||
+      (to_key.startsWith("route:") && (!after || after.board_id !== boardId || after.kind !== kind)))
+    return res.status(400).json({ error: "route is not on this board" });
+  const id = db.transaction(() => {
+    const created = db.prepare("INSERT INTO canvas_routes (board_id,from_key,kind,role) VALUES (?,?,?,?)")
+      .run(boardId,from_key,kind,role);
+    const id = Number(created.lastInsertRowid);
+    placeCanvasObject(boardId,"route",id,Number(x) || 0,Number(y) || 0);
+    if (attached) {
+      // Разрыв меняет только раскладку: реальный переход/состав остаётся один.
+      db.prepare("INSERT INTO canvas_route_outputs (route_id,to_key,role) VALUES (?,?,?)").run(id,to_key,role);
+      if (before) {
+        db.prepare("DELETE FROM canvas_route_outputs WHERE route_id=? AND to_key=?").run(before.id,to_key);
+        db.prepare("INSERT INTO canvas_route_outputs (route_id,to_key,role) VALUES (?,?,?)").run(before.id,`route:${id}`,role);
+      }
+      if (after?.from_key === from_key)
+        db.prepare("UPDATE canvas_routes SET from_key=? WHERE id=?").run(`route:${id}`,after.id);
+    }
+    return id;
+  })();
+  res.status(201).json(db.prepare("SELECT id,from_key,kind,role FROM canvas_routes WHERE id=?").get(id));
 });
 canvasRouter.put("/routes/:id", (req, res) => {
   const id = Number(req.params.id);
@@ -2789,7 +2823,7 @@ canvasRouter.post("/images", (req, res) => {
   const board_id_r = resolveFreeBoardId(board_id);
   const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id_r, vaultRel(file_path), w ?? 320, h ?? 240);
   const iid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?, ?,?)").run(board_id_r, "image", iid, Number(x) || 0, Number(y) || 0);
+  placeCanvasObject(board_id_r, "image", iid, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: iid, file_url: toFileUrl(file_path) });
 });
 canvasRouter.post("/images/upload", upload.single("file"), async (req, res) => {
@@ -2811,7 +2845,7 @@ canvasRouter.post("/images/upload", upload.single("file"), async (req, res) => {
   const file_path = vaultRel(target);
   const info = db.prepare("INSERT INTO canvas_images (board_id, file_path, w, h) VALUES (?,?,?,?)").run(board_id_r, file_path, 320, 240);
   const iid = Number(info.lastInsertRowid);
-  db.prepare("INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?,?,?,?,?)").run(board_id_r, "image", iid, x, y);
+  placeCanvasObject(board_id_r, "image", iid, x, y);
   res.status(201).json({ id: iid, file_url: toFileUrl(file_path) });
 });
 
@@ -3164,9 +3198,7 @@ canvasRouter.post("/bundles/:id/insert", (req, res) => {
     .run(source.id, source.setting_id);
   const bundleId = Number(info.lastInsertRowid);
   const boardId = board_id ? resolveFreeBoardId(Number(board_id)) : ensureBoard("arc", Number(arc_id));
-  db.prepare(
-    "INSERT INTO canvas_nodes (board_id, node_type, node_id, x, y) VALUES (?, 'bundle', ?, ?, ?)"
-  ).run(boardId, bundleId, Number(x) || 0, Number(y) || 0);
+  placeCanvasObject(boardId, "bundle", bundleId, Number(x) || 0, Number(y) || 0);
   res.status(201).json({ id: bundleId, key: `bundle:${bundleId}` });
 });
 

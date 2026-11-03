@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { TypeGlyph } from "../components/TypeGlyph";
+import { CanvasNodeMenuContext, withCanvasNodeMenu } from "../components/CanvasNodeMenu";
+import { canvasEntity, canvasMoveCount, canvasRouteAt, canvasRouteForEdge } from "../canvasRoutes";
+import { entityMark, openEntityMenu, openPageMenu } from "../pageMenu";
 import {
   Background,
   Handle,
@@ -1234,21 +1237,21 @@ function SagEdge({ id, sourceX, sourceY, targetX, targetY, style, label, selecte
 const EDGE_TYPES = { sag: SagEdge };
 
 const NODE_TYPES = {
-  scene: SceneNode,
-  entity: EntityNode,
-  bundle: BundleNode,
-  event: EventNode,
-  check: CheckNode,
-  adventure: AdventureNode,
-  sticker: StickerNode,
-  image: ImageNode,
-  frame: FrameNode,
-  chapter: ChapterNode,
-  sound_set: SoundSetNode,
-  secret: SecretNode,
-  playlist: PlaylistNode,
-  pin: PinNode,
-  route: RouteNode,
+  scene: withCanvasNodeMenu(SceneNode),
+  entity: withCanvasNodeMenu(EntityNode),
+  bundle: withCanvasNodeMenu(BundleNode),
+  event: withCanvasNodeMenu(EventNode),
+  check: withCanvasNodeMenu(CheckNode),
+  adventure: withCanvasNodeMenu(AdventureNode),
+  sticker: withCanvasNodeMenu(StickerNode),
+  image: withCanvasNodeMenu(ImageNode),
+  frame: withCanvasNodeMenu(FrameNode),
+  chapter: withCanvasNodeMenu(ChapterNode),
+  sound_set: withCanvasNodeMenu(SoundSetNode),
+  secret: withCanvasNodeMenu(SecretNode),
+  playlist: withCanvasNodeMenu(PlaylistNode),
+  pin: withCanvasNodeMenu(PinNode),
+  route: withCanvasNodeMenu(RouteNode),
 };
 
 /** Ширина холста, ниже которой палитра и поиск перестают помещаться рядом.
@@ -1645,7 +1648,10 @@ function toFlowNode(
   /** Схема сеттинга: у приключений появляются разъёмы (блок D3). */
   onSettingMap = false
 ): Node<CanvasNodeData> {
-  const base: Node<CanvasNodeData> = { id: n.key, position: { x: n.x, y: n.y }, zIndex: n.z_index ?? 0 } as Node<CanvasNodeData>;
+  const entity = canvasEntity(n.key, boardNodeTitle(n));
+  const base: Node<CanvasNodeData> = { id: n.key, position: { x: n.x, y: n.y }, zIndex: n.z_index ?? 0,
+    ...(entity ? { domAttributes: entityMark(entity.type, entity.id, entity.name) } : {}),
+  } as Node<CanvasNodeData>;
   if (n.node_type === "bundle") {
     return {
       ...base,
@@ -2017,6 +2023,7 @@ function BoardTile({
     <div
       className="card canvas-index__board"
       onContextMenu={(e) => {
+        if (e.shiftKey) return;
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
       }}
@@ -2319,7 +2326,7 @@ export function CanvasPage() {
   const index = useResource<CanvasIndex>(!arcId && !freeId ? canvasPaths.index() : null).data ?? null;
   const [canvasTab, setCanvasTab] = useState<"campaigns" | "settings" | "boards">("campaigns");
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem("canvasPropsCollapsed") === "1");
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; title?: string; items: ContextMenuItem[] } | null>(null);
   // Узловой дизайн: протянутая стрелка ждёт решения «улика или проход», а
   // щелчок по стрелке улики открывает её улики. Оба — показанные id сцен.
   // secret — цель не сцена, а тайна на холсте (Q20): тогда только улика.
@@ -2342,7 +2349,7 @@ export function CanvasPage() {
     const top = anchor ? Math.min(anchor.top, window.innerHeight - 240) : 80;
     setCreatureCard({ type, id, x: Math.max(8, left), y: Math.max(8, top) });
   }, []);
-  const [canvasMenuOpen, setCanvasMenuOpen] = useState(false);
+  const [canvasMenuOpen, setCanvasMenuOpen] = useState<{ x: number; y: number } | null>(null);
   const [zoomPct, setZoomPct] = useState(100);
   const [showCanvasWizard, setShowCanvasWizard] = useState(false);
   const [showOpenWizard, setShowOpenWizard] = useState(false);
@@ -2844,6 +2851,7 @@ export function CanvasPage() {
         label: e.id.includes("::r") ? undefined : (e.label || undefined),
         style: e.width ? { stroke: e.color, strokeWidth: e.width } : undefined,
         markerEnd: e.kind === "thread" ? undefined : EDGE_MARKER,
+        data: { canvasRoute: canvasRouteForEdge(e.kind, e.source, e.target, e.target_handle ?? "") },
         // Вид ребра — классом, а не цветом: в палитре ровно три цвета.
         // Исход проверки пунктиром (ведёт туда же, но по броску, а не по
         // решению), состав — тонкой линией: это не ход истории, а из чего
@@ -2895,7 +2903,7 @@ export function CanvasPage() {
     if (!board) return [];
     const chapters = board.nodes.filter((n) => n.node_type === "chapter").length;
     const scenes = board.nodes.filter((n) => n.node_type === "scene").length;
-    const moves = board.edges.filter((e) => e.kind === "transition" || e.kind === "outcome").length;
+    const moves = canvasMoveCount(board.edges);
     const parts: string[] = [];
     if (chapters) parts.push(`${chapters} ${plural(chapters, "глава", "главы", "глав")}`);
     if (scenes) parts.push(`${scenes} ${plural(scenes, "сцена", "сцены", "сцен")}`);
@@ -3983,13 +3991,6 @@ export function CanvasPage() {
       // `from_key` (`PUT /routes/:id`), проводка из выхода добавляет выход
       // (`POST /routes/:id/outputs`).
       if (sourceType === "route" || targetType === "route") {
-        // Диагностика коннектов рераута (временная).
-        console.log("[reroute] onConnect", {
-          source: connection.source,
-          target: connection.target,
-          sourceHandle: connection.sourceHandle ?? null,
-          targetHandle: connection.targetHandle ?? null,
-        });
         // Вход или выход? Во вход рераута входят слева (target — рераут), из
         // выхода выходят справа (source — рераут).
         // P0-1: from/to �� handle route-in/route-out, � �� �� ���� � ��������� ���������� from ��� drag � ��������
@@ -4658,6 +4659,7 @@ export function CanvasPage() {
 
   const handleEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
+      if (event.shiftKey) return;
       event.preventDefault();
       const [kind, rawId] = edge.id.split(":");
       if (kind === "clue") {
@@ -4708,7 +4710,7 @@ export function CanvasPage() {
       const [type, id] = splitKey(node.id);
       // Пин — векторная точка, верхний слой
       if (type === "pin") {
-        const selectedPins = nodes.filter((n) => n.id.startsWith("pin:") && n.selected);
+        const selectedPins = node.selected ? nodes.filter((n) => n.id.startsWith("pin:") && n.selected) : [];
         const targetPins = selectedPins.length ? selectedPins : [node];
         const items: ContextMenuItem[] = [];
         items.push({
@@ -4836,6 +4838,7 @@ export function CanvasPage() {
   // Контекст-меню: правая кнопка (Q4) — нода Delete/Дублировать/Переименовать, артборд Create
   const handleNodeContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent, node: Node<CanvasNodeData>) => {
+      if (event.shiftKey) return;
       (event as React.MouseEvent).preventDefault();
       const selected = nodes.filter((n) => n.selected);
       // мульти-выделение стикер+картинка → меню группы (Q4)
@@ -4849,13 +4852,13 @@ export function CanvasPage() {
           ...groupColorItems(selected),
           { label: "Удалить выбранные", danger: true, onClick: () => onNodesDelete(selected) },
         ];
-        setContextMenu({ x: event.clientX, y: event.clientY, items });
+        setContextMenu({ x: event.clientX, y: event.clientY, title: selected.length > 1 && node.selected ? "Выбранные объекты" : nodeTitle(node.data) ?? "Объект", items });
         return;
       }
       const [type, id] = splitKey(node.id);
       // Пин — векторная точка, верхний слой
       if (type === "pin") {
-        const selectedPins = nodes.filter((n) => n.id.startsWith("pin:") && n.selected);
+        const selectedPins = node.selected ? nodes.filter((n) => n.id.startsWith("pin:") && n.selected) : [];
         const targetPins = selectedPins.length ? selectedPins : [node];
         const items: ContextMenuItem[] = [];
         items.push({
@@ -4908,9 +4911,10 @@ export function CanvasPage() {
           danger: true,
           onClick: () => void boardAction(() => write.del(`/canvas/pins/${id}`), { failure: "Удаление пина" }),
         });
-        setContextMenu({ x: event.clientX, y: event.clientY, items });
+        setContextMenu({ x: event.clientX, y: event.clientY, title: selected.length > 1 && node.selected ? "Выбранные объекты" : nodeTitle(node.data) ?? "Объект", items });
         return;
       }
+      const entity = canvasEntity(node.id, nodeTitle(node.data) ?? "Объект");
       const items: ContextMenuItem[] = [];
       // Войти — дрилл-даун в другой холст. Осталось только у ярлыка приключения:
       // у сцены и главы «Войти» повторяло одиночный щелчок и не делало ничего.
@@ -4923,11 +4927,6 @@ export function CanvasPage() {
               setSearchParams({ setting: String(sid), arc: String(id), ...(campaignMapId ? { campaign: String(campaignMapId) } : {}) }),
           });
         }
-      } else if (type === "scene") {
-        items.push({
-          label: "Открыть страницу сцены",
-          onClick: () => navigate(`/scenes/${id}`),
-        });
       }
       if (type === "being" || type === "compendium_entry") {
         items.push({
@@ -4936,16 +4935,6 @@ export function CanvasPage() {
             const el = document.querySelector(`[data-id="${node.id}"]`);
             openCreatureCard(type, id, el?.getBoundingClientRect() ?? null);
           },
-        });
-      }
-      if (ENTITY_PAGE_PATH[type]) {
-        // Одно правило на все виды: у узла, за которым стоит страница, есть
-        // дверь на неё. До блока G7 её имела одна сцена, а существо, локация
-        // и предмет — нет, хотя страницы у них есть; «здесь открывается, а
-        // здесь нет» Мастеру пришлось бы помнить за столом.
-        items.push({
-          label: "Открыть страницу",
-          onClick: () => navigate(`/${ENTITY_PAGE_PATH[type]}/${id}`),
         });
       }
       if (type === "sticker" || type === "image" || type === "check" || type === "adventure" || type === "bundle") {
@@ -4982,11 +4971,12 @@ export function CanvasPage() {
         items.push({
           label: "Дублировать",
           onClick: async () => {
-            const pos = { x: node.position.x + 20, y: node.position.y + 20 };
+            const absolute = toAbsolute(node, new Map(nodes.map((item) => [item.id, item])));
+            const pos = { x: absolute.x + 20, y: absolute.y + 20 };
             if (type !== "sticker") return;
             const d = node.data as StickerNodeData;
             await boardAction(
-              () => write.post("/canvas/stickers", { board_id: board?.board_id, text: d.text, color: d.color, x: pos.x, y: pos.y }),
+              () => write.post("/canvas/stickers", { board_id: board?.board_id, text: d.text, name: d.name, note: d.note, color: d.color, x: pos.x, y: pos.y }),
               { retry: false, failure: "Копия стикера" }
             );
           },
@@ -5052,8 +5042,8 @@ export function CanvasPage() {
           });
         }
       }
-        items.push({
-          label: "Удалить",
+        if (!["scene", "chapter", "adventure"].includes(type)) items.push({
+          label: entity ? "Снять с доски" : "Удалить",
           danger: true,
           onClick: async () => {
           // Архивация сцены и главы — это правка самой записи: её видят и
@@ -5080,7 +5070,8 @@ export function CanvasPage() {
           );
         },
       });
-      setContextMenu({ x: event.clientX, y: event.clientY, items });
+      if (entity) { setContextMenu(null); openEntityMenu(entity, event.clientX, event.clientY, items); }
+      else setContextMenu({ x: event.clientX, y: event.clientY, title: selected.length > 1 && node.selected ? "Выбранные объекты" : nodeTitle(node.data) ?? "Объект", items });
     },
     [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm, groupColorItems]
   );
@@ -5144,6 +5135,7 @@ export function CanvasPage() {
 
   const handleSelectionContextMenu = useCallback(
     (event: React.MouseEvent, selectedNodes: Node<CanvasNodeData>[]) => {
+      if (event.shiftKey) return;
       event.preventDefault();
       const selected = selectedNodes.length ? selectedNodes : nodes.filter((n) => n.selected);
       if (selected.length <= 1) return;
@@ -5158,7 +5150,7 @@ export function CanvasPage() {
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, nodes, onNodesDelete, createGroup, groupColorItems]
+    [nodes, onNodesDelete, createGroup, groupColorItems]
   );
 
   // Стикер и картинка — одно действие для меню по правой кнопке и для кнопок
@@ -5193,6 +5185,7 @@ export function CanvasPage() {
 
   const handlePaneContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent) => {
+      if (event.shiftKey) return;
       (event as React.MouseEvent).preventDefault();
       const selected = nodes.filter((n) => n.selected);
       if (selected.length > 1) {
@@ -5220,13 +5213,15 @@ export function CanvasPage() {
         },
         { label: PALETTE_NAME, onClick: () => setPaletteOpen(true) },
       ];
-      setContextMenu({ x: event.clientX, y: event.clientY, items });
+      setContextMenu(null);
+      openPageMenu(event.clientX, event.clientY, items);
     },
     [nodes, onNodesDelete, createGroup, groupColorItems, addSticker, addImage]
   );
 
   const handleDrop = useCallback(
     async (event: React.DragEvent) => {
+      if (event.shiftKey) return;
       event.preventDefault();
       const clueRaw = event.dataTransfer.getData(CLUE_DRAG_MIME);
       if (clueRaw) {
@@ -5275,32 +5270,16 @@ export function CanvasPage() {
             return;
           }
           if (data.kind === "route") {
-            // P1: автоподхват ближайшего ребра при дропе — один жест вместо двух подводок
-            let from_key = "";
-            let to_key = "";
-            let kind: string | undefined = undefined;
-            let bestDist = Infinity;
-            let bestEdge: any = null;
-            for (const e of edges) {
-              const s: any = (nodes as any[]).find((n: any) => n.id === e.source);
-              const t2: any = (nodes as any[]).find((n: any) => n.id === e.target);
-              if (!s || !t2) continue;
-              const mx = (s.position.x + t2.position.x) / 2;
-              const my = (s.position.y + t2.position.y) / 2;
-              const d = Math.hypot(x - mx, y - my);
-              if (d < bestDist) { bestDist = d; bestEdge = e; }
-            }
-            if (bestEdge && bestDist < 120) {
-              from_key = bestEdge.source;
-              to_key = bestEdge.target;
-              kind = "transition";
-            }
+            const byId = new Map(nodes.map((node) => [node.id, node]));
+            const boxes = new Map(nodes.map((node) => {
+              const position = toAbsolute(node, byId), size = getNodeSize(node);
+              return [node.id, { ...position, w: size.w, h: size.h }];
+            }));
+            const route = canvasRouteAt({ x, y }, edges, boxes, 96 / (flowRef.current?.getZoom() ?? 1));
             const boardId = board.board_id;
             await boardAction(
               () =>
-                from_key && to_key
-                  ? write.post("/canvas/routes", { board_id: boardId, x, y, from_key, to_key, kind })
-                  : write.post("/canvas/routes", { board_id: boardId, x, y }),
+                write.post("/canvas/routes", { board_id: boardId, x, y, ...route }),
               { retry: false, failure: "Новый маршрут" }
             );
             return;
@@ -5617,7 +5596,12 @@ export function CanvasPage() {
       : { x: 0, y: 0 };
   };
 
+  const openNodeMenu = useEvent((id: string, x: number, y: number) => {
+    const node = nodes.find((item) => item.id === id);
+    if (node) handleNodeContextMenu(new MouseEvent("contextmenu", { clientX: x, clientY: y, cancelable: true }), node);
+  });
   const boardSurface = board && (
+    <CanvasNodeMenuContext.Provider value={openNodeMenu}>
     <div className="canvas-body">
       <div className="canvas-flow" ref={flowElRef}>
         {/* Снэп включён всегда, без органа управления и без модификатора
@@ -5626,6 +5610,7 @@ export function CanvasPage() {
             не доказано обратное. Растягивание рамок сюда входит даром — ручки
             ресайза читают тот же `snapGrid` из стора React Flow. */}
         <ReactFlow
+          minZoom={0.1}
           nodes={nodes}
           edges={edges}
           nodeTypes={NODE_TYPES}
@@ -5867,6 +5852,7 @@ export function CanvasPage() {
           <SceneProperties sceneId={selectedSceneId} act={boardAction} board={board} />
         ) : null)}
     </div>
+    </CanvasNodeMenuContext.Provider>
   );
 
   // Список полотен и открытая доска — две разные страницы под одним адресом:
@@ -6071,35 +6057,18 @@ export function CanvasPage() {
               <button className="d-btn d-btn--sm" onClick={() => flowRef.current?.zoomOut()} aria-label="Масштаб −" title="Масштаб −">−</button>
               <button className="canvas-tool__zoom d-mono" onClick={() => flowRef.current?.zoomTo(1, { duration: 200 })} title="Масштаб 100 %">{zoomPct} %</button>
               <button className="d-btn d-btn--sm" onClick={() => flowRef.current?.zoomIn()} aria-label="Масштаб +" title="Масштаб +">+</button>
-              <span style={{ position: "relative" }}>
-                <button className="d-btn d-btn--sm" onClick={() => setCanvasMenuOpen((v) => !v)} aria-label="Ещё" aria-expanded={canvasMenuOpen}>⋯</button>
-                {canvasMenuOpen && (
-                  <div className="context-menu canvas-tool__menu">
-                    <button onClick={() => { setCanvasMenuOpen(false); setShowCanvasWizard(true); }}>Мастер создания холста</button>
-                    <button onClick={() => { setCanvasMenuOpen(false); handleQuickCanvas(); }}>Быстрый холст</button>
-                    <button onClick={() => { setCanvasMenuOpen(false); setShowOpenWizard(true); }}>Открыть</button>
-                    {arcId > 0 && hasScenesOnBoard && !rehearsalOn && (
-                      <button title="Запрос для внешнего чата: добрать улик до правила трёх" onClick={() => { setCanvasMenuOpen(false); setProposeOpen(true); }}>
-                        Предложить улики
-                      </button>
-                    )}
-                    <button onClick={() => { setCanvasMenuOpen(false); autoLayoutUnplaced(); }}>Упорядочить узлы</button>
-                    {/* Пункта нет, когда гасить нечего. Экспорта и импорта
-                        здесь нет намеренно (Q6): вернутся вместе с экспортом. */}
-                    {(dismissed.setting.length > 0 || dismissed.scenes.length > 0) && (
-                      <button
-                        onClick={(e) => {
-                          setCanvasMenuOpen(false);
-                          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          openDismissed(r.left, r.bottom);
-                        }}
-                      >
-                        Заглушённые подсказки ({dismissed.setting.length + dismissed.scenes.length})
-                      </button>
-                    )}
-                  </div>
-                )}
-              </span>
+              <button className="d-btn d-btn--sm" aria-label="Действия с холстом" aria-haspopup="menu" aria-expanded={!!canvasMenuOpen}
+                onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); setCanvasMenuOpen((current) => current ? null : { x: rect.left, y: rect.bottom }); }}>⋯</button>
+              {canvasMenuOpen && <ContextMenu x={canvasMenuOpen.x} y={canvasMenuOpen.y} title={boardTitle} ariaLabel="Действия с холстом"
+                onClose={() => setCanvasMenuOpen(null)} items={[
+                  { label: "Мастер создания холста", onClick: () => setShowCanvasWizard(true) },
+                  { label: "Быстрый холст", onClick: () => { void handleQuickCanvas(); } },
+                  { label: "Открыть", onClick: () => setShowOpenWizard(true) },
+                  ...(arcId > 0 && hasScenesOnBoard && !rehearsalOn ? [{ label: "Предложить улики", onClick: () => setProposeOpen(true) }] : []),
+                  { label: "Упорядочить узлы", onClick: autoLayoutUnplaced },
+                  ...(dismissed.setting.length + dismissed.scenes.length > 0 ? [{ label: `Заглушённые подсказки (${dismissed.setting.length + dismissed.scenes.length})`,
+                    onClick: () => openDismissed(canvasMenuOpen.x, canvasMenuOpen.y) }] : []),
+                ]} />}
             </span>
           </>
         )}
@@ -6315,7 +6284,7 @@ export function CanvasPage() {
           }}
         />
       )}
-      {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
+      {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} title={contextMenu.title} ariaLabel={contextMenu.title ?? "Действия на холсте"} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
       {pendingLink && (
         <NewLinkDialog
           fromName={sceneName(pendingLink.from)}
@@ -6372,7 +6341,7 @@ function CanvasWizard({ settings, arcs, onClose, onCreated }: { settings: Settin
   const canNext = step === 1 ? !!entityKind : step === 2 ? (entityKind === "free" || settingId !== "free") : !!name.trim();
   return (
     <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }} onClick={onClose}>
-      <div className="card" style={{ padding: 16, minWidth: 360, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+      <div className="card canvas-dialog" onClick={(e) => e.stopPropagation()}>
         <h3>Мастер создания холста — шаг {step}/3</h3>
         {step === 1 && (
           <div className="stack">
@@ -6478,7 +6447,7 @@ function OpenWizard({ settings, arcs, onClose, onOpen }: { settings: Setting[]; 
   const chapters = wizardArcs.filter((a) => a.parent_id === Number(arcId));
   return (
     <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }} onClick={onClose}>
-      <div className="card" style={{ padding: 16, minWidth: 320 }} onClick={(e) => e.stopPropagation()}>
+      <div className="card canvas-dialog" onClick={(e) => e.stopPropagation()}>
         <h3>Открыть</h3>
         <div className="stack">
           <label>Сеттинг <select value={String(settingId)} onChange={(e) => { const v = e.target.value; setSettingId(v === "free" ? "free" : v ? Number(v) : ""); setArcId(""); setChapterId(""); }}><option value="">— выбери —</option><option value="free">Общие (фриформ)</option>{settings.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></label>
@@ -7761,6 +7730,7 @@ function CanvasPalette({
   const active = PALETTE_TABS.find((t) => t.key === tab);
   const entityType = active && "entity" in active ? active.entity : null;
   const compendiumKinds = active && "compendiumKinds" in active ? active.compendiumKinds : null;
+  const entityQuery = settingId ? "" : query.trim();
 
   useEffect(() => {
     if (!entityType) {
@@ -7770,8 +7740,12 @@ function CanvasPalette({
     if (!settingId) {
       if (boardId) {
         // фриформ: существа/локации/предметы из всех сеттингов — через /search (пустой запрос = все)
-        readResource<{ id: number; title: string }[]>(`/search?q=&types=${entityType}`)
-          .then((rows) => setEntities(rows.slice(0, 40).map((r) => ({ type: entityType, id: r.id, name: r.title }))));
+        let cancelled = false;
+        readResource<{ id: number; title: string }[]>(`/search?q=${encodeURIComponent(entityQuery)}&types=${entityType}`)
+          .then((rows) => {
+            if (!cancelled) setEntities(rows.slice(0, 40).map((r) => ({ type: entityType, id: r.id, name: r.title })));
+          });
+        return () => { cancelled = true; };
       } else {
         setEntities([]);
       }
@@ -7779,7 +7753,7 @@ function CanvasPalette({
     }
     readResource<{ id: number; name: string }[]>(`${ENTITY_LIST_URL[entityType]}?setting_id=${settingId}`)
       .then((rows) => setEntities(rows.map((r) => ({ type: entityType, id: r.id, name: r.name }))));
-  }, [entityType, settingId, boardId]);
+  }, [entityType, settingId, boardId, entityQuery]);
 
   // События сеттинга и кампании вместе: сцена приключения чаще двигает
   // что-то своё, кампанейское («срыв поставки в порту»), чем историю мира,
@@ -8238,7 +8212,7 @@ function CanvasPalette({
               }}
             >
               <span className="canvas-palette__item-name">📌 Пин</span>
-              <span className="canvas-palette__item-meta">Точка • M • круг</span>
+              <span className="canvas-palette__item-meta">Точка • M • череп</span>
             </button>
             <button
               className="canvas-palette__item"

@@ -43,6 +43,7 @@ function moveFocus(root: HTMLElement, step: number) {
 export function ContextMenu({ x, y, title, glyph, ariaLabel, items, footer, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const subRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const [expanded, setExpanded] = useState<{ index: number; x: number; y: number } | null>(null);
   // Меню открывается там, где щёлкнули, и у правого-нижнего края уезжало за
   // экран: на 375 px меню плитки доски (180 px) от кнопки «⋯» на 304 px просто
@@ -75,6 +76,9 @@ export function ContextMenu({ x, y, title, glyph, ariaLabel, items, footer, onCl
   // после щелчка мышью не срабатывает. Один раз: onClose у вызывающих часто
   // новый на каждую отрисовку, и фокус прыгал бы наверх.
   useEffect(() => {
+    if (!ref.current?.contains(document.activeElement)) {
+      triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     (ref.current?.querySelector<HTMLElement>("button") ?? ref.current)?.focus();
   }, []);
 
@@ -83,7 +87,10 @@ export function ContextMenu({ x, y, title, glyph, ariaLabel, items, footer, onCl
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        triggerRef.current?.focus({ preventScroll: true });
+        onClose();
+      }
     }
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleKey);
