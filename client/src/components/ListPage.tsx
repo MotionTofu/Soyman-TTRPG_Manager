@@ -104,6 +104,8 @@ export interface ListPageProps {
    *  сегментом с «+ Группа», поиском и счётчиком справа.
    *  Пока только у «Кампаний»: остальные списки переводят свои блоки. */
   ds?: boolean;
+  /** Полоса групп над рамкой, поиск и вид внутри (принятые макеты игроков). */
+  groupsAbove?: boolean;
 }
 
 type GroupMenu =
@@ -140,6 +142,7 @@ export function ListPage({
   hideToolbar,
   children,
   ds = false,
+  groupsAbove = false,
 }: ListPageProps) {
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -214,8 +217,9 @@ export function ListPage({
   const tabs: ListPageGroup[] = [
     ...(allLabel != null ? [{ id: "all", label: allLabel, count: ds ? totalCount : undefined }] : []),
     ...(extraTabs ?? []).map((t) => ({ id: t.id, label: t.label, count: t.count })),
+    ...(groupsAbove && showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
     ...groups,
-    ...(showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
+    ...(!groupsAbove && showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
   ];
   const current = activeGroup ?? "all";
 
@@ -230,11 +234,11 @@ export function ListPage({
 
   const resetVisible = showReset ?? search.trim() !== "";
 
-  function dBar() {
+  function dBar(part: "all" | "groups" | "toolbar" = "all") {
     return (
       <div className="list-page__dbar">
-        {tabs.length > 0 && (
-          <div className="d-seg d-seg--scroll" role="tablist" aria-label={typeof title === "string" ? title : undefined}>
+        {part !== "toolbar" && tabs.length > 0 && (
+          <div className={groupsAbove ? "tabs d-tabs" : "d-seg d-seg--scroll"} role="tablist" aria-label={typeof title === "string" ? title : undefined}>
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -269,7 +273,7 @@ export function ListPage({
             ))}
           </div>
         )}
-        {groupsEndpoint &&
+        {part !== "toolbar" && groupsEndpoint &&
           (creatingGroup ? (
             <div className="list-page__group-new">
               <input
@@ -296,16 +300,16 @@ export function ListPage({
               + Группа
             </button>
           ))}
-        {!hideToolbar && <>
+        {part !== "groups" && !hideToolbar && <>
           <input type="search" className="d-input list-page__search"
             placeholder={searchPlaceholder ?? "Поиск…"} aria-label={searchLabel ?? "Поиск"}
             value={search} onChange={(event) => onSearch(event.target.value)} />
           {toolbarExtra}
           {resetVisible && <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={onResetSearch} title={resetTitle ?? "Сбросить поиск"}>Сбросить</button>}
         </>}
-        <span className="d-mono list-page__count" aria-live="polite">
+        {part !== "groups" && <span className="d-mono list-page__count" aria-live="polite">
           {filteredCount} / {totalCount}
-        </span>
+        </span>}
       </div>
     );
   }
@@ -329,7 +333,8 @@ export function ListPage({
         }
       />
 
-      {ds && <div className="list-page__sheet">{dBar()}<div className="list-page__content">{children}</div></div>}
+      {ds && groupsAbove && dBar("groups")}
+      {ds && <div className="list-page__sheet">{dBar(groupsAbove ? "toolbar" : "all")}<div className="list-page__content">{children}</div></div>}
 
       {!ds && tabs.length > 0 && (
         <div className="tabs" role="tablist" aria-label={typeof title === "string" ? title : undefined}>

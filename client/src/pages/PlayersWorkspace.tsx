@@ -1,62 +1,20 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { invalidateAffects } from "../data/entities";
 import { labelled } from "../data/notices";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
-import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
-import { formatNearestDate } from "../nearestDate";
-import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
-import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { SectionBackground } from "../components/SectionBackground";
 import { ListPage } from "../components/ListPage";
+import { PlayerListCard } from "../components/players/PlayerListCard";
 import type { Player, PlayerGroup } from "../types";
-
-function PlayerCoverTile({ player: p, active }: { player: Player; active: boolean }) {
-  const rawUrl = p.thumbnail_image_url ?? p.avatar_image_url ?? null;
-  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
-  const authBlob = useAuthenticatedFileUrl(imageUrl);
-  const bg = imageUrl?.startsWith("/files/")
-    ? (authBlob ? `url("${authBlob}")` : undefined)
-    : safeBackgroundImage(imageUrl);
-
-  return (
-    <Link
-      to={`/players/${p.id}`}
-      className={`card campaign-tile${active ? " campaign-tile--active" : ""}`}
-      aria-current={active ? "true" : undefined}
-    >
-      <div className="campaign-tile-cover cover-halftone">
-        {bg ? (
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{p.name}</h3>
-      </div>
-      <div className="campaign-tile-meta">
-        <div className="campaign-tile-system">
-          {p.notes ? <MentionText text={p.notes} /> : "без описания"}
-        </div>
-        {p.next_planned_date && (
-          <div className="campaign-tile-next">
-            <span className="campaign-tile-next-mark" aria-hidden="true" />
-            <span>{formatNearestDate(p.next_planned_date)}</span>
-          </div>
-        )}
-      </div>
-    </Link>
-  );
-}
+import "./players-d.css";
 
 const NO_PLAYERS: Player[] = [];
 const NO_GROUPS: PlayerGroup[] = [];
@@ -64,7 +22,6 @@ const NO_GROUPS: PlayerGroup[] = [];
 const GROUP_AFFECTS = [{ path: "/player-groups" }];
 
 export function PlayersWorkspace() {
-  const navigate = useNavigate();
   const client = useQueryClient();
   const run = useAction();
   const playersState = useResource<Player[]>("/players");
@@ -90,6 +47,8 @@ export function PlayersWorkspace() {
   });
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"tiles" | "rows">("tiles");
+  const [saving, setSaving] = useState(false);
 
   // Группы правит каркас списка (ListPage) — после его правки перечитываются
   // группы и их составы.
@@ -97,7 +56,6 @@ export function PlayersWorkspace() {
     void invalidateAffects(client, GROUP_AFFECTS);
   }
 
-  useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
   const filteredPlayers = (() => {
     const qq = q.trim().toLowerCase();
@@ -117,63 +75,54 @@ export function PlayersWorkspace() {
     );
   })();
 
-  // Профиль игрока — своя страница (спека campaign-paper, Q47): плитка
-  // ведёт на /players/:id, панели справа больше нет.
-
   async function create() {
-    if (!name.trim()) return;
-    // Модалка остаётся открытой при отказе — набранное не теряется.
-    const created = await run(labelled("Новый игрок", () => write.post<Player>("/players", { name, notes })), {
-      affects: [{ kind: "player" }],
-      retry: false,
-    });
-    if (!created) return;
-    syncMentionLinks("player", created.id, "", notes);
-    setCreating(false);
-    setName("");
-    setNotes("");
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      const created = await run(labelled("Новый игрок", () => write.post<Player>("/players", { name: name.trim(), notes })), {
+        affects: [{ kind: "player" }], retry: false,
+      });
+      if (!created) return;
+      syncMentionLinks("player", created.id, "", notes);
+      setCreating(false);
+      setName("");
+      setNotes("");
+    } finally { setSaving(false); }
   }
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack players-list-d">
       <SectionBackground />
       <ListPage
+        ds
+        groupsAbove
+        allLabel="Все игроки"
+        ungroupedLabel="Без группы"
         headingSection="players"
         title="Игроки"
-        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        groups={groups.map((g, index) => ({ id: String(g.id), label: g.name, count: memberQueries[index]?.data?.length }))}
         groupsEndpoint="/player-groups"
         groupsDeleteNote="Игроки не будут удалены — они останутся в разделе «Все игроки»."
         onGroupsChanged={refreshGroups}
         createLabel="+ Новый игрок"
         onCreate={() => setCreating(true)}
         actions={
-          <Link
-            to="/invitations"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              border: "1px solid var(--line)",
-              borderRadius: "var(--card-radius)",
-              fontFamily: "var(--font-ui)",
-              fontSize: "var(--fs-micro)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              textDecoration: "none",
-              color: "var(--ink)",
-              background: "var(--paper)",
-            }}
-          >
+          <Link to="/invitations" className="d-btn"          >
             Пригласить →
           </Link>
         }
         activeGroup={activeTab}
-        onGroupChange={(g) => { setActiveTab(g); navigate("/players"); }}
+        onGroupChange={setActiveTab}
         search={q}
         onSearch={setQ}
         searchPlaceholder="Поиск по имени, заметкам…"
         searchLabel="Поиск по игрокам"
+        toolbarExtra={
+          <div className="d-seg players-list-d__view" role="group" aria-label="Вид списка игроков">
+            <button type="button" className={view === "tiles" ? "active" : ""} aria-pressed={view === "tiles"} onClick={() => setView("tiles")}>Плитки</button>
+            <button type="button" className={view === "rows" ? "active" : ""} aria-pressed={view === "rows"} onClick={() => setView("rows")}>Список</button>
+          </div>
+        }
         filteredCount={filteredPlayers.length}
         totalCount={players.length}
         onResetSearch={() => setQ("")}
@@ -188,35 +137,16 @@ export function PlayersWorkspace() {
         {loading ? (
           <ListSkeleton variant="tiles" tilesClassName="players-tiles" label="Загрузка игроков" />
         ) : (
-          // Мастер-детейл, но с правой панелью-местом работы: карточка
-          // игрока правится тут же, не уходя из списка (Q59). Это не
-          // предпросмотр каталога, снятый решениями Q52–Q53.
           <div className="players-workspace">
-            <div className="players-workspace__list">
-              <div className="players-tiles">
-                {filteredPlayers.map((p) => (
-                  <PlayerCoverTile key={p.id} player={p} active={false} />
-                ))}
-                {activeTab !== null && activeTab !== "ungrouped" && (
-                  <button
-                    className="card campaign-tile setting-group-empty-add"
-                    onClick={() => {
-                      const g = groups.find((gr) => gr.id === Number(activeTab));
-                      if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-                    }}
-                  >
-                    <div className="campaign-tile-cover cover-halftone">
-                      <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                      <div className="campaign-tile-scrim" />
-                      <h3 className="campaign-tile-name">+</h3>
-                    </div>
-                    <div className="campaign-tile-meta">
-                      <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
-                    </div>
-                  </button>
-                )}
-              </div>
+            <div className={`players-d-items players-d-items--${view}`}>
+              {filteredPlayers.map((p) => <PlayerListCard key={p.id} player={p} />)}
             </div>
+            {activeTab !== null && activeTab !== "ungrouped" && (
+              <button type="button" className="d-btn players-list-d__members" onClick={() => {
+                const group = groups.find((g) => g.id === Number(activeTab));
+                if (group) setGroupMembersModal({ groupId: group.id, groupName: group.name });
+              }}>Изменить состав группы</button>
+            )}
             {players.length > 0 && filteredPlayers.length === 0 && (
               <EmptyState kind="search"
                 title="Ничего не найдено"
@@ -237,7 +167,7 @@ export function PlayersWorkspace() {
             title="Стол пустует"
             hint="Ни одного игрока ещё не заведено — добавьте первого."
             action={
-              <button className="primary" onClick={() => setCreating(true)}>
+              <button className="d-btn" onClick={() => setCreating(true)}>
                 + Новый игрок
               </button>
             }
@@ -246,7 +176,7 @@ export function PlayersWorkspace() {
       </ListPage>
 
       {creating && (
-        <Modal onClose={() => setCreating(false)}>
+        <Modal onClose={() => !saving && setCreating(false)} ariaLabel="Новый игрок">
           <h2>Новый игрок</h2>
           <div className="stack">
             <label>
@@ -258,9 +188,9 @@ export function PlayersWorkspace() {
               <MentionTextarea value={notes} onChange={setNotes} />
             </label>
             <div className="modal-footer row">
-              <button onClick={() => setCreating(false)}>Отмена</button>
-              <button className="primary" onClick={create}>
-                Создать
+              <button onClick={() => setCreating(false)} disabled={saving}>Отмена</button>
+              <button className="primary" onClick={create} disabled={saving || !name.trim()}>
+                {saving ? "Создание…" : "Создать"}
               </button>
             </div>
           </div>

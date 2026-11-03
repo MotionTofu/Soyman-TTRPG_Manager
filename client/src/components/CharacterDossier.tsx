@@ -1,3 +1,4 @@
+import "../pages/players-d.css";
 import { useState } from "react";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { useCurrentUser } from "../api/currentUser";
@@ -69,7 +70,7 @@ export function CharacterDossier({ character }: { character: Character }) {
   const hooks = chapters.filter((c) => c.section === "hooks");
   return (
     <div className="character-dossier-extra paper-scope paper-sheet">
-      {character.campaign_id != null && <CharacterStatusChip character={character} editable={isGm} />}
+      {character.campaign_id != null && <div className="character-dossier__context"><CharacterStatusChip character={character} editable={isGm} /> <span>Кампания · {character.campaign_name}</span></div>}
       {isGm && character.campaign_id != null && (
         <CampaignParticipation
           characterId={character.id}
@@ -80,7 +81,7 @@ export function CharacterDossier({ character }: { character: Character }) {
       {isGm && (
         <section className="character-dossier__hooks">
           <h3 className="paper-group__head">
-            Зацепки <span className="paper-group__count">· {hooks.length}</span>
+            <span className="d-plate">Зацепки</span> <span className="d-note">только Мастеру · {hooks.length}</span>
           </h3>
           <HookList characterId={character.id} hooks={hooks} />
         </section>
@@ -88,13 +89,13 @@ export function CharacterDossier({ character }: { character: Character }) {
       {SECTIONS.map((s) => {
         const list = chapters.filter((c) => c.section === s.key);
         return (
-          <details key={s.key} className="paper-fold" open={list.length > 0}>
+          <details key={s.key} className="paper-fold" open={s.key === "personality" && list.length > 0}>
             <summary>
               {s.label} <span className="paper-fold__count">· {list.length}</span>
               {s.note && character.system_code === "phb" && <span className="dossier-note">{s.note}</span>}
             </summary>
             <div className="paper-fold__body">
-              <ChapterList ownerId={character.id} ownerType="character" apiBase="/characters" section={s.key} chapters={list} />
+              <ChapterList flat ownerId={character.id} ownerType="character" apiBase="/characters" section={s.key} chapters={list} />
             </div>
           </details>
         );
@@ -197,9 +198,8 @@ function HookList({ characterId, hooks }: { characterId: number; hooks: Characte
                 editor
               ) : (
                 <>
-                  <button type="button" className="hook-list__text paper-rows__main" onClick={() => start(h.id, h.title)}>
-                    {h.title || h.content}
-                  </button>
+                  <span className="paper-rows__main">{h.title || h.content}</span>
+                  <button type="button" className="d-btn d-btn--sm" aria-label={`Править зацепку: ${h.title || h.content}`} onClick={() => start(h.id, h.title)}>Править</button>
                   <button type="button" className="comp-mini" title="Убрать зацепку" onClick={() => void remove(h.id)}>
                     ✕
                   </button>
@@ -212,7 +212,7 @@ function HookList({ characterId, hooks }: { characterId: number; hooks: Characte
       {editing === "new" ? (
         editor
       ) : (
-        <button type="button" className="editable-card-add" onClick={() => start("new", "")}>
+        <button type="button" className="editable-card-add d-btn d-btn--sm" onClick={() => start("new", "")}>
           + Зацепка
         </button>
       )}
@@ -245,12 +245,11 @@ export function CampaignParticipation({
 
   return (
     <PaperFieldsCard
-      strong
-      label={campaignName ? `В кампании · ${campaignName}` : "В кампании"}
+      label="В кампании"
       fields={PC_PARTICIPATION_FIELDS}
       values={state.data?.data ?? {}}
       onSave={save}
-      empty="Почему персонаж здесь и что для него на кону."
+      empty={campaignName ? `Почему персонаж здесь и что для него на кону · ${campaignName}` : "Почему персонаж здесь и что для него на кону."}
     />
   );
 }
@@ -258,7 +257,7 @@ export function CampaignParticipation({
 /** Окно досье — для листа LitM и персонажа без листа (пункт «Досье» в «⋯»). */
 export function CharacterDossierModal({ character, onClose }: { character: Character; onClose: () => void }) {
   return (
-    <Modal wide className="sheet-side-modal" ariaLabel="Досье" onClose={onClose}>
+    <Modal wide className="sheet-side-modal character-dossier-modal" ariaLabel="Досье" onClose={onClose}>
       <div className="sheet-side-modal-head">
         <h2>Досье · {character.character_name}</h2>
         <button type="button" onClick={onClose}>

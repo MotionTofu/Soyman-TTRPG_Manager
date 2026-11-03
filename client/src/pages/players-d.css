@@ -1,0 +1,179 @@
+/* Игроки «Д»: принятые Players-List / Profile / Dossier, 2026-11-03. */
+.players-list-d { position: relative; }
+.players-list-d .list-page { gap: 0; }
+.players-list-d .page-head { margin-bottom: var(--sp-7); }
+.players-list-d .list-page > .list-page__dbar { margin-bottom: var(--sp-3); }
+.players-list-d .list-page__sheet { outline: none; padding: var(--sp-6); gap: var(--sp-5); }
+.players-list-d .list-page__search { flex: 1; max-width: none; }
+.players-list-d .list-page__count { white-space: nowrap; }
+.players-list-d .players-workspace { display: flex; flex-direction: column; gap: var(--sp-6); }
+.players-d-items { min-width: 0; }
+.players-d-items--tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5); }
+.player-d-card { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); }
+.player-d-card__body { flex: 1; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5); }
+.player-d-card h2 { margin: 0; font: 600 var(--fs-h2)/1.2 var(--font-display); overflow-wrap: anywhere; }
+.player-d-card h2 a { color: var(--ink); text-decoration: none; }
+.player-d-card h2 a::after { content: ""; position: absolute; inset: 0; }
+.player-d-card:focus-within { outline: var(--edge-width) solid var(--ink); }
+.player-d-card__note { font-size: var(--fs-data); line-height: 1.5; overflow-wrap: anywhere; }
+.player-d-card__note a { position: relative; z-index: 2; }
+.player-d-card__date { margin-top: auto; padding-top: var(--sp-4); font: var(--fs-micro)/1.5 var(--font-mono); color: var(--muted); }
+.player-d-card > .entity-dots { position: absolute; z-index: 3; right: var(--sp-3); top: var(--sp-3); }
+.player-d-portrait { display: block; position: relative; overflow: hidden; width: 100%; height: 160px; background: var(--ph); color: var(--muted); }
+.player-d-portrait img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.player-d-placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
+.player-d-placeholder::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .12; background: var(--skin-halftone-corner) right bottom / auto 90% no-repeat; }
+.player-d-placeholder::before { content: ""; width: 48px; height: 48px; background: currentColor; mask: var(--skin-glyph-player) center / contain no-repeat; }
+.player-d-portrait--character .player-d-placeholder::before { mask-image: var(--skin-glyph-character); }
+.player-d-placeholder > span { position: absolute; left: var(--sp-5); bottom: var(--sp-3); font-family: var(--font-mono); }
+[data-theme-mode="dark"] .player-d-placeholder::after { display: none; }
+.players-d-items--rows { display: flex; flex-direction: column; }
+.players-d-items--rows .player-d-card { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--sp-5); align-items: start; border: 0; border-top: 1px solid var(--line); padding: var(--sp-5) 0; }
+.players-d-items--rows .player-d-card__body { padding: 0; }
+.players-d-items--rows .player-d-portrait { width: 56px; height: 56px; border: 1px solid var(--line); }
+.players-d-items--rows .player-d-placeholder::before { width: 32px; height: 32px; }
+.players-d-items--rows .player-d-placeholder > span { display: none; }
+.players-d-items--rows .player-d-card > .entity-dots { position: relative; right: auto; top: auto; }
+.players-list-d__members { align-self: flex-start; }
+
+/* Паспорт без дополнительной рамки. Единственный внутренний фокус — персонажи. */
+.entity-page--paper:has(.player-profile) > .paper-sheet { padding: var(--sp-6); outline: none; }
+.player-profile.dossier { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: var(--sp-7); }
+.player-profile .dossier__aside { display: flex; flex-direction: column; min-width: 0; border: 0; border-right: 1px solid var(--line); padding: 0 var(--sp-6) 0 0; background: none; }
+.player-profile .dossier__main { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-7); }
+.player-profile .dossier__portrait { display: block; padding: 0; border: 1px solid var(--line); aspect-ratio: 4 / 5; }
+.player-profile .dossier__portrait::before { display: none; }
+.player-profile .dossier__portrait .player-d-portrait { height: 100%; }
+.player-profile__identity { margin-top: var(--sp-5); }
+.player-profile__identity h2 { margin: var(--sp-2) 0 var(--sp-5); font-family: var(--font-display); font-size: var(--fs-h2); }
+.player-profile__passport > summary { display: none; }
+.player-profile .paper-facts { margin-top: var(--sp-5); }
+.player-profile__passport .stack > input { min-width: 0; width: 100%; }
+.player-profile__passport .row { flex-wrap: wrap; }
+.player-profile .player-profile__characters { margin: 0; padding: var(--sp-6); }
+.player-profile__character-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-5); }
+.player-profile__character-head .d-plate { margin: 0; }
+.player-profile__character-head .d-note { color: inherit; }
+.player-profile .player-char-list { display: flex; flex-direction: column; gap: 0; }
+.player-profile .player-char-card { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: var(--sp-5); align-items: start; border: 0; border-top: 1px solid var(--line); padding: var(--sp-5) 0; background: none; border-radius: 0; box-shadow: none; }
+.player-profile .player-char-card .player-d-portrait { width: 52px; height: 64px; border: 1px solid var(--line); }
+.player-profile .player-char-card .player-d-placeholder::before { width: 32px; height: 32px; }
+.player-profile .player-char-card .player-d-placeholder > span { display: none; }
+.player-profile .player-char-card__name { margin: 0 0 var(--sp-2); font: 600 var(--fs-h2)/1.2 var(--font-display); }
+.player-profile .player-char-card__name a { color: var(--ink); }
+.player-profile .player-char-card__meta { color: var(--muted); font-size: var(--fs-meta); margin-bottom: var(--sp-2); overflow-wrap: anywhere; }
+.player-profile .player-char-card__open { font-size: var(--fs-label); }
+.player-profile__add { display: flex; flex-direction: column; gap: var(--sp-4); border-top: 1px solid var(--line); padding-top: var(--sp-5); }
+.player-profile__add h3 { margin: 0; font-size: var(--fs-body); }
+.player-profile__add :is(input, select) { min-width: 0; width: 100%; }
+.player-profile__add .row { flex-wrap: wrap; }
+.player-profile .paper-fold { margin: 0; }
+
+/* Общая часть досье: без второй рамки, спокойные разделы по линейке. */
+.paper-scope.character-dossier-extra { max-width: none; gap: 0; color: var(--ink); margin-top: var(--sp-7); padding: var(--sp-7) 0 0; border: 0; border-top: 1px solid var(--line); outline: 0; background: none; }
+.character-dossier-extra > :is(.creature-card, section) { margin-bottom: var(--sp-7); }
+.character-dossier__context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); margin-bottom: var(--sp-6); font-size: var(--fs-meta); }
+.character-dossier-extra .creature-card { border: 0; padding: 0; box-shadow: none; background: none; }
+.character-dossier-extra .creature-card__head { margin-bottom: var(--sp-5); }
+.character-dossier-extra .paper-group__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); font-size: var(--fs-label); }
+.character-dossier-extra .d-plate { margin: 0; }
+.character-dossier-extra .paper-fold { margin: 0; border-top: 1px solid var(--line); }
+.character-dossier-extra .paper-fold__body { padding: var(--sp-5) 0; }
+.character-dossier-extra .character-dossier-chapter { margin: 0; border: 0; padding: 0 0 var(--sp-5); background: none; box-shadow: none; }
+.character-dossier-chapter > header { display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-4); }
+.character-dossier-chapter > header .entry-title { flex: 1; font: 600 var(--fs-body)/1.4 var(--font-display); }
+.character-dossier-chapter > header .danger { margin-left: auto; }
+.character-dossier-chapter > header .chevron-icon { display: none; }
+.character-dossier-extra .hook-list__edit { flex-wrap: wrap; }
+.character-dossier-extra .hook-list__edit input { flex: 1 1 200px; min-width: 0; }
+.character-dossier-extra .creature-card-editor .scene-head__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.character-dossier-lead { margin-bottom: var(--sp-6); }
+.character-dossier-lead h2 { font: 600 var(--fs-h2)/1.2 var(--font-display); margin: 0 0 var(--sp-3); }
+.character-dossier-lead p { margin: 0; color: var(--muted); font-size: var(--fs-data); }
+body.sheet-fullscreen .character-dossier-extra .card { background: none; box-shadow: none; border: 0; }
+body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; gap: var(--sp-6); padding: 0; background: none; border: 0; }
+body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) .sb-entry { display: flex; flex-direction: column; gap: var(--sp-4); font-size: var(--fs-body); }
+body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) .sb-prop-label { font-family: var(--font-ui); font-size: var(--fs-label); text-transform: uppercase; }
+
+@media (min-width: 701px) {
+  .player-d-card > .entity-dots, .player-char-card > .entity-dots { opacity: 0; }
+  :is(.player-d-card, .player-char-card):is(:hover, :focus-within) > .entity-dots { opacity: 1; }
+}
+@media (max-width: 1100px) {
+  .players-d-items--tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .player-profile.dossier { grid-template-columns: 180px minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .players-list-d .list-page__sheet { padding: var(--sp-5); }
+  .players-list-d .list-page__dbar { gap: var(--sp-4); }
+  .players-list-d .list-page > .list-page__dbar { flex-wrap: nowrap; }
+  .players-list-d .list-page > .list-page__dbar .tabs { min-width: 0; flex: 1; scrollbar-width: none; }
+  .players-list-d .list-page__search { flex-basis: 100%; }
+  .players-d-items--tiles { gap: var(--sp-4); }
+  .players-d-items--tiles .player-d-portrait { height: 120px; }
+  .player-d-card h2 { font-size: var(--fs-h2); }
+  .player-d-card__body { padding: var(--sp-4); }
+  .player-d-card__date { font-size: var(--fs-micro); }
+  .entity-page--paper:has(.player-profile) > .paper-sheet { padding: var(--sp-5); }
+  .player-profile.dossier { grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
+  .player-profile .dossier__aside { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: var(--sp-4); border: 0; border-bottom: 1px solid var(--line); padding: 0 0 var(--sp-5); }
+  .player-profile .dossier__portrait { width: 80px; height: 80px; aspect-ratio: auto; }
+  .player-profile__identity { margin: 0; align-self: center; }
+  .player-profile__identity h2 { display: none; }
+  .player-profile__passport { grid-column: 1 / -1; min-width: 0; }
+  .player-profile__passport > summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); cursor: pointer; font: 600 var(--fs-data)/1.5 var(--font-display); }
+  .player-profile__passport > summary::after { content: "⌄"; }
+  .player-profile .dossier__main { gap: var(--sp-6); }
+  .player-profile .player-profile__characters { padding: var(--sp-5); }
+  .player-profile__character-head .d-btn--primary { width: 100%; }
+  .player-profile .player-char-card { grid-template-columns: 44px minmax(0, 1fr) auto; gap: var(--sp-4); }
+  .player-profile .player-char-card .player-d-portrait { width: 44px; height: 56px; }
+  .character-dossier-extra .creature-card-editor .scene-head__grid { grid-template-columns: minmax(0, 1fr); }
+  body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) { grid-template-columns: minmax(0, 1fr); }
+}
+
+.player-profile__interest > .card { position: relative; padding: 0; border: 0; background: none; box-shadow: none; }
+.player-profile__interest > .card > h3 { align-self: flex-start; margin: 0; padding: var(--sp-2) var(--sp-4); font: 500 var(--fs-label)/1.2 var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--on-surface); background: var(--surface); }
+.modal.sheet-side-modal.character-dossier-modal { background: var(--sheet); color: var(--ink); border: var(--edge-width) solid var(--edge); box-shadow: none; border-radius: 0; }
+.character-dossier-modal .sheet-side-modal-head { flex-wrap: wrap; }
+.character-dossier-modal .sheet-side-modal-head h2 { font-family: var(--font-display); font-size: var(--fs-h2); color: var(--ink); }
+.character-dossier-modal > .modal-x { display: none; }
+.paper-scope.character-dossier-extra .chevron-summary > .danger { color: var(--muted); }
+.paper-scope.character-dossier-extra .chevron-summary > .danger:hover { color: var(--danger); }
+.character-dossier-extra .row { flex-wrap: wrap; min-width: 0; }
+.character-dossier-extra .row > :is(input, textarea, select) { min-width: 0; max-width: 100%; }
+.entity-page:has(.player-profile) h1 { font-size: var(--fs-h1); }
+.player-profile__interest > .card:not(:has(textarea)) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-5); }
+.player-profile__interest > .card:not(:has(textarea)) > h3 { grid-column: 1; grid-row: 1; align-self: center; }
+.player-profile__interest > .card:not(:has(textarea)) > .reading-text { grid-column: 1 / -1; grid-row: 2; }
+.player-profile__interest > .card:not(:has(textarea)) > .row { grid-column: 2; grid-row: 1; }
+.players-list-d .list-page > .list-page__dbar .tabs { margin: 0; flex-wrap: nowrap; min-width: 0; }
+.players-list-d .list-page > .list-page__dbar .tabs button { white-space: nowrap; }
+
+/* Вкладка досье занимает спокойный лист; остальные карты сохраняют сплит. */
+body.sheet-fullscreen .dnd-card-frame:has(.dnd-app-dossier-sheet) { padding: var(--sp-7) var(--sp-8); }
+body.sheet-fullscreen .dnd-desktop-split:has(.dnd-app-dossier-sheet) { display: block; max-width: 1120px; margin: 0 auto; }
+body.sheet-fullscreen .dnd-desktop-split:has(.dnd-app-dossier-sheet) > :is(.dnd-card-face, .dnd-card-back) { display: none; }
+body.sheet-fullscreen .dnd-desktop-tab:has(.dnd-app-dossier-sheet) { display: block; }
+body.sheet-fullscreen .dnd-desktop-tab:has(.dnd-app-dossier-sheet) > .hp-apply { display: none; }
+.dnd-app-dossier-sheet { position: relative; padding: var(--sp-7); border: var(--edge-width) solid var(--edge); outline: 1px solid var(--edge); outline-offset: -8px; background: var(--sheet); color: var(--ink); }
+.dnd-app-dossier-sheet .scene-head__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dnd-app-dossier-sheet .character-dossier__context .character-status-line { margin: 0; }
+.dnd-app-dossier-sheet .creature-card__head-label:first-child { color: var(--ink); }
+.character-dossier-extra .creature-card__head > .creature-card__head-label { padding: var(--sp-2) var(--sp-4); font-family: var(--font-ui); font-size: var(--fs-label); letter-spacing: .12em; background: var(--surface); color: var(--on-surface); }
+.character-dossier__hooks { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-5); }
+.character-dossier__hooks > .paper-group__head { grid-column: 1; grid-row: 1; margin: 0; }
+.character-dossier__hooks > .editable-card-add { grid-column: 2; grid-row: 1; align-self: center; }
+.character-dossier__hooks > :is(.hook-list, .hook-list__edit) { grid-column: 1 / -1; margin: 0; }
+@media (min-width: 701px) {
+  .dnd-app-dossier-sheet .character-dossier-lead { padding-right: calc(3 * var(--sp-10) + var(--sp-8)); }
+  .dnd-app-dossier-sheet .dnd-tab-tools { position: absolute; top: var(--sp-7); right: var(--sp-7); width: auto; }
+}
+@media (max-width: 700px) {
+  body.sheet-fullscreen .sheet-page:has(.dnd-app-dossier-sheet) { margin-left: 0; margin-right: 0; }
+  body.sheet-fullscreen .dnd-card-frame:has(.dnd-app-dossier-sheet) { padding: var(--sp-5) var(--sp-2); }
+  .dnd-app-dossier-sheet { padding: var(--sp-6); }
+  .dnd-app-dossier-sheet .scene-head__grid { grid-template-columns: minmax(0, 1fr); }
+  body.sheet-fullscreen:has(.dnd-app-dossier-sheet) .sheet-bar-sub { display: block; }
+}
+.character-dossier-extra .paper-rows__main { font-size: var(--fs-body); }

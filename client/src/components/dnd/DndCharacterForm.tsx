@@ -822,6 +822,10 @@ function DndDeckFan({
   );
 }
 
+function DossierSurface({ app, children }: { app: boolean; children: ReactNode }) {
+  return app ? <section className="dnd-app-dossier-sheet">{children}</section> : <>{children}</>;
+}
+
 export function DndCharacterView({
   value,
   portraitUrl,
@@ -932,11 +936,24 @@ export function DndCharacterView({
   // так виден; `block: nearest` не даёт утащить страницу по вертикали.
   // Карусель, как лента классов в визарде: активный язычок тянется в центр,
   // пока полоске есть куда ехать (просьба владельца 2026-09-26).
+  const showDesktopFace = !useIsMobile();
   const deckStripRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const active = deckStripRef.current?.querySelector<HTMLElement>("button.active");
-    active?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [tab]);
+    const nav = deckStripRef.current;
+    const active = nav?.querySelector<HTMLElement>("button.active");
+    if (!nav || !active) return;
+    const reveal = () => {
+      if (!appShell) { active.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); return; }
+      const n = nav.getBoundingClientRect(), a = active.getBoundingClientRect();
+      // Прокручивается только полоса: scrollIntoView сдвигал app-content.
+      nav.scrollLeft += a.left + a.width / 2 - n.left - n.width / 2;
+    };
+    reveal();
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reveal);
+    resize?.observe(nav);
+    resize?.observe(active);
+    return () => resize?.disconnect();
+  }, [tab, showDesktopFace, appShell]);
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
   const wantedIds = sheetEntryIds(value);
@@ -1044,7 +1061,6 @@ export function DndCharacterView({
   // величину, содержимое активной вкладки — справа. Тот же порог 700px, что
   // у useIsMobile и мобильной CSS. На телефоне лицевая видна только на своей
   // вкладке, как было.
-  const showDesktopFace = !useIsMobile();
   // Оборот первой карты — входящие игрока (этап 4). Угол виден всегда:
   // серый без входящих, цвета класса при непрочитанных. Мастеру игроцкий
   // роут отвечает 404 — тогда оборот открывается с пояснением, а не
@@ -2720,7 +2736,7 @@ export function DndCharacterView({
               от края до края, а в колоду ведут свайп, веер по двойному тапу и
               «Колода карт» в меню «⋯». */}
           {!showDesktopFace && !cardOnly && tab !== "Карта" && (
-          <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа" ref={deckStripRef}>
+          <div className={`dnd-deck-strip${appShell ? " d-tabs" : ""}`} role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
                 key={t}
@@ -3433,7 +3449,7 @@ export function DndCharacterView({
           <div className="dnd-desktop-tab">
           {appShell && showDesktopFace && <HpApplyBar value={value} onQuickUpdate={onQuickUpdate} />}
           {showDesktopFace && (
-          <div className={`dnd-deck-strip${appShell ? " d-tabs" : ""}`} role="tablist" aria-label="Карты листа">
+          <div className={`dnd-deck-strip${appShell ? " d-tabs" : ""}`} role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
                 key={t}
@@ -4191,6 +4207,10 @@ export function DndCharacterView({
             </div>
           )}
 
+          {tab === "Досье" && <DossierSurface app={!!dossierExtra}>
+          {tab === "Досье" && dossierExtra && (
+            <header className="character-dossier-lead"><h2>Досье</h2><p>История, связи с кампанией и то, что важно помнить.</p></header>
+          )}
           {tab === "Досье" && draftDossier && (
             <div className="dnd-personality-grid">
               {NARRATIVE_FIELDS.map(({ key, label }) => {
@@ -4219,13 +4239,11 @@ export function DndCharacterView({
                 );
               })}
               <div className="row" style={{ marginTop: 6, alignItems: "center" }}>
-                <TabEditToggle
-                  editing
-                  onToggle={() => {
-                    onQuickUpdate?.(draftDossier);
-                    setDraftDossier(null);
-                  }}
-                />
+                {dossierExtra ? (
+                  <button type="button" className="d-btn d-btn--primary" onClick={() => { onQuickUpdate?.(draftDossier); setDraftDossier(null); }}>Сохранить</button>
+                ) : (
+                  <TabEditToggle editing onToggle={() => { onQuickUpdate?.(draftDossier); setDraftDossier(null); }} />
+                )}
                 <button type="button" className="dnd-quiet-link" onClick={() => setDraftDossier(null)}>
                   отмена
                 </button>
@@ -4237,9 +4255,11 @@ export function DndCharacterView({
             <div className="dnd-personality-grid">
               <div className="dnd-tab-tools" style={{ gridColumn: "1 / -1" }}>
                 {onQuickUpdate ? (
-                  <TabEditToggle
-                    editing={false}
-                    onToggle={() =>
+                  <button type="button" className={dossierExtra ? "d-btn d-btn--sm" : "comp-mini dnd-tab-edit-toggle dnd-tab-btn"}
+                    aria-label={dossierExtra ? "Править характер" : "Редактировать"}
+                    aria-pressed={false}
+                    title={dossierExtra ? "Править характер" : "Редактировать"}
+                    onClick={() =>
                       setDraftDossier({
                         personalityTraits: value.personalityTraits ?? "",
                         ideals: value.ideals ?? "",
@@ -4247,7 +4267,7 @@ export function DndCharacterView({
                         flaws: value.flaws ?? "",
                       })
                     }
-                  />
+                  >{dossierExtra ? "Править характер" : <NavIcon name="edit" />}</button>
                 ) : (
                   <span className="dnd-tab-btn" aria-hidden="true" />
                 )}
@@ -4271,6 +4291,7 @@ export function DndCharacterView({
             </div>
           )}
           {tab === "Досье" && dossierExtra}
+          </DossierSurface>}
           {/* Низ карты: поиск и возврат в профиль (решение владельца). Поиск
               после просмотра, а не до; возврат — тем же жестом, что свайп
               «назад» с лицевой (onSheetBack задаёт полноэкранная страница). */}

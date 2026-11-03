@@ -17,6 +17,7 @@ import {
 
 interface Props {
   title: string;
+  editLabel?: string;
   help?: string;
   value: string;
   onSave: (value: string) => Promise<unknown>;
@@ -66,6 +67,7 @@ interface Props {
 
 export function EditableTextCard({
   title,
+  editLabel = "Редактировать",
   help,
   value,
   onSave,
@@ -239,7 +241,7 @@ export function EditableTextCard({
           })()}
           <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <div className="row">
-              <button onClick={sheetAllowed ? () => setSheetMode("hybrid") : startEdit}>Редактировать</button>
+              <button onClick={sheetAllowed ? () => setSheetMode("hybrid") : startEdit}>{editLabel}</button>
               {sheetAllowed && value && (
                 <button type="button" title="Открыть листом" aria-label="Открыть листом"
                   onClick={() => setSheetMode("reading")}>⤢</button>

@@ -12,11 +12,14 @@ import { useCurrentUser } from "../../api/currentUser";
 import type { Campaign, PlayerDetail, PlayerGroup, UnpaidSession } from "../../types";
 import { ConfirmModal } from "../ConfirmModal";
 import { loadHideFinance } from "../../financePrivacy";
-import { useConfirm } from "../../hooks/useConfirm";
 import { PlayerCharacterCards } from "./PlayerCharacterCards";
 import { EntityPage } from "../EntityPage";
 import { EditableTextCard } from "../EditableTextCard";
 import { useImageCrop } from "../../hooks/useImageCrop";
+import { useIsMobile } from "../../hooks/useIsMobile";
+import { PlayerPortrait } from "./PlayerPortrait";
+import "../../pages/players-d.css";
+import { plural } from "../../sceneKinds";
 import { IMAGE_ACCEPT } from "../../imageUpload";
 
 const NO_UNPAID: UnpaidSession[] = [];
@@ -42,13 +45,11 @@ function playerCharacterAffects(playerId: number): Affect[] {
 
 const ACCOUNTS_PATH = "/auth/players";
 
-/**
- * Профиль игрока для правой колонки раздела «Игроки» (и для прямого маршрута
- * /players/:id — тот рендерит тот же workspace). Первым блоком идут персонажи
- * игрока, дальше — остальное (доступ, долги, напоминания, группы).
- */
+/** Самостоятельное досье игрока, принятые Players-Profile (2026-11-03). */
 export function PlayerProfilePanel({ playerId }: { playerId: number }) {
-  const [confirmDialog, confirm] = useConfirm();
+  const mobile = useIsMobile();
+  const [addingCharacter, setAddingCharacter] = useState(false);
+  const [creatingCharacter, setCreatingCharacter] = useState(false);
   const navigate = useNavigate();
   const thumbnailCrop = useImageCrop("thumbnail", (file) => void uploadThumbnailRef.current(file));
   const uploadThumbnailRef = useRef<(file: File | null) => Promise<void>>(async () => {});
@@ -138,24 +139,14 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
   }
 
   async function addCharacter() {
-    if (!campaignId || !characterName.trim()) return;
-    const created = await run(
-      labelled("Новый персонаж", () =>
-        write
-          .post("/characters", { player_id: playerId, campaign_id: Number(campaignId), character_name: characterName })
-          .then(() => true)
-      ),
-      { affects: playerCharacterAffects(playerId), retry: false }
-    );
-    if (created) setCharacterName("");
-  }
-
-  async function removeCharacter(characterId: number) {
-    if (!(await confirm({ message: "Отправить персонажа в архив?", confirmLabel: "Архивировать", danger: true })))
-      return;
-    await run(labelled("Персонаж не архивирован", () => write.del(`/characters/${characterId}`)), {
-      affects: [...playerCharacterAffects(playerId), { path: "/archive" }],
-    });
+    if (!campaignId || !characterName.trim() || creatingCharacter) return;
+    setCreatingCharacter(true);
+    try {
+      const created = await run(labelled("Новый персонаж", () =>
+        write.post("/characters", { player_id: playerId, campaign_id: Number(campaignId), character_name: characterName.trim() }).then(() => true)
+      ), { affects: playerCharacterAffects(playerId), retry: false });
+      if (created) { setCharacterName(""); setCampaignId(""); setAddingCharacter(false); }
+    } finally { setCreatingCharacter(false); }
   }
 
   async function saveEdit() {
@@ -233,28 +224,23 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
       entityType="player"
       title={player.name}
       paper
-      meta={
-        <span className="paper-ident-tags">
-          <span className="badge tag">Игрок</span>
-          {account?.role === "gm" && <span className="badge tag">Мастер</span>}
-        </span>
-      }
+      titleAbove
       actions={[
         { label: "Править имя и заметки", onClick: startEdit },
         { label: "Архивировать", danger: true, onClick: () => setShowArchiveModal(true) },
       ]}
-      overlays={confirmDialog}
     >
-      {/* Профиль игрока на бумаге (спека campaign-paper, Q47; доска 48):
-          одно досье без вкладок. */}
       <div className="dossier player-profile">
         <aside className="dossier__aside">
           <label className="dossier__portrait" title="Сменить портрет">
-            {portrait ? <img src={portrait} alt={`Портрет: ${player.name}`} /> : <span className="dossier__portrait-empty">Портрет</span>}
+            <PlayerPortrait url={portrait} name={player.name} />
             <span className="dossier__portrait-hint">Сменить портрет</span>
             <input type="file" hidden accept={IMAGE_ACCEPT} onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)} />
           </label>
           {thumbnailCrop.modal}
+          <div className="player-profile__identity"><span className="d-note">Игрок{account?.role === "gm" ? " · Мастер" : ""}</span><h2>{player.name}</h2></div>
+          <details className="player-profile__passport" open={!mobile}>
+            <summary>Доступ и группы <span className="d-note">{account ? `Учётка ${account.username}` : "Нет доступа"} · {playerGroupIds.length} {plural(playerGroupIds.length, "группа", "группы", "групп")}</span></summary>
           <dl className="paper-facts">
             <div>
               <dt className="paper-label">Доступ к клиенту</dt>
@@ -293,7 +279,7 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
                     placeholder={account ? "Новый пароль (необязательно)" : "Пароль"}
                     value={passwordDraft}
                     onChange={(e) => setPasswordDraft(e.target.value)}
-                    autoComplete={account ? "current-password" : "new-password"}
+                    autoComplete="new-password"
                   />
                   <div className="row">
                     <button className="primary" onClick={account ? saveAccountEdit : createAccount}>
@@ -333,6 +319,7 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
               </dd>
             </div>
           </dl>
+          </details>
         </aside>
 
         <div className="dossier__main">
@@ -357,22 +344,24 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
             </div>
           )}
 
-          <EditableTextCard
+          <section className="player-profile__interest"><EditableTextCard
             key={`interest-${playerId}`}
             title="Чем увлечён"
-            help="Что игрок любит за столом и чего ждёт от игры — к этому цепляют крючки."
+            editLabel="Править"
             value={player.interest ?? ""}
             onSave={saveInterest}
             rows={3}
             emptyLabel="что игрок любит за столом"
-          />
+          /></section>
 
-          <section className="paper-list-group">
-            <h2 className="paper-group__head">
-              Персонажи <span className="paper-group__count">· {player.characters.length}</span>
-            </h2>
-            <PlayerCharacterCards characters={player.characters} onRemove={removeCharacter} />
-            <div className="row player-profile__add">
+          <section className="paper-list-group player-profile__characters d-focal" aria-label="Персонажи игрока">
+            <header className="player-profile__character-head">
+              <h2 className="d-plate">Персонажи <span className="d-note">{player.characters.length}</span></h2>
+              {!addingCharacter && <button type="button" className="d-btn d-btn--primary" onClick={() => setAddingCharacter(true)}>+ Персонаж</button>}
+            </header>
+            <PlayerCharacterCards characters={player.characters} />
+            {addingCharacter && <form className="player-profile__add" onSubmit={(event) => { event.preventDefault(); void addCharacter(); }}>
+              <h3>Новый персонаж</h3>
               <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} aria-label="Кампания">
                 <option value="">Кампания…</option>
                 {campaigns.map((c) => (
@@ -381,11 +370,12 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
                   </option>
                 ))}
               </select>
-              <input placeholder="Имя персонажа" value={characterName} onChange={(e) => setCharacterName(e.target.value)} />
-              <button onClick={addCharacter} disabled={!campaignId || !characterName.trim()}>
-                + Персонаж
-              </button>
-            </div>
+              <input autoFocus aria-label="Имя персонажа" placeholder="Имя персонажа" value={characterName} onChange={(e) => setCharacterName(e.target.value)} />
+              <div className="row">
+                <button type="button" disabled={creatingCharacter} onClick={() => setAddingCharacter(false)}>Отмена</button>
+                <button type="submit" className="d-btn d-btn--primary" disabled={creatingCharacter || !campaignId || !characterName.trim()}>{creatingCharacter ? "Создание…" : "Создать персонажа"}</button>
+              </div>
+            </form>}
           </section>
 
           {/* Долг нигде не хранится — сервер считает его как «ожидалось −
@@ -441,7 +431,7 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
       {showArchiveModal && (
         <ConfirmModal
           title="Архивировать игрока?"
-          message={`Это архивирует ${player.name} и его ${player.characters.length} персонаж${player.characters.length === 1 ? "а" : "ей"}. Игрок потеряет доступ к приложению.`}
+          message={`Архивировать игрока «${player.name}»? Его персонажи и доступ к приложению сохранятся.`}
           confirmLabel="Архивировать"
           cancelLabel="Отмена"
           danger

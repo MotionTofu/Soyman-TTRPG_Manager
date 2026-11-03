@@ -61,6 +61,8 @@ interface Props<T extends ChapterLike> {
   // Optional title rendered as <h3> above the chapter list. Provides a
   // consistent card-header pattern with EntityFieldsCard and AliasesCard.
   listTitle?: string;
+  /** Главы досье читаются сразу внутри раскрытого раздела. */
+  flat?: boolean;
 }
 
 export function ChapterList<T extends ChapterLike>({
@@ -77,6 +79,7 @@ export function ChapterList<T extends ChapterLike>({
   visibilityToggle,
   emptyState,
   listTitle,
+  flat = false,
 }: Props<T>) {
   const [confirmDialog, confirm] = useConfirm();
   const run = useAction();
@@ -145,6 +148,7 @@ export function ChapterList<T extends ChapterLike>({
         <ChapterCard
           key={ch.id}
           chapter={ch}
+          flat={flat}
           ownerType={ownerType}
           ownerId={ownerId}
           apiBase={apiBase}
@@ -165,6 +169,7 @@ export function ChapterList<T extends ChapterLike>({
 
 function ChapterCard<T extends ChapterLike>({
   chapter,
+  flat,
   ownerType,
   ownerId,
   apiBase,
@@ -175,6 +180,7 @@ function ChapterCard<T extends ChapterLike>({
   visibilityToggle,
 }: {
   chapter: T;
+  flat?: boolean;
   ownerType: string;
   ownerId: number;
   apiBase: string;
@@ -238,9 +244,11 @@ function ChapterCard<T extends ChapterLike>({
   }
   const imageCrop = useImageCrop("square", handleImageChange);
 
+  const Container = flat ? "section" : "details";
+  const Heading = flat ? "header" : "summary";
   return (
-    <details className="card" open={editMode}>
-      <summary className="chevron-summary">
+    <Container className={flat ? "character-dossier-chapter" : "card"} {...(!flat ? { open: editMode } : {})}>
+      <Heading className="chevron-summary">
         <NavIcon name="chevron" className="chevron-icon" />
         {!!chapter.important && (
           <span title="Важно">
@@ -258,6 +266,7 @@ function ChapterCard<T extends ChapterLike>({
             <NavIcon name="eye" /> {chapter.visible_to_players ? "Видно игрокам" : "Скрыто"}
           </button>
         )}
+        {flat && !editMode && <button type="button" className="d-btn d-btn--sm" onClick={() => setEditMode(true)}>Править</button>}
         <button
           className="danger"
           style={{ float: "right" }}
@@ -269,7 +278,7 @@ function ChapterCard<T extends ChapterLike>({
         >
           <NavIcon name="delete" />
         </button>
-      </summary>
+      </Heading>
       <div className="row" style={{ alignItems: "flex-start" }}>
         {allowImage && (
           <div className="stack" style={{ alignItems: "center" }}>
@@ -333,7 +342,7 @@ function ChapterCard<T extends ChapterLike>({
                 <MentionText text={chapter.content} />
               </div>
               <div className="row">
-                <button onClick={() => setEditMode(true)}>Редактировать</button>
+                {!flat && <button onClick={() => setEditMode(true)}>Редактировать</button>}
                 {!isMobile && (
                   <button type="button" title="Открыть листом" aria-label="Открыть листом" onClick={() => setSheetOpen(true)}>⤢</button>
                 )}
@@ -353,6 +362,6 @@ function ChapterCard<T extends ChapterLike>({
           )}
         </div>
       </div>
-    </details>
+    </Container>
   );
 }
