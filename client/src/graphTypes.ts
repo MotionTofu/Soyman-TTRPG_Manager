@@ -3,6 +3,8 @@ export interface GraphNode {
   type: string;
   id: number;
   title: string;
+  blurb?: string; // первая фраза, максимум 120 знаков; полного описания в ответе нет
+  scopeLabel?: string; // сеттинг или кампания сущности
   // Ярусная раскладка графа приключений — заполняет сервер.
   date?: string;
   campaign_id?: number;

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { cardBlurb } from "../services/cardBlurb";
 import { sessionEventLinkError } from "../services/chronicle";
 import { db } from "../db/db";
 import { ENTITY_KINDS } from "../db/entityKinds";
@@ -41,6 +42,8 @@ interface GraphNode {
   type: string;
   id: number;
   title: string;
+  blurb?: string; // первая фраза, максимум 120 знаков; полного описания в ответе нет
+  scopeLabel?: string; // сеттинг или кампания сущности
   // Для ярусной раскладки графа приключений (решения 2026-09-30, Q4–Q6).
   date?: string; // сессия
   campaign_id?: number; // сессия — полоса «Все кампании»
@@ -441,14 +444,27 @@ linksRouter.get("/graph", (req, res) => {
     assertSafeIdent("table", table);
     assertSafeIdent("nameCol", nameCol);
     const placeholders = ids.map(() => "?").join(",");
+    // Короткая строка карточки, без переноса полных описаний по сети.
+    // Таблица из реестра; колонки проверяем по схеме (у персонажа, например,
+    // есть предыстория, но нет описания). Это тот же cardBlurb, что у холста.
+    const columns = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+    const description = columns.has("description") ? "n.description" : "NULL";
+    const campaign = type === "campaign" ? "n.id" : columns.has("campaign_id") ? "n.campaign_id" : "NULL";
+    const setting = type === "setting" ? "n.id" : columns.has("setting_id") ? "n.setting_id" : "NULL";
     const rows = db
       .prepare(
-        `SELECT id, ${nameCol} as name FROM ${table} WHERE id IN (${placeholders})` +
-          (archivable ? " AND archived_at IS NULL" : "")
+        `SELECT n.id, n.${nameCol} as name, ${description} AS descr,
+                CASE WHEN c.name IS NOT NULL THEN 'Кампания · ' || c.name
+                     WHEN s.name IS NOT NULL THEN 'Сеттинг · ' || s.name END AS scopeLabel
+         FROM ${table} n LEFT JOIN campaigns c ON c.id = ${campaign}
+         LEFT JOIN settings s ON s.id = ${setting}
+         WHERE n.id IN (${placeholders})` + (archivable ? " AND n.archived_at IS NULL" : "")
       )
-      .all(...ids) as { id: number; name: string }[];
+      .all(...ids) as { id: number; name: string; descr: string | null; scopeLabel: string | null }[];
     for (const r of rows) {
-      nodes.push({ key: `${type}:${r.id}`, type, id: r.id, title: r.name ?? "" });
+      const blurb = cardBlurb(r.descr);
+      nodes.push({ key: `${type}:${r.id}`, type, id: r.id, title: r.name ?? "",
+        ...(blurb ? { blurb } : {}), ...(r.scopeLabel ? { scopeLabel: r.scopeLabel } : {}) });
     }
   }
 

@@ -8672,8 +8672,8 @@ button.mention-link:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  height: 28px;
-  padding: 0 var(--sp-2) 0 var(--sp-4);
+  min-height: 28px;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
@@ -8703,6 +8703,19 @@ button.mention-link:focus-visible {
   font-weight: 500;
   line-height: 1.1;
 }
+.rg-card__blurb { margin: 0; font-size: var(--fs-label); overflow-wrap: anywhere; }
+.rg-card__scope { color: var(--muted); overflow-wrap: anywhere; }
+.rg-card__body b { overflow-wrap: anywhere; }
+.rg-card__band .entity-dots { color: inherit; margin-left: auto; }
+.rg-card__band .entity-dots + .rg-card__close { margin-left: 0; }
+.rg-dialog { padding: var(--sp-4); min-width: 0; overflow-wrap: anywhere; }
+.rg-dialog--isolated { max-height: 60vh; overflow-y: auto; }
+.rg-size-range { display: flex; align-items: center; gap: var(--sp-3); }
+.rg-size-range input { flex: 1; min-width: 0; width: 100%; accent-color: var(--ink); }
+.rg-size-value { text-align: center; }
+.rg-dialog__actions { justify-content: flex-end; flex-wrap: wrap; }
+.rg-node-list button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.rg-node-list:focus-within { position: static; width: auto; height: auto; clip: auto; white-space: normal; grid-column: 1 / -1; max-height: 12rem; overflow-y: auto; margin: 0; }
 .rg-card__acts {
   display: flex;
   flex-wrap: wrap;
@@ -8765,8 +8778,13 @@ button.mention-link:focus-visible {
   color: var(--on-surface);
 }
 @media (max-width: 900px) {
-  .rg-body { grid-template-columns: minmax(0, 1fr); }
-  .rg-tools { right: var(--sp-4); }
+  .rg-body { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .rg-card__band .entity-dots { opacity: 1; }
+  .rg-frame { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(420px, 1fr); }
+  .rg-frame > .relation-graph-wrap { grid-area: 3 / 1; min-height: 420px; }
+  .rg-tools { position: static; grid-area: 1 / 1; padding: var(--sp-3); }
+  .rg-card { position: static; grid-area: 2 / 1; width: auto; min-width: 0; margin: 0 var(--sp-3) var(--sp-3); }
+  .rg-rings { bottom: calc(var(--sp-4) + 44px); max-width: calc(100% - 2 * var(--sp-4)); white-space: normal; }
 }
 
 .relation-graph-wrap {
@@ -9037,10 +9055,12 @@ button.mention-link:focus-visible {
 .relation-graph-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  /* Выше навигации (40), ниже общих окон (50) и меню сущности (100). */
+  z-index: 45;
   background: var(--paper);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   padding: var(--sp-5);
   gap: var(--sp-4);
 }

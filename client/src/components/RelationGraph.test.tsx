@@ -8,6 +8,11 @@ import { applyTheme, BUILTIN_THEMES } from "../themes";
 import type { GraphData } from "../graphTypes";
 import { autoNodeScales } from "../graphTypes";
 import { RelationGraph } from "./RelationGraph";
+import { PageContextMenu } from "./PageContextMenu";
+
+vi.mock("../data/hooks", () => ({ useAfterWrite: () => vi.fn() }));
+vi.mock("../api/currentUser", () => ({ getCachedUser: () => ({ role: "gm" }) }));
+Object.defineProperty(navigator, "clipboard", { value: { writeText: vi.fn() }, configurable: true });
 
 const mocks = vi.hoisted(() => ({ draw: vi.fn(), simulate: vi.fn(), renders: vi.fn() }));
 vi.mock("../canvasGraph", async (original) => ({
@@ -36,7 +41,7 @@ function mount(layered = false, graphData = data) {
   const result = render(<MemoryRouter><Profiler id="graph" onRender={mocks.renders}>
     <RelationGraph data={graphData} layoutKey="drag-test" layered={layered}
       view={layered ? "adventures" : "world"} defaultHiddenTypes={layered ? ["campaign"] : []} />
-    </Profiler></MemoryRouter>);
+    </Profiler><PageContextMenu /></MemoryRouter>);
   const canvas = result.container.querySelector("canvas")!;
   return { ...result, wrap: canvas.parentElement!, canvas };
 }
@@ -66,7 +71,10 @@ describe("перетаскивание в графе связей", () => {
     frames = new Map(); frameId = 0;
     vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => { frames.set(++frameId, fn); return frameId; });
     vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
-    vi.stubGlobal("PointerEvent", MouseEvent);
+    vi.stubGlobal("PointerEvent", class extends MouseEvent {
+      pointerId: number; pointerType: string;
+      constructor(type: string, props: PointerEventInit) { super(type, props); this.pointerId = props.pointerId ?? 1; this.pointerType = props.pointerType ?? "mouse"; }
+    });
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ setTransform() {} } as never);
@@ -302,7 +310,9 @@ describe("перетаскивание в графе связей", () => {
     fireEvent.click(view.getByTitle("Приблизить"));
     const closer = mocks.draw.mock.lastCall![0] as DrawInput;
     expect(closer.zoom).toBeGreaterThan(initial.zoom);
-    fireEvent.click(view.getByRole("button", { name: "Обзор" }));
+    // Список чтеца добавляет 600 доступных кнопок. Здесь проверяется камера,
+    // поэтому не вычисляем accessible name каждой кнопки ради «Обзора».
+    fireEvent.click(view.getByTitle("Показать весь граф"));
     const overview = mocks.draw.mock.lastCall![0] as DrawInput;
     expect(overview.zoom).toBe(1);
     expect(overview.nodeScales.get(at)).toBe(initial.nodeScales.get(at));
@@ -371,6 +381,82 @@ describe("перетаскивание в графе связей", () => {
     act(() => applyTheme(BUILTIN_THEMES[1]));
     expect(mocks.draw).not.toHaveBeenCalled();
     document.documentElement.removeAttribute('style');
+  });
+
+  it("общее меню сохраняет местные действия, шапку и архив последним; ⋯ и клавиши открывают то же меню", () => {
+    const view = mount();
+    const labels = () => [...document.querySelectorAll('.context-menu-label')].map(e => e.textContent);
+    fireEvent.contextMenu(view.wrap, { clientX: 100, clientY: 100 });
+    const expected = ['Изолировать узел и связи', 'Изменить размер', 'Карточка сущности', 'Перейти к сущности',
+      'Открыть', 'Открыть вторым окном', 'В мешок', 'Закрепить', 'Копировать упоминание', 'В архив'];
+    expect(labels()).toEqual(expected);
+    expect(view.getByRole('menu', { name: 'Первый' })).toBeTruthy();
+    expect(document.querySelector('.context-menu-title')?.querySelector('.type-glyph')).toBeTruthy();
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    fireEvent.click(view.wrap, { clientX: 100, clientY: 100 });
+    fireEvent.click(view.getByRole('button', { name: 'Действия: Первый' }));
+    expect(labels()).toEqual(expected);
+    for (const props of [{ key: 'ContextMenu' }, { key: 'F10', shiftKey: true }]) {
+      fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      view.wrap.focus();
+      fireEvent.keyDown(view.wrap, props);
+      expect(labels()).toEqual(expected);
+    }
+  });
+
+  it("Shift+ПКМ пропускает системное меню", () => {
+    const view = mount();
+    expect(fireEvent.contextMenu(view.wrap, { clientX: 100, clientY: 100, shiftKey: true })).toBe(true);
+    expect(document.querySelector('.context-menu')).toBeNull();
+  });
+
+  it("список чтеца называет только видимые узлы, связи и приближает выбранный как поиск", () => {
+    const view = mount();
+    const list = view.getByRole('list', { name: 'Видимые узлы графа' });
+    expect(list.querySelectorAll('li')).toHaveLength(2);
+    const first = view.getByRole('button', { name: 'Существо: Первый · 1 связь' });
+    fireEvent.click(first);
+    expect(first.getAttribute('aria-pressed')).toBe('true');
+    const draw = mocks.draw.mock.lastCall![0] as DrawInput;
+    expect(draw.focusedKey).toBe('being:1');
+    expect(draw.zoom * draw.fitScale).toBeGreaterThanOrEqual(1.2);
+    fireEvent.click(view.getByRole('button', { name: /^Существа\s*2$/ }));
+    expect(list.querySelectorAll('li')).toHaveLength(0);
+  });
+
+  it("касание пустого поля панорамирует, щипок масштабирует; после отпускания нет скачка и записи узлов", () => {
+    const view = mount();
+    const touch = (type: 'down' | 'move' | 'up', id: number, x: number, y: number) => {
+      ({down:fireEvent.pointerDown, move:fireEvent.pointerMove, up:fireEvent.pointerUp})[type](view.wrap,
+        { pointerType:'touch', pointerId:id, clientX:x, clientY:y, button:0 });
+      flushFrame();
+    };
+    const before = mocks.draw.mock.lastCall![0] as DrawInput;
+    touch('down',1,600,400); touch('move',1,640,430);
+    let draw = mocks.draw.mock.lastCall![0] as DrawInput;
+    expect(draw.panX).toBe(before.panX + 40); expect(draw.panY).toBe(before.panY + 30);
+    expect(view.container.querySelector<HTMLElement>('.graph-marquee')?.style.display).not.toBe('block');
+    touch('down',2,740,430); touch('move',2,840,430);
+    draw = mocks.draw.mock.lastCall![0] as DrawInput;
+    expect(draw.zoom).toBe(before.zoom * 2);
+    touch('up',2,840,430);
+    fireEvent.lostPointerCapture(view.wrap, {pointerType:'touch',pointerId:2});
+    touch('move',1,650,440);
+    const after = mocks.draw.mock.lastCall![0] as DrawInput;
+    expect(after.panX).toBe(draw.panX + 10); expect(after.panY).toBe(draw.panY + 10);
+    touch('up',1,650,440);
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("карточка показывает короткую фразу и область; без описания строка отсутствует", () => {
+    const graphData = {...data, nodes: data.nodes.map((n,i) => ({...n, scopeLabel:'Сеттинг · Эстария', ...(i === 0 ? {blurb:'Живёт у реки.'} : {})}))};
+    const view = mount(false, graphData);
+    fireEvent.click(view.wrap, {clientX:100,clientY:100});
+    expect(view.getByText('Живёт у реки.')).toBeTruthy();
+    expect(view.getByText('Сеттинг · Эстария')).toBeTruthy();
+    fireEvent.click(view.wrap, {clientX:400,clientY:300});
+    expect(view.container.querySelector('.rg-card__blurb')).toBeNull();
+    expect(view.getByText('Сеттинг · Эстария')).toBeTruthy();
   });
 
 });

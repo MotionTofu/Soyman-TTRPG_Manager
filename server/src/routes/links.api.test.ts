@@ -12,6 +12,24 @@ let app: express.Express;
 beforeAll(() => {
   app = express();
   app.use("/api/links", linksRouter);
+  it("карточка узла получает только первую фразу (до 120 знаков) и имя области", async () => {
+    db.prepare("UPDATE setting_beings SET description=? WHERE id=?").run('**Живёт** у [[location@uid|Мир|реки]]. Полное описание не отправлять.', beingId);
+    db.prepare("UPDATE story_arcs SET description=? WHERE id=?").run('А'.repeat(300), arcId);
+    graphCache.clear();
+    const world = await request(app).get(`/api/links/graph?view=world&setting_id=${settingId}`);
+    const being = world.body.nodes.find((n:{key:string}) => n.key === `being:${beingId}`);
+    expect(being).toMatchObject({blurb:'Живёт у реки.',scopeLabel:'Сеттинг · Тестовый сеттинг'});
+    expect(being).not.toHaveProperty('description'); expect(being).not.toHaveProperty('descr');
+    expect(JSON.stringify(world.body)).not.toContain('Полное описание');
+    const location = world.body.nodes.find((n:{key:string}) => n.key === `location:${locationId}`);
+    expect(location).not.toHaveProperty('blurb');
+    expect(location.scopeLabel).toBe('Сеттинг · Тестовый сеттинг');
+    const adventures = await request(app).get(`/api/links/graph?view=adventures&campaign_id=${campaignId}`);
+    const arc = adventures.body.nodes.find((n:{key:string}) => n.key === `adventure:${arcId}`);
+    expect(arc.blurb).toHaveLength(120); expect(arc.blurb.endsWith('…')).toBe(true);
+    expect(adventures.body.nodes.find((n:{key:string}) => n.key === `session:${sessionId}`).scopeLabel).toBe('Кампания · Кампания');
+  });
+
 });
 
 describe("GET /links/graph?view=", () => {

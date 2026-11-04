@@ -10,7 +10,9 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
-import { ContextMenu } from "./ContextMenu";
+import type { ContextMenuItem } from "./ContextMenu";
+import { EntityMenuButton } from "./PageContextMenu";
+import { entityMark, openEntityMenu } from "../pageMenu";
 import { EmptyState } from "./EmptyState";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { Modal } from "./Modal";
@@ -221,7 +223,7 @@ function GraphCanvas({
   onNodeClick: (n: GraphNode, isFoldedGroup: boolean) => void;
   onNodeDoubleClick: (key: string) => void;
   onBackgroundClick: () => void;
-  onNodeContextMenu: (e: ReactMouseEvent, node: GraphNode) => void;
+  onNodeContextMenu: (e: { clientX: number; clientY: number }, node: GraphNode) => void;
   /** Зафиксировать завершённый перенос одного узла или всего выделенного. */
   onNodeDrag: (moves: [string, number, number][]) => void;
   /** Ярусы: вписать по высоте и встать так, чтобы эта точка мира была на 2/3 экрана. */
@@ -246,6 +248,8 @@ function GraphCanvas({
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const justPannedRef = useRef(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const touchPoints = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number; worldX: number; worldY: number } | null>(null);
 
   // Keep path computation as refs (cheap, no re-render needed)
   const path = pathFrom && pathTo ? findPath(visibleEdges, pathFrom, pathTo) : null;
@@ -464,6 +468,16 @@ function GraphCanvas({
 
   // ── Keyboard pan ──────────────────────────────────────────────
   const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+      const node = nodesByKey.get(focusedKey ?? [...selectedKeys][0]);
+      if (!node) return;
+      e.preventDefault(); e.stopPropagation();
+      const r = e.currentTarget.getBoundingClientRect();
+      const p = positions.get(node.key);
+      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      onNodeContextMenu({ clientX: r.left + (p ? p.x * viewRef.current.zoom * fs + viewRef.current.panX : r.width / 2), clientY: r.top + (p ? p.y * viewRef.current.zoom * fs + viewRef.current.panY : r.height / 2) }, node);
+      return;
+    }
     const step = ARROW_PAN_STEP;
     const v = viewRef.current;
     let dx = 0;
@@ -483,7 +497,7 @@ function GraphCanvas({
     viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(draw);
-  }, [draw, worldWidth, worldHeight, onSelect]);
+  }, [draw, worldWidth, worldHeight, onSelect, focusedKey, selectedKeys, nodesByKey, positions, onNodeContextMenu]);
 
   // ── Pointer: world coordinates from event ─────────────────────
   const worldCoords = useCallback((e: { clientX: number; clientY: number }) => {
@@ -528,6 +542,24 @@ function GraphCanvas({
 
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     wrapRef.current?.focus({ preventScroll: true });
+    if (e.pointerType === "touch") {
+      e.preventDefault(); hideTooltip();
+      touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      e.currentTarget.setPointerCapture(e.pointerId);
+      if (touchPoints.current.size >= 2) {
+        dragState.current = null; dragOrigin.current = null; dragPositionsRef.current = null;
+        panState.current = null;
+        const [a, b] = [...touchPoints.current.values()];
+        const r = e.currentTarget.getBoundingClientRect();
+        const v = viewRef.current, fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+        pinch.current = { distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)), zoom: v.zoom,
+          worldX: ((a.x + b.x) / 2 - r.left - v.panX) / (v.zoom * fs),
+          worldY: ((a.y + b.y) / 2 - r.top - v.panY) / (v.zoom * fs) };
+        justPannedRef.current = true;
+        draw();
+        return;
+      }
+    }
     if (e.button === 1) {
       e.preventDefault();
       panState.current = { startX: e.clientX, startY: e.clientY, originX: viewRef.current.panX, originY: viewRef.current.panY, moved: false };
@@ -547,10 +579,12 @@ function GraphCanvas({
       const starts = new Map(keys.map((k) => [k, { x: positions.get(k)!.x, y: positions.get(k)!.y }]));
       dragState.current = { keys, moved: false };
       dragOrigin.current = { starts, clientX: e.clientX, clientY: e.clientY };
+    } else if (e.pointerType === "touch") {
+      panState.current = { startX: e.clientX, startY: e.clientY, originX: viewRef.current.panX, originY: viewRef.current.panY, moved: false };
     } else {
       marquee.current = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, add: e.shiftKey, moved: false };
     }
-  }, [visibleNodes, positions, nodeScales, worldCoords, selectedKeys]);
+  }, [visibleNodes, positions, nodeScales, worldCoords, selectedKeys, worldWidth, worldHeight, draw]);
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     const c = canvasRef.current;
@@ -558,6 +592,20 @@ function GraphCanvas({
     const r = c.getBoundingClientRect();
     if (r.width === 0) return;
 
+    if (e.pointerType === "touch" && touchPoints.current.has(e.pointerId)) {
+      touchPoints.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch.current && touchPoints.current.size >= 2) {
+        const [a, b] = [...touchPoints.current.values()];
+        const base = pinch.current, fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+        const zoom = Math.min(maxGraphZoom(fs, clipTitles), Math.max(MIN_ZOOM, base.zoom * Math.hypot(b.x - a.x, b.y - a.y) / base.distance));
+        const pan = clampPan(zoom, (a.x + b.x) / 2 - r.left - base.worldX * zoom * fs,
+          (a.y + b.y) / 2 - r.top - base.worldY * zoom * fs, r.width, r.height, worldWidth, worldHeight, fs);
+        viewRef.current = { zoom, panX: pan.x, panY: pan.y };
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+    }
     // Node drag
     if (dragState.current && dragOrigin.current) {
       updateDragPreview(e.clientX, e.clientY);
@@ -595,9 +643,18 @@ function GraphCanvas({
     viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(draw);
-  }, [draw, worldWidth, worldHeight, updateDragPreview]);
+  }, [draw, worldWidth, worldHeight, updateDragPreview, clipTitles]);
 
   const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") {
+      touchPoints.current.delete(e.pointerId);
+      if (pinch.current) {
+        pinch.current = null;
+        const remaining = [...touchPoints.current.values()][0];
+        panState.current = remaining ? { startX: remaining.x, startY: remaining.y, originX: viewRef.current.panX, originY: viewRef.current.panY, moved: true } : null;
+        return;
+      }
+    }
     const m = marquee.current;
     if (m) {
       marquee.current = null;
@@ -636,7 +693,10 @@ function GraphCanvas({
     panState.current = null;
   }, [visibleNodes, positions, onSelect, worldCoords, updateDragPreview, draw, onNodeDrag]);
 
-  const handlePointerCancel = useCallback(() => {
+  const handlePointerCancel = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    // Lost capture после штатного pointerup не прерывает оставшийся палец.
+    if (e.type === "lostpointercapture" && e.pointerType === "touch" && !touchPoints.current.has(e.pointerId)) return;
+    touchPoints.current.clear(); pinch.current = null;
     if (!dragState.current && !panState.current && !marquee.current) return;
     cancelAnimationFrame(rafRef.current);
     justPannedRef.current = true;
@@ -672,6 +732,7 @@ function GraphCanvas({
   }, [visibleNodes, positions, nodeScales, onNodeDoubleClick, worldCoords]);
 
   const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.shiftKey) return;
     e.preventDefault();
     const w = worldCoords(e);
     const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
@@ -679,6 +740,7 @@ function GraphCanvas({
   }, [visibleNodes, positions, nodeScales, onNodeContextMenu, worldCoords]);
 
   const handleMouseMove = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.type.startsWith("pointer") && (e as unknown as ReactPointerEvent).pointerType === "touch") return;
     if (dragState.current || panState.current || marquee.current) return;
     const w = worldCoords(e);
     const hitN = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
@@ -737,6 +799,8 @@ function GraphCanvas({
         position: "relative",
       }}
       tabIndex={0}
+      role="group"
+      aria-label="Поле графа"
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={(e) => { handlePointerMove(e); handleMouseMove(e); }}
@@ -789,7 +853,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [pathFrom, setPathFrom] = useState<string | null>(null);
   const [pathTo, setPathTo] = useState<string | null>(null);
   const [isolation, setIsolation] = useState<{ key: string; depth: number } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const [manualScales, setManualScales] = useState<Map<string, number>>(() => new Map());
   const [sizeMode, setSizeMode] = useState<NodeSizeMode>(() => loadSizeMode(view));
@@ -1008,6 +1071,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const matchKeys = shownMatches.map((n) => n.key).join("|");
   useEffect(() => setHighlightIdx(-1), [query, matchKeys]);
 
+  const visibleLinkCounts = new Map<string, number>();
+  for (const edge of visibleEdgesList) {
+    visibleLinkCounts.set(edge.from, (visibleLinkCounts.get(edge.from) ?? 0) + 1);
+    if (edge.to !== edge.from) visibleLinkCounts.set(edge.to, (visibleLinkCounts.get(edge.to) ?? 0) + 1);
+  }
+
   // Path
   const path = pathFrom && pathTo ? findPath(visibleEdgesList, pathFrom, pathTo) : null;
 
@@ -1027,7 +1096,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setFocusedKey(key);
     setPathFrom(null);
     setPathTo(null);
-    setMenu(null);
     setManualScales((prev) => { if (prev.has(key)) return prev; const next = new Map(prev); next.set(key, 2); return next; });
   }
   function leaveIsolation() { setIsolation(null); }
@@ -1046,13 +1114,23 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setLayoutRevision((revision) => revision + 1);
   }
   function handleNodeClick(n: GraphNode, isFoldedGroup: boolean) {
-    setMenu(null);
     if (isFoldedGroup) { setExpandedGroups((prev) => new Set(prev).add(n.key)); setFocusedKey(n.key); return; }
     if (expandedGroups.has(n.key)) { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(n.key); return next; }); return; }
     if (focusedKey === n.key) setFocusedKey(null); else focusNode(n.key);
   }
-  function handleBackgroundClick() { setFocusedKey(null); setMenu(null); setSelected(new Set()); }
-  function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) { setMenu({ x: e.clientX, y: e.clientY, node }); }
+  function handleBackgroundClick() { setFocusedKey(null); setSelected(new Set()); }
+  function nodeMenuItems(node: GraphNode): ContextMenuItem[] {
+    return [
+      { label: "Изолировать узел и связи", onClick: () => isolate(node.key) },
+      { label: "Изменить размер", onClick: () => setResizeTarget({ title: node.title, keys: [node.key] }) },
+      { label: "Карточка сущности", onClick: () => setPreview({ type: node.type, id: node.id }) },
+      ...(TYPE_ROUTES[node.type] ? [{ label: "Перейти к сущности", onClick: () => navigate(`${TYPE_ROUTES[node.type]}/${node.id}`) }] : []),
+      ...(expandedGroups.has(node.key) ? [{ label: "Свернуть группу", onClick: () => setExpandedGroups((prev) => { const next = new Set(prev); next.delete(node.key); return next; }) }] : []),
+    ];
+  }
+  function handleNodeContextMenu(e: { clientX: number; clientY: number }, node: GraphNode) {
+    openEntityMenu({ type: node.type, id: node.id, name: node.title }, e.clientX, e.clientY, nodeMenuItems(node));
+  }
 
   const handleSelect = useCallback((keys: string[], mode: SelectMode) => {
     setSelected((prev) => {
@@ -1254,18 +1332,23 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const cardTint = cardNode ? typeTint(cardNode.type) : null;
   const cardRoute = cardNode ? TYPE_ROUTES[cardNode.type] : undefined;
   const card = cardNode && cardKey && (
-    <section className="rg-card" aria-label={`Выбрано: ${cardNode.title}`}>
+    <section className="rg-card" aria-label={`Выбрано: ${cardNode.title}`}
+      {...entityMark(cardNode.type, cardNode.id, cardNode.title)}
+      onContextMenu={(e) => { if (e.shiftKey) return; e.preventDefault(); handleNodeContextMenu(e, cardNode); }}>
       <div
         className="rg-card__band"
         style={cardTint?.kind === "color" ? { background: cardTint.color, color: pickTextOn(cardTint.color) } : undefined}
       >
         <TypeGlyph type={cardNode.type} />
         <span>{ENTITY_TYPE_SINGULAR[cardNode.type] ?? TYPE_LABELS[cardNode.type] ?? cardNode.type} · {cardLinks} {plural(cardLinks, "связь", "связи", "связей")}</span>
+        <EntityMenuButton entity={{ type: cardNode.type, id: cardNode.id, name: cardNode.title }} local={nodeMenuItems(cardNode)} />
         <button type="button" className="rg-card__close" aria-label="Снять выбор"
           onClick={() => { if (cardIsolated) leaveIsolation(); setFocusedKey(null); }}>×</button>
       </div>
       <div className="rg-card__body">
         <b>{cardNode.title}</b>
+        {cardNode.blurb && <p className="rg-card__blurb">{cardNode.blurb}</p>}
+        {cardNode.scopeLabel && <span className="rg-card__scope d-mono">{cardNode.scopeLabel}</span>}
         {cardIsolated && isolationView && (
           <span className="d-mono">шагов {isolation!.depth} · вокруг {isolationView.nodes.length - 1}</span>
         )}
@@ -1300,7 +1383,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       action={<Link to="/settings" className="d-btn">К сеттингам</Link>}
     />
   ) : (
-    <div ref={graphWrapRef} className="rg-frame" style={{ minHeight: fullscreen || fill ? 0 : height }}>
+    <div ref={graphWrapRef} className="rg-frame" style={{ minHeight: fullscreen || fill ? undefined : height }}>
       <GraphCanvas
         key={ringsMode ? "concentric" : "standard"}
         width={canvasSize.width}
@@ -1369,50 +1452,49 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     <div className={`rg-body${fill || fullscreen ? " rg-body--fill" : ""}`}>
       {graphFrame}
       {legend}
+      <ul className="sr-only rg-node-list" aria-label="Видимые узлы графа">
+        {visibleNodesList.map((node) => {
+          const count = visibleLinkCounts.get(node.key) ?? 0;
+          return <li key={node.key}><button type="button" {...entityMark(node.type, node.id, node.title)}
+            aria-pressed={focusedKey === node.key}
+            onClick={() => focusNode(node.key, true)}
+            onContextMenu={(e) => { if (e.shiftKey) return; e.preventDefault(); handleNodeContextMenu(e, node); }}>
+            {ENTITY_TYPE_SINGULAR[node.type] ?? TYPE_LABELS[node.type] ?? node.type}: {node.title} · {count} {plural(count, "связь", "связи", "связей")}
+          </button></li>;
+        })}
+      </ul>
     </div>
   );
 
   const overlays = (
     <>
-      {menu && (
-        <ContextMenu x={menu.x} y={menu.y}
-          items={[
-            { label: "Изолировать узел и связи", onClick: () => isolate(menu.node.key) },
-            { label: "Изменить размер", onClick: () => { setResizeTarget({ title: menu.node.title, keys: [menu.node.key] }); setMenu(null); } },
-            { label: "Карточка сущности", onClick: () => { setPreview({ type: menu.node.type, id: menu.node.id }); setMenu(null); } },
-            ...(TYPE_ROUTES[menu.node.type] ? [{ label: "Перейти к сущности", onClick: () => { navigate(`${TYPE_ROUTES[menu.node.type]}/${menu.node.id}`); setMenu(null); } }] : []),
-            ...(expandedGroups.has(menu.node.key) ? [{ label: "Свернуть группу", onClick: () => { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(menu.node.key); return next; }); setMenu(null); } }] : []),
-          ]}
-          onClose={() => setMenu(null)}
-        />
-      )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
       {resizeTarget && (
-        <Modal onClose={() => setResizeTarget(null)}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16, minWidth: 280 }}>
-            <div style={{ fontFamily: "var(--font-ui)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Размер узла</div>
-            <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600 }}>{resizeTarget.title}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36, textAlign: "right" }}>50%</span>
-              <input type="range" min={50} max={200} step={5}
+        <Modal ariaLabel="Размер узла" onClose={() => setResizeTarget(null)}>
+          <div className="rg-dialog stack">
+            <h2 className="d-plate">Размер узла</h2>
+            <strong>{resizeTarget.title}</strong>
+            <div className="rg-size-range">
+              <span className="d-mono">50%</span>
+              <input aria-label="Размер узла в процентах" type="range" min={50} max={200} step={5}
                 value={Math.round((manualScales.get(resizeTarget.keys[0]) ?? 1) * 100)}
                 onChange={(e) => { const val = Number(e.target.value) / 100; setManualScales((prev) => { const next = new Map(prev); for (const k of resizeTarget.keys) { if (val === 1) next.delete(k); else next.set(k, val); } return next; }); }}
-                style={{ flex: 1, accentColor: "var(--accent, #c2683f)" }} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36 }}>200%</span>
+              />
+              <span className="d-mono">200%</span>
             </div>
-            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((manualScales.get(resizeTarget.keys[0]) ?? 1) * 100)}%</div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+            <div className="rg-size-value d-mono">{Math.round((manualScales.get(resizeTarget.keys[0]) ?? 1) * 100)}%</div>
+            <div className="row rg-dialog__actions">
               {resizeTarget.keys.some((k) => (manualScales.get(k) ?? 1) !== 1) && (
-                <button type="button" className="graph-tb-btn" onClick={() => setManualScales((prev) => { const next = new Map(prev); for (const k of resizeTarget.keys) next.delete(k); return next; })}>Сбросить</button>
+                <button type="button" className="d-btn d-btn--sm" onClick={() => setManualScales((prev) => { const next = new Map(prev); for (const k of resizeTarget.keys) next.delete(k); return next; })}>Сбросить</button>
               )}
-              <button type="button" className="graph-tb-btn" onClick={() => setResizeTarget(null)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Готово</button>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setResizeTarget(null)}>Готово</button>
             </div>
           </div>
         </Modal>
       )}
       {isolatedOpen && isolated.length > 0 && (
-        <Modal onClose={() => setIsolatedOpen(false)}>
-          <div style={{ padding: 16, minWidth: 320, maxWidth: 480, maxHeight: "60vh", display: "flex", flexDirection: "column", gap: 8 }}>
+        <Modal ariaLabel="Без связей" onClose={() => setIsolatedOpen(false)}>
+          <div className="rg-dialog rg-dialog--isolated stack">
             <div style={{ fontFamily: "var(--font-ui)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>
               Без связей в этом срезе: {isolated.length}
             </div>
@@ -1431,7 +1513,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               })}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-              <button type="button" className="graph-tb-btn" onClick={() => setIsolatedOpen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Закрыть</button>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setIsolatedOpen(false)}>Закрыть</button>
             </div>
           </div>
         </Modal>
