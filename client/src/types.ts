@@ -1160,6 +1160,7 @@ export interface SettingCommunityDetail extends SettingCommunity {
 }
 
 export interface BeingEvent {
+  campaign_id?: number | null;
   id: number;
   being_id: number;
   session_id: number | null;

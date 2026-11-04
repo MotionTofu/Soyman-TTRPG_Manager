@@ -191,7 +191,7 @@ export function PageContextMenu() {
           onClick: () => void buildMentionToken(entity.type, entity.id, entity.name).then((t) => { if (t) void clip.writeText(t); }),
         },
       ]),
-      group([...local.filter((item) => item.danger), isGm && ARCHIVABLE.has(entity.type) && { label: "В архив", danger: true, onClick: () => void archive(entity) }]),
+      group([...local.filter((item) => item.danger), isGm && ARCHIVABLE.has(entity.type) && !local.some((item) => item.danger && /архив/i.test(item.label)) && { label: "В архив", danger: true, onClick: () => void archive(entity) }]),
     ]);
   }
 

@@ -332,7 +332,7 @@ settingBeingsRouter.get("/:id", (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   const events = db
     .prepare(
-      `SELECT be.*, s.date as session_date, c.name as campaign_name
+      `SELECT be.*, s.date as session_date, c.name as campaign_name, c.id AS campaign_id
        FROM being_events be
        LEFT JOIN sessions s ON s.id = be.session_id
        LEFT JOIN campaigns c ON c.id = s.campaign_id

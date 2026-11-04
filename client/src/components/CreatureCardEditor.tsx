@@ -54,6 +54,7 @@ export function CreatureCardEditor({
   inline,
   onDone,
   settingId,
+  forceInitiallyOpen = false,
 }: {
   type: "being" | "compendium_entry";
   id: number;
@@ -61,6 +62,7 @@ export function CreatureCardEditor({
   inline?: boolean;
   onDone?: () => void;
   settingId?: number;
+  forceInitiallyOpen?: boolean;
 }) {
   // Редактор — только у Мастера, поэтому читает мастерский маршрут напрямую,
   // без игроцкого запасного пути fetchCreatureCard.
@@ -72,7 +74,7 @@ export function CreatureCardEditor({
   const [tactics, setTactics] = useState("");
   const [secret, setSecret] = useState("");
   const [force, setForce] = useState<BeingForce>({});
-  const [showExtra, setShowExtra] = useState(false);
+  const [showExtra, setShowExtra] = useState(forceInitiallyOpen);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 

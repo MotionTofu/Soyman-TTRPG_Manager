@@ -6,7 +6,8 @@ import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { galleryAffects, settingPaths } from "../data/settingEntities";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
-import type { GalleryImage } from "../types";
+import type { GalleryImage, Resource } from "../types";
+import { Modal } from "./Modal";
 import { ImageLightbox } from "./ImageLightbox";
 import { EmptyState } from "./EmptyState";
 import { useConfirm } from "../hooks/useConfirm";
@@ -29,6 +30,7 @@ interface ThumbnailUploadProps {
 }
 
 interface Props {
+  profile?: boolean;
   ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact" | "compendium_entry";
   ownerId: number;
   focusedId?: number;
@@ -40,7 +42,7 @@ interface Props {
   avatarUpload?: ThumbnailUploadProps;
 }
 
-export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, focusedId, hideDelete = false }: Props) {
+export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, focusedId, hideDelete = false, profile = false }: Props) {
   const { offerUndo } = useUndoDelete();
   const galleryPath = settingPaths.gallery(ownerType, ownerId);
   const gallery = useResource<GalleryImage[]>(galleryPath);
@@ -58,6 +60,8 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
   const [confirmDialog, confirm] = useConfirm();
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false);
+  const [libraryOpen,setLibraryOpen] = useState(false);
+  const library = useResource<Resource[]>(profile && libraryOpen ? "/resources?category=image" : null);
 
   // Порядок меняется на экране сразу; сервер отказал — прежний порядок
   // возвращается, и появляется плашка.
@@ -76,7 +80,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
     afterWrite(galleryAffects(ownerType, ownerId));
   }
 
-  async function uploadFiles(files: FileList | null, resetTarget?: HTMLInputElement | null) {
+  async function uploadFiles(files: FileList | File[] | null, resetTarget?: HTMLInputElement | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadProgress({ done: 0, total: files.length });
@@ -233,29 +237,18 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
     return isSafeImageUrl(url) ? url : "";
   }
 
-  const galleryTitle =
-    ownerType === "being"
-      ? "ИЗОБРАЖЕНИЯ СУЩЕСТВА"
-      : ownerType === "community"
-        ? "ИЗОБРАЖЕНИЯ СООБЩЕСТВА"
-        : ownerType === "character"
-          ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
-          : ownerType === "artifact"
-            ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
-            : ownerType === "compendium_entry"
-              ? "ГАЛЕРЕЯ"
-              : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
-  return (
-    <div className={`stack gallery-tab${focusedId != null ? " gallery-tab--focused" : ""}`}>
-      <div className="gallery-tab-header">
-        <span className="gallery-tab-title">{galleryTitle}</span>
-        <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
-      </div>
-      <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
-        JPG, PNG, GIF, WebP или AVIF до 15MB.
-      </p>
+  async function attachImage(url: string, name: string, portrait = false) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Не удалось прочитать картинку");
+      const blob = await response.blob();
+      const file = new File([blob],name,{type:blob.type});
+      if (portrait) avatarUpload?.onSelect(file);
+      else { await uploadFiles([file]); setLibraryOpen(false); }
+    } catch (e) { showSaveError(errorText(e)); }
+  }
 
-      {(thumbnailUpload || avatarUpload) && (
+  const imageSlots = (thumbnailUpload || avatarUpload) ? (
         <div className="entity-image-slots">
           {thumbnailUpload && (
             <EntityImageSlot
@@ -278,10 +271,35 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
             />
           )}
         </div>
-      )}
+  ) : null;
+
+  const galleryTitle =
+    ownerType === "being"
+      ? "ИЗОБРАЖЕНИЯ СУЩЕСТВА"
+      : ownerType === "community"
+        ? "ИЗОБРАЖЕНИЯ СООБЩЕСТВА"
+        : ownerType === "character"
+          ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
+          : ownerType === "artifact"
+            ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
+            : ownerType === "compendium_entry"
+              ? "ГАЛЕРЕЯ"
+              : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
+  return (
+    <div className={`stack gallery-tab${profile ? " profile-gallery" : ""}${focusedId != null ? " gallery-tab--focused" : ""}`}>
+      <div className="gallery-tab-header">
+        <span className={profile ? "d-plate" : "gallery-tab-title"}>{profile ? "Галерея" : galleryTitle}</span>
+        <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
+        {profile && <div className="profile-block__actions">{images.length > 1 && <button type="button" className="d-btn d-btn--sm" onClick={sortAlphabetically}>А-Я</button>}<button type="button" className="d-btn d-btn--sm" onClick={() => setLibraryOpen(true)}>Из библиотеки</button><label className="d-btn d-btn--sm">+ Загрузить<input type="file" hidden accept={IMAGE_ACCEPT} multiple onChange={(e) => uploadFiles(e.target.files,e.currentTarget)} /></label></div>}
+      </div>
+      <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
+        JPG, PNG, GIF, WebP или AVIF до 15MB.
+      </p>
+
+      {profile && imageSlots ? <details className="profile-gallery-settings"><summary>Портрет и миниатюра</summary>{imageSlots}</details> : imageSlots}
       {thumbnailUpload?.modal}
       {avatarUpload?.modal}
-      {images.length > 1 && (
+      {!profile && images.length > 1 && (
         <button type="button" className="comp-mini" onClick={sortAlphabetically} title="Отсортировать по алфавиту (по подписи)" style={{ alignSelf: "flex-start", fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "var(--fs-meta)" }}>
           А-Я
         </button>
@@ -396,11 +414,15 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={[{ label: "Удалить", danger: true, onClick: () => removeImage(menu.id) }]}
+          items={[
+            ...(profile && avatarUpload ? [{ label:"Сделать портретом",onClick:() => { const img=images.find((i) => i.id === menu.id); if (img) void attachImage(img.image_url,labelFor(img),true); } }] : []),
+            { label: "Удалить", danger: true, onClick: () => removeImage(menu.id) },
+          ]}
           onClose={() => setMenu(null)}
         />
       )}
       {confirmDialog}
+      {libraryOpen && <Modal wide onClose={() => setLibraryOpen(false)} ariaLabel="Картинка из библиотеки"><h2>Из библиотеки</h2>{library.error && <p role="alert">{library.error}</p>}<div className="profile-library-grid">{(library.data ?? []).filter((r) => r.file_url).map((r) => <button type="button" key={r.id} disabled={uploading} onClick={() => void attachImage(r.file_url!,r.name)}><img src={r.file_url!} alt="" loading="lazy" /><span>{r.name}</span></button>)}</div>{library.data?.length === 0 && <p className="muted">В библиотеке пока нет картинок.</p>}</Modal>}
     </div>
   );
 }

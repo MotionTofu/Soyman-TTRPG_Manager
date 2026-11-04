@@ -1,8 +1,7 @@
 import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
-import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { EntityParticipates } from "../components/EntityParticipates";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfEntitySources } from "../components/PdfEntitySources";
 import {
@@ -26,22 +25,21 @@ import { ChapterList } from "../components/ChapterList";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
 import { CreatureCardLoader } from "../components/CreatureCard";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
-import { RelationsTab } from "../components/RelationsTab";
 import { MentionText } from "../components/mentions/MentionText";
-import { useSettingCalendar } from "../hooks/useSettingCalendar";
-import { formatImportantDate } from "../inworldCalendar";
 import { EntityPage } from "../components/EntityPage";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
-import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { useTabState } from "../hooks/useTabState";
 import { useImageCrop } from "../hooks/useImageCrop";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import { TagChips } from "../components/TagChips";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
-import { EditableTextCard } from "../components/EditableTextCard";
+import { ProfileText as EditableTextCard, ProfileHero, ProfileEntityLink, ProfileBlock } from "../components/profiles/ProfileParts";
+import { ProfileLinks } from "../components/profiles/ProfileLinks";
+import { ProfileChronicle, mergeProfileWorld, type ProfileWorldEvent } from "../components/profiles/ProfileChronicle";
+import type { ChronicleNow } from "../components/chronicle/time";
+import { ProfileStatblock } from "../components/profiles/ProfileStatblock";
 import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
-import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
@@ -51,7 +49,6 @@ import type {
   BeingChapter,
   CompendiumLink,
   Campaign,
-  DateRecurrence,
   EntityRelationsResponse,
   LiveSession,
   SearchResult,
@@ -61,11 +58,8 @@ import type {
 } from "../types";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 import {
-  BaseFold,
-  CampaignChronicle,
   CampaignRecords,
   ContextSwitch,
-  EngagedCampaigns,
 } from "../components/campaign/CampaignProfileParts";
 import { SIDE_PROFILE_ASPECTS } from "../entityRecords";
 import {
@@ -114,6 +108,7 @@ export function BeingDetailPage() {
   const inCampaign = ctx.campaign;
   const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "being", beingId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "being", beingId);
+  const world = useResource<{ events: ProfileWorldEvent[]; now: ChronicleNow | null }>(being ? `/links/profile-chronicle?type=being&id=${beingId}${inCampaign ? `&campaign_id=${inCampaign.id}` : ""}` : null).data;
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   const communities =
     useResource<SettingCommunity[]>(
@@ -144,15 +139,10 @@ export function BeingDetailPage() {
       settingId ? settingPaths.inSetting("location", settingId) : null,
     ).data ?? [];
   const [addLocationId, setAddLocationId] = useState<number | null>(null);
-  const [dateTitle, setDateTitle] = useState("");
-  const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
-  const [dateYear, setDateYear] = useState("");
-  const [dateMonth, setDateMonth] = useState("");
-  const [dateDay, setDateDay] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInput = useRef<HTMLInputElement>(null);
   const [editingCard, setEditingCard] = useState(false);
 
-  const calendar = useSettingCalendar(being?.setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const [confirmDialog, confirm] = useConfirm();
   const { deleteWithUndo } = useUndoDelete();
@@ -162,11 +152,10 @@ export function BeingDetailPage() {
   });
   const run = useAction();
   const afterWrite = useAfterWrite();
-  const [dossierQuery, setDossierQuery] = useState("");
 
   // Соседи по сеттингу — для prev/next навигации (U-P0-1). Тот же список
   // существ сеттинга, что у «Связей» и «Населения», — из кэша слоя.
-  const settingBeings = useResource<{ id: number }[]>(
+  const settingBeings = useResource<{ id: number; name: string }[]>(
     settingId ? settingPaths.inSetting("being", settingId) : null,
   ).data;
   const neighbourIds = useMemo(() => {
@@ -367,47 +356,6 @@ export function BeingDetailPage() {
   }
 
 
-  // Важные даты попадают в календарь сеттинга и кампаний.
-  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
-
-  async function addImportantDate() {
-    if (!dateTitle.trim() || !dateDay) return;
-    const body = {
-      title: dateTitle,
-      recurrence: dateRecurrence,
-      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
-      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
-      day: Number(dateDay),
-    };
-    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
-    // Набранное остаётся в полях — добавить ещё раз можно самому.
-    const done = await run(
-      () =>
-        write
-          .post(`/setting-beings/${beingId}/important-dates`, body)
-          .then(() => true),
-      { affects: dateAffects, retry: false },
-    );
-    if (!done) return;
-    setDateTitle("");
-    setDateYear("");
-    setDateMonth("");
-    setDateDay("");
-  }
-
-  async function removeImportantDate(dateId: number) {
-    const ok = await confirm({
-      title: "Удалить дату?",
-      message: "Удалить важную дату?",
-      confirmLabel: "Удалить",
-      danger: true,
-    });
-    if (!ok) return;
-    await run(() => write.del(`/setting-beings/important-dates/${dateId}`), {
-      affects: dateAffects,
-    });
-  }
-
   async function handleAvatarChange(file: File | null) {
     if (!file) return;
     setUploadingAvatar(true);
@@ -428,19 +376,19 @@ export function BeingDetailPage() {
 
   const chaptersOf = (section: BeingChapter["section"]) =>
     being.chapters.filter(
-      (c) => c.section === section && matches(dossierQuery, c.title, c.content),
+      (c) => c.section === section && matches("", c.title, c.content),
     );
   const scenes = being.scenes ?? [];
   const relationCount = relations
     ? relations.outgoing.length + relations.incoming.length
     : 0;
   const linkCount = being.locations.length + relationCount + scenes.length;
-  const chronicleCount = being.important_dates.length + being.events.length;
+  const chronicleCount = mergeProfileWorld(being.important_dates,world?.events ?? [],world?.now ?? null).length + being.events.filter((e) => !inCampaign || e.campaign_id === inCampaign.id).length;
   const isBestiary = being.category === "bestiary";
 
   return (
     <EntityPage
-      paper
+      profile={{ id: beingId, previous: neighbourIds.prev ? { href: `/beings/${neighbourIds.prev}`, name: settingBeings?.find((b) => b.id === neighbourIds.prev)?.name ?? "Предыдущее" } : undefined, next: neighbourIds.next ? { href: `/beings/${neighbourIds.next}`, name: settingBeings?.find((b) => b.id === neighbourIds.next)?.name ?? "Следующее" } : undefined }}
       crumbs={inCampaign ? campaignCrumbs(inCampaign, being.name) : [
         ...settingCrumbs,
         {
@@ -489,6 +437,8 @@ export function BeingDetailPage() {
       // Главного действия нет: быстрый просмотр карточки стал шапкой досье
       // (Q3), а «Править» стоит на самой карточке — рядом с тем, что правят.
       actions={[
+        { label: "Показать в графе", onClick: () => navigate(`/graph/world?focus=being:${beingId}&depth=2`) },
+        ...(!inCampaign ? [{ label: uploadingAvatar ? "Загрузка…" : "Сменить портрет", onClick: () => avatarInput.current?.click() }] : []),
         { label: "Печать профиля", onClick: () => window.print() },
         { label: "Дублировать", onClick: duplicateBeing },
         { label: "Архивировать", danger: true, onClick: archiveBeing },
@@ -510,6 +460,7 @@ export function BeingDetailPage() {
           {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
+          <input ref={avatarInput} type="file" hidden accept={IMAGE_ACCEPT} onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
         </>
       }
     >
@@ -518,31 +469,6 @@ export function BeingDetailPage() {
         campaign={inCampaign}
         onSelect={ctx.select}
       />
-      {/* Соседи по списку населения — язычки на кромке листа, на всех
-          вкладках (владелец, 2026-10-01). Если такое понадобится ещё
-          одной карточке — это гнездо каркаса. */}
-      <button
-        type="button"
-        className="paper-flap paper-flap--prev"
-        disabled={!neighbourIds.prev}
-        title={neighbourIds.prev ? "Предыдущее существо" : "Нет предыдущего"}
-        onClick={() =>
-          neighbourIds.prev && navigate(`/beings/${neighbourIds.prev}`)
-        }
-      >
-        ←
-      </button>
-      <button
-        type="button"
-        className="paper-flap paper-flap--next"
-        disabled={!neighbourIds.next}
-        title={neighbourIds.next ? "Следующее существо" : "Нет следующего"}
-        onClick={() =>
-          neighbourIds.next && navigate(`/beings/${neighbourIds.next}`)
-        }
-      >
-        →
-      </button>
       {/* Обновление не удалось, прежние данные на экране. */}
       {beingState.error && (
         <div className="card entity-page__error">
@@ -558,231 +484,29 @@ export function BeingDetailPage() {
         </span>
       )}
 
-      {tab === "Досье" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            <div className="dossier__figure">
-              {inCampaign ? (
-                <div className="dossier__portrait">
-                  {being.avatar_image_url ? (
-                    <img
-                      src={being.avatar_image_url}
-                      alt={`Портрет: ${being.name}`}
-                    />
-                  ) : (
-                    <span className="dossier__portrait-empty">Портрет</span>
-                  )}
-                </div>
-              ) : (
-              <label className="dossier__portrait" title={IMAGE_HINT}>
-                {being.avatar_image_url ? (
-                  <img
-                    src={being.avatar_image_url}
-                    alt={`Портрет: ${being.name}`}
-                  />
-                ) : (
-                  <span className="dossier__portrait-empty">Портрет</span>
-                )}
-                <span className="dossier__portrait-hint">
-                  {uploadingAvatar ? "Загрузка…" : "Сменить портрет"}
-                </span>
-                <input
-                  type="file"
-                  accept={IMAGE_ACCEPT}
-                  hidden
-                  onChange={(e) =>
-                    avatarCrop.onSelect(e.target.files?.[0] ?? null)
-                  }
-                />
-              </label>
-              )}
-              {/* Статус — под портретом (владелец, 2026-10-01). */}
-              <span className="badge tag being-category-badge">
-                {BEING_CATEGORY_LABELS[being.category]}
-              </span>
-            </div>
-            <dl className="paper-facts">
-              {being.communities.length > 0 && (
-                <div>
-                  <dt className="paper-label">Сообщества</dt>
-                  <dd>
-                    {being.communities.map((c) => (
-                      <Link key={c.id} className="mention-link mention--com" to={`/communities/${c.id}`}>
-                        {c.name}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {being.locations.length > 0 && (
-                <div>
-                  <dt className="paper-label">Где обитает</dt>
-                  <dd>
-                    {being.locations.map((l) => (
-                      <Link key={l.id} className="mention-link mention--loc" to={`/locations/${l.id}`}>
-                        {l.name}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {being.base_monster_id && (
-                <div>
-                  <dt className="paper-label">На основе</dt>
-                  <dd>
-                    <Link className="mention-link mention--cre" to={`/compendium/${being.base_monster_id}`}>
-                      {being.base_monster_name}
-                    </Link>
-                  </dd>
-                </div>
-              )}
-              {!inCampaign && (
-                <div>
-                  <dt className="paper-label">Теги</dt>
-                  <dd>
-                    <TagChips tags={being.tags} onChange={saveTags} />
-                  </dd>
-                </div>
-              )}
-              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
-              <PlayerVisibilityFact targetType="setting_being" targetId={beingId} />
-            </dl>
-            <div className="dossier__search">
-              <input
-                type="search"
-                placeholder="Поиск по досье"
-                value={dossierQuery}
-                onChange={(e) => setDossierQuery(e.target.value)}
-                aria-label="Поиск по досье"
-              />
-              <GraphNeighbourhoodLink type="being" id={being.id} />
-            </div>
-          </aside>
-
-          {inCampaign ? (
-          <div className="dossier__main">
-            {/* Основу отсюда не правят: «За столом» — значения основы, под
-                ячейкой — записи кампании той же графы. */}
-            <CreatureCardLoader
-              type="being"
-              id={beingId}
-              variant="page"
-              embedded
-              hideProfileButton
-              forceExtras={forceExtras(records, being.setting_id)}
-            />
-            <CampaignMove
-              being={being}
-              campaignId={inCampaign.id}
-              live={live?.campaign_id === inCampaign.id}
-              affects={mine}
-            />
-            <CampaignRecords
-              campaignId={inCampaign.id}
-              settingId={being.setting_id}
-              ownerType="being"
-              ownerId={beingId}
-              chains={records}
-              title="Что изменилось"
-              aspects={SIDE_PROFILE_ASPECTS}
-            />
-            <BaseFold
-              description={being.description}
-              chapters={[
-                { title: "История", items: chaptersOf("history") },
-                { title: "Поведение", items: chaptersOf("behavior") },
-              ]}
-            />
-          </div>
-          ) : (
-          <div className="dossier__main">
-            {editingCard ? (
-              <CreatureCardEditor
-                type="being"
-                id={beingId}
-                inline
-                settingId={being.setting_id}
-                onDone={() => setEditingCard(false)}
-              />
-            ) : (
-              <CreatureCardLoader
-                type="being"
-                id={beingId}
-                variant="page"
-                embedded
-                hideProfileButton
-                onEdit={() => setEditingCard(true)}
-              />
-            )}
-
-            <EngagedCampaigns
-              campaigns={being.campaigns}
-              onOpen={ctx.select}
-            />
-
-            <EditableTextCard
-              title="Описание"
-              help="Короткая сводка — тоже используется как краткое описание в раскрываемых карточках (Обитатели, Представители)."
-              value={being.description}
-              onSave={saveDescription}
-              rows={4}
-              entityType="being"
-              entityId={beingId}
-              defaultSettingId={being.setting_id}
-              collapsible
-              defaultOpen
-            />
-
-            {(
-              [
-                ["history", "История"],
-                ["behavior", "Поведение"],
-              ] as const
-            ).map(([section, title]) => (
-              <details key={section} className="paper-fold" open>
-                <summary>
-                  {title}{" "}
-                  <span className="paper-fold__count">
-                    · {chaptersOf(section).length}
-                  </span>
-                </summary>
-                <div className="paper-fold__body">
-                  <ChapterList
-                    ownerId={beingId}
-                    ownerType="being"
-                    apiBase="/setting-beings"
-                    section={section}
-                    chapters={chaptersOf(section)}
-                    defaultSettingId={being.setting_id}
-                    visibilityToggle
-                  />
-                </div>
-              </details>
-            ))}
-            <details className="paper-fold">
-              <summary>
-                Текущая ситуация{" "}
-                <span className="paper-fold__count">
-                  · {chaptersOf("current_situation").length}
-                </span>
-              </summary>
-              <div className="paper-fold__body">
-                <ChapterList
-                  ownerId={beingId}
-                  ownerType="being"
-                  apiBase="/setting-beings"
-                  section="current_situation"
-                  chapters={chaptersOf("current_situation")}
-                  defaultSettingId={being.setting_id}
-                  campaigns={campaigns}
-                  visibilityToggle
-                />
-              </div>
-            </details>
-
+      {tab === "Досье" && <div className="profile-dossier">
+        <ProfileHero type="being" name={being.name} subtype={isBestiary ? "Бестиарий" : "Личность"} createdAt={being.created_at} image={being.avatar_image_url} onGallery={() => selectTab("Галерея")}
+          labels={<><span className="gch">{BEING_CATEGORY_LABELS[being.category]}</span>{campaignState.badge}{being.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{being.communities.map((c) => <ProfileEntityLink key={c.id} type="community" id={c.id} name={c.name} />)}{!inCampaign && <TagChips tags={being.tags} onChange={saveTags} />}</>}>
+          {editingCard && !inCampaign ? <CreatureCardEditor type="being" id={beingId} inline forceInitiallyOpen={isBestiary} settingId={being.setting_id} onDone={() => setEditingCard(false)} /> : <CreatureCardLoader type="being" id={beingId} variant="page" embedded hideProfileButton forceExtras={inCampaign ? forceExtras(records,being.setting_id) : undefined} onEdit={!inCampaign ? () => setEditingCard(true) : undefined} />}
+        </ProfileHero>
+        <PlayerVisibilityFact line targetType="setting_being" targetId={beingId} />
+        {isBestiary && <ProfileStatblock id={beingId} name={being.name} settingId={being.setting_id} compendiumId={being.base_monster_id ?? being.compendium_links[0]?.id} />}
+        {(being.campaigns ?? []).map((c) => <details key={c.id} className="paper-fold" open={live?.campaign_id === c.id}>
+          <summary>В кампании «{c.name}»</summary>
+          <button type="button" className="d-btn d-btn--sm" onClick={() => ctx.select(c.id)}>Контекст кампании ›</button>
+          {inCampaign?.id === c.id && <><CampaignMove being={being} campaignId={c.id} live={live?.campaign_id === c.id} affects={mine} /><CampaignRecords campaignId={c.id} settingId={being.setting_id} ownerType="being" ownerId={beingId} chains={records} title="Что изменилось" aspects={SIDE_PROFILE_ASPECTS} /></>}
+          <ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section="current_situation" chapters={being.chapters.filter((ch) => ch.section === "current_situation" && ch.campaign_id === c.id)} defaultSettingId={being.setting_id} campaigns={campaigns} visibilityToggle />
+        </details>)}
+        {inCampaign ? <ProfileBlock title="Описание"><MentionText text={being.description} /></ProfileBlock> : <EditableTextCard title="Описание" value={being.description} onSave={saveDescription} emptyLabel="Опишите существо так, как его увидят игроки." entityType="being" entityId={beingId} defaultSettingId={being.setting_id} />}
+        {isBestiary ? <details className="paper-fold"><summary>Главы</summary><div className="profile-columns">
+          {([['history','История'],['behavior','Поведение']] as const).map(([section,title]) => <ProfileBlock key={section} title={title} count={chaptersOf(section).length}><ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section={section} chapters={chaptersOf(section)} defaultSettingId={being.setting_id} visibilityToggle /></ProfileBlock>)}
+        </div></details> : <div className="profile-columns">
+          {([['history','История'],['behavior','Поведение']] as const).map(([section,title]) => <ProfileBlock key={section} title={title} count={chaptersOf(section).length}><ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section={section} chapters={chaptersOf(section)} defaultSettingId={being.setting_id} visibilityToggle /></ProfileBlock>)}
+        </div>}
+        {being.chapters.some((c) => c.section === "current_situation" && !c.campaign_id) && <details className="paper-fold"><summary>Текущая ситуация</summary><ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section="current_situation" chapters={being.chapters.filter((c) => c.section === "current_situation" && !c.campaign_id)} defaultSettingId={being.setting_id} campaigns={campaigns} visibilityToggle /></details>}
             {/* Справка: правится редко, за столом не нужна — свёрнута. */}
             <details className="paper-fold">
-              <summary>Основное, статблоки, источники</summary>
+              <summary>Справка</summary>
               <div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${being.id}`}
@@ -897,13 +621,13 @@ export function BeingDetailPage() {
                     saveOrThrow({ aliases, name_original })
                   }
                 />
-                <StatblockList
+                {!isBestiary && <StatblockList
                   ownerType="being"
                   ownerId={beingId}
                   ownerName={being.name}
                   settingId={being.setting_id}
                   soleOnPage
-                />
+                />}
                 <CompendiumLinksCard
                   beingId={beingId}
                   links={being.compendium_links}
@@ -911,269 +635,20 @@ export function BeingDetailPage() {
                 <PdfEntitySources kind="being" id={being.id} />
               </div>
             </details>
-          </div>
-          )}
-        </div>
-      )}
+      </div>}
 
-      {tab === "Связи" && (
-        <div className="paper-groups">
-          <details className="paper-fold" open>
-            <summary>
-              Где{" "}
-              <span className="paper-fold__count">
-                {being.locations.length}
-              </span>
-            </summary>
-            <p className="muted">
-              Места, где существо обитает или бывает: по ним оно попадает на
-              карты и в списки локаций.
-            </p>
-            <div
-              className={`drop-zone${locationsDragOver ? " drag-over" : ""}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setLocationsDragOver(true);
-              }}
-              onDragLeave={() => setLocationsDragOver(false)}
-              onDrop={handleLocationDrop}
-            >
-              <ul className="paper-rows">
-                {being.locations.map((l) => (
-                  <li key={l.id}>
-                    <span className="paper-rows__main">
-                      <Link className="mention-link mention--loc" to={`/locations/${l.id}`}>
-                        {l.name}
-                      </Link>
-                    </span>
-                    <span className="paper-rows__sub">
-                      {settingLocations.find((loc) => loc.id === l.id)?.kind}
-                    </span>
-                    <button
-                      type="button"
-                      className="comp-mini"
-                      onClick={() => removeLocation(l.id)}
-                    >
-                      Убрать
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {being.locations.length === 0 && (
-                <EmptyState
-                  title="Пока нигде не встречали"
-                  hint="Перетащите локацию из поиска, выберите из списка или из мешка — существо появится на карте."
-                />
-              )}
-            </div>
-            <div className="row">
-              <LocationCascadePicker
-                locations={settingLocations}
-                value={addLocationId}
-                onChange={setAddLocationId}
-              />
-              <button
-                type="button"
-                onClick={addLocationViaCascade}
-                disabled={!addLocationId}
-              >
-                + Место
-              </button>
-            </div>
-          </details>
+      {tab === "Связи" && <ProfileLinks type="being" id={beingId} name={being.name} settingId={being.setting_id} onEntityDrop={(r) => { if(r.type === "location") { void addLocation(r); return true; } return false; }} groups={[
+        { title: "Где", rows: being.locations.map((l) => ({ key:`habitat:${l.id}`,type:"location",id:l.id,name:l.name,note:settingLocations.find((x) => x.id === l.id)?.kind,actions:[{label:"Убрать место",danger:true,onClick:() => void removeLocation(l.id)}] })) },
+        { title: "С кем", rows: [] }, { title: "Что", rows: [] },
+        { title: "В приключениях", rows: scenes.map((s) => ({ key:`scene:${s.id}`,type:"scene",id:s.id,name:s.name,note:[s.arc_name,s.campaign_name].filter(Boolean).join(" · ") })) },
+      ]} tools={<div className={`drop-zone${locationsDragOver ? " drag-over" : ""}`} onDragOver={(e) => { e.preventDefault(); setLocationsDragOver(true); }} onDragLeave={() => setLocationsDragOver(false)} onDrop={handleLocationDrop}>
+        <h3>Где обитает</h3><div className="row"><LocationCascadePicker locations={settingLocations} value={addLocationId} onChange={setAddLocationId} /><button type="button" onClick={addLocationViaCascade} disabled={!addLocationId}>+ Место</button></div>
+      </div>} />}
 
-          <details className="paper-fold" open>
-            <summary>
-              С кем · что{" "}
-              <span className="paper-fold__count">{relationCount}</span>
-            </summary>
-            <p className="muted">
-              Отношения с другими существами, персонажами, фракциями, местами и
-              предметами: союз, долг, страх, торговля.
-            </p>
-            <RelationsTab
-              entityType="being"
-              entityId={beingId}
-              entityName={being.name}
-              defaultSettingId={being.setting_id}
-            />
-          </details>
-
-          <EntityParticipates entityType="being" entityId={beingId} />
-
-          {scenes.length > 0 && (
-            <details className="paper-fold" open>
-              <summary>
-                В приключениях{" "}
-                <span className="paper-fold__count">{scenes.length}</span>
-              </summary>
-              <ul className="paper-rows">
-                {scenes.map((s) => (
-                  <li key={s.id}>
-                    <span className="paper-rows__main">
-                      <Link className="mention-link" to={`/scenes/${s.id}`}>
-                        {s.name}
-                      </Link>
-                    </span>
-                    <span className="paper-rows__sub">
-                      {[s.arc_name, s.campaign_name]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </div>
-      )}
-
-      {tab === "Хроника" && inCampaign && (
-        <CampaignChronicle
-          campaign={inCampaign}
-          settingId={being.setting_id}
-          chains={records}
-        />
-      )}
-
-      {tab === "Хроника" && !inCampaign && (
-        <div className="chronicle">
-          <section>
-            <h2 className="paper-group__head">
-              В мире{" "}
-              <span className="paper-group__count">
-                {being.important_dates.length}
-              </span>
-            </h2>
-            <p className="muted">
-              Важные даты — отмечаются на календаре сеттинга и его кампаний.
-            </p>
-            <ul className="paper-rows">
-              {being.important_dates.map((d) => (
-                <li key={d.id}>
-                  <span className="paper-rows__main">
-                    <strong>{d.title}</strong>
-                  </span>
-                  <span className="paper-rows__sub">
-                    {formatImportantDate(
-                      d,
-                      calendar?.months ?? [],
-                      calendar?.weekdays ?? [],
-                    )}
-                  </span>
-                  <button
-                    className="comp-mini"
-                    aria-label={`Удалить «${d.title}»`}
-                    onClick={() => removeImportantDate(d.id)}
-                  >
-                    <NavIcon name="delete" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="chronicle__add">
-              <div className="row chronicle__line">
-                <input
-                  placeholder="Дата (напр. День рождения)"
-                  value={dateTitle}
-                  onChange={(e) => setDateTitle(e.target.value)}
-                />
-                <button
-                  className="primary"
-                  aria-label="Добавить дату"
-                  title="Добавить дату"
-                  onClick={addImportantDate}
-                >
-                  +
-                </button>
-              </div>
-              <div className="row chronicle__line">
-                <select
-                  value={dateRecurrence}
-                  onChange={(e) =>
-                    setDateRecurrence(e.target.value as DateRecurrence)
-                  }
-                >
-                  <option value="once">Разовое</option>
-                  <option value="annual">Ежегодное</option>
-                  <option value="monthly">Ежемесячное</option>
-                </select>
-                {dateRecurrence === "once" && (
-                  <input
-                    type="number"
-                    placeholder="Год"
-                    className="chronicle__num"
-                    value={dateYear}
-                    onChange={(e) => setDateYear(e.target.value)}
-                  />
-                )}
-                {dateRecurrence !== "monthly" && (
-                  <select
-                    value={dateMonth}
-                    onChange={(e) => setDateMonth(e.target.value)}
-                  >
-                    <option value="">Месяц…</option>
-                    {(calendar?.months ?? []).map((m) => (
-                      <option key={m.id} value={m.position}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <input
-                  type="number"
-                  placeholder="День"
-                  className="chronicle__num"
-                  value={dateDay}
-                  onChange={(e) => setDateDay(e.target.value)}
-                />
-              </div>
-            </div>
-          </section>
-          <section>
-            <h2 className="paper-group__head">
-              В игре{" "}
-              <span className="paper-group__count">{being.events.length}</span>
-            </h2>
-            <p className="muted">Сессии, где существо появлялось.</p>
-            {being.events.length === 0 ? (
-              <EmptyState
-                title="За столом ещё не было"
-                hint="Появится, когда существо отметят в сессии."
-              />
-            ) : (
-              <ul className="paper-rows">
-                {being.events.map((ev) => (
-                  <li key={ev.id}>
-                    <span className="paper-rows__main">
-                      <strong>{ev.title}</strong>
-                      {ev.description && (
-                        <div className="paper-rows__sub">{ev.description}</div>
-                      )}
-                    </span>
-                    <span className="paper-rows__sub">
-                      {[ev.campaign_name, ev.session_date]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                    {ev.session_id && (
-                      <Link
-                        to={`/sessions/${ev.session_id}`}
-                        className="comp-mini"
-                      >
-                        К сессии →
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
+      {tab === "Хроника" && <ProfileChronicle type="being" id={beingId} settingId={being.setting_id} campaignId={inCampaign?.id} dates={being.important_dates} gameEvents={being.events} />}
 
       {tab === "Галерея" && (
-        <GalleryTab ownerType="being" ownerId={beingId} />
+        <GalleryTab profile ownerType="being" ownerId={beingId} avatarUpload={!inCampaign ? { previewUrl:being.avatar_image_url,uploading:uploadingAvatar,onSelect:avatarCrop.onSelect,modal:null } : undefined} />
       )}
 
       {tab === "Упоминания" && (
