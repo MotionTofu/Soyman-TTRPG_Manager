@@ -374,29 +374,17 @@ linksRouter.get("/graph", (req, res) => {
       .prepare("SELECT id FROM sessions WHERE status IN ('held','planned') AND rescheduled_to_id IS NULL AND archived_at IS NULL")
       .all() as { id: number }[];
     for (const r of sessionRows) track("session", r.id);
-    // Переходы приключений (набор кампании перебивает набор сеттинга — п. 1 задания).
-    const campaignTransitions = campaign_id
-      ? db.prepare(
-          "SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id = ?"
-        ).all(campaign_id) as { from_arc_id: number; to_arc_id: number; label: string }[]
-      : [];
-    const settingTransitions = setting_id
-      ? db.prepare(
-          "SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS NULL AND from_arc_id IN (SELECT id FROM story_arcs WHERE setting_id = ?)"
-        ).all(setting_id) as { from_arc_id: number; to_arc_id: number; label: string }[]
-      : [];
-    // Набор кампании перебивает наследованный от сеттинга.
-    const seenTransitions = new Set<string>();
-    for (const t of campaignTransitions) {
-      const key = `${t.from_arc_id}|${t.to_arc_id}`;
-      seenTransitions.add(key);
+    // Набор переходов выбирается целиком, как в story/clues и story:
+    // собственный (даже пустой) либо наследованный. Область узлов и рёбер
+    // отсекается ниже общим фильтром; campaign_id важнее setting_id.
+    const ownsTransitions = campaign_id && (db.prepare(
+      "SELECT own_arc_transitions FROM campaigns WHERE id = ?"
+    ).get(campaign_id) as { own_arc_transitions: number } | undefined)?.own_arc_transitions === 1;
+    const transitions = ownsTransitions
+      ? db.prepare("SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id = ?").all(campaign_id)
+      : db.prepare("SELECT from_arc_id, to_arc_id, label FROM story_arc_transitions WHERE campaign_id IS NULL").all();
+    for (const t of transitions as { from_arc_id: number; to_arc_id: number; label: string }[])
       connect("adventure", t.from_arc_id, "adventure", t.to_arc_id, t.label || "переход", null, "link");
-    }
-    for (const t of settingTransitions) {
-      const key = `${t.from_arc_id}|${t.to_arc_id}`;
-      if (!seenTransitions.has(key))
-        connect("adventure", t.from_arc_id, "adventure", t.to_arc_id, t.label || "переход", null, "link");
-    }
     // Сессии → сцены: набрано и сыграно — два разных вида ребра (п. 1 задания).
     const plannedScenes = db
       .prepare(

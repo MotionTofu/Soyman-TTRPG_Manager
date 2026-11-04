@@ -47,12 +47,13 @@ import {
 } from "../graphTypes";
 import { glyphName, onGlyphLoad, typeTint } from "../typeGlyphs";
 import { TypeGlyph } from "./TypeGlyph";
-import { pickTextOn } from "../themes";
+import { pickTextOn, THEME_CHANGE_EVENT } from "../themes";
 import { plural } from "../sceneKinds";
 import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import { concentricLayout, type ConcentricLayout } from "../concentricGraph";
 import {
   drawGraph,
+  clearColorCache,
   hitTestEdge,
   hitTestNode,
   edgeTooltip,
@@ -336,6 +337,12 @@ function GraphCanvas({
     draw();
   }, [draw]);
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  useEffect(() => {
+    const onThemeChange = () => { clearColorCache(); draw(); };
+    onThemeChange();
+    window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+  }, [draw]);
   // Знаки типов грузятся картинками — догрузился знак, перерисовать.
   useEffect(() => onGlyphLoad(() => draw()), [draw]);
 
@@ -994,14 +1001,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   }, [data]);
 
   // ── Search ────────────────────────────────────────────────────
-  const searchMatches = useMemo(() => {
-    if (!data || !debouncedQuery.trim()) return [];
-    const q = debouncedQuery.trim().toLowerCase();
-    return data.nodes.filter((n) => n.title.toLowerCase().includes(q)).slice(0, 8);
-  }, [data, debouncedQuery]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const visibleKeys = useMemo(() => new Set(visibleNodesList.map((n) => n.key)), [visibleNodesList]);
-  const shownMatches = searchMatches.filter((n) => visibleKeys.has(n.key));
+  // Сначала видимый срез, затем лимит: скрытые совпадения не занимают места.
+  const shownMatches = visibleNodesList.filter((n) =>
+    debouncedQuery.trim() && n.title.toLowerCase().includes(debouncedQuery.trim().toLowerCase())
+  ).slice(0, 8);
+  const matchKeys = shownMatches.map((n) => n.key).join("|");
+  useEffect(() => setHighlightIdx(-1), [query, matchKeys]);
 
   // Path
   const path = pathFrom && pathTo ? findPath(visibleEdgesList, pathFrom, pathTo) : null;
@@ -1105,11 +1110,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setQuery(""); setDebouncedQuery(""); return; }
               if (shownMatches.length === 0) return;
               if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((v) => Math.min(shownMatches.length - 1, v + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((v) => Math.max(0, v - 1)); }
               else if (e.key === "Enter" && highlightIdx >= 0) { e.preventDefault(); const pick = shownMatches[highlightIdx]; if (pick) { if (pathFrom && !pathTo) pickPathTo(pick.key); else focusNode(pick.key, true); } }
-              else if (e.key === "Escape") setQuery("");
             }}
           />
           {debouncedQuery.trim() && shownMatches.length === 0 && (

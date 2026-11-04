@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DrawInput } from "../canvasGraph";
+import { drawGrid, type DrawInput } from "../canvasGraph";
+import { applyTheme, BUILTIN_THEMES } from "../themes";
 import type { GraphData } from "../graphTypes";
 import { autoNodeScales } from "../graphTypes";
 import { RelationGraph } from "./RelationGraph";
@@ -306,4 +307,70 @@ describe("перетаскивание в графе связей", () => {
     expect(overview.zoom).toBe(1);
     expect(overview.nodeScales.get(at)).toBe(initial.nodeScales.get(at));
   });
+  it("ищет восемь видимых совпадений после скрытых и закрывает пустой поиск по Escape", () => {
+    vi.useFakeTimers();
+    try {
+      const nodes = Array.from({ length: 18 }, (_, i) => ({
+        key: `${i < 8 ? 'being' : 'location'}:${i + 1}`,
+        type: i < 8 ? 'being' : 'location', id: i + 1, title: `Мишень ${i + 1}`,
+      }));
+      const view = render(<MemoryRouter><RelationGraph data={{ nodes, edges: [] }} defaultHiddenTypes={['being']} /></MemoryRouter>);
+      const input = view.getByRole('textbox', { name: 'Найти сущность' });
+      fireEvent.change(input, { target: { value: 'Мишень' } });
+      act(() => vi.advanceTimersByTime(210));
+      expect(view.container.querySelectorAll('.entity-search-item')).toHaveLength(8);
+      expect(view.container.querySelector('.entity-search-results')?.textContent).toContain('Мишень 9');
+      expect(view.container.querySelector('.entity-search-results')?.textContent).not.toContain('Мишень 17');
+      fireEvent.change(input, { target: { value: 'несуществующая' } });
+      act(() => vi.advanceTimersByTime(210));
+      expect(view.getByText('Нет результатов')).toBeTruthy();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect((input as HTMLInputElement).value).toBe('');
+      expect(view.queryByText('Нет результатов')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("сбрасывает выделенный результат при смене запроса", () => {
+    vi.useFakeTimers();
+    try {
+      const view = mount();
+      const input = view.getByRole('textbox', { name: 'Найти сущность' });
+      fireEvent.change(input, { target: { value: 'р' } });
+      act(() => vi.advanceTimersByTime(210));
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(view.container.querySelector('.highlighted')?.textContent).toContain('Второй');
+      fireEvent.change(input, { target: { value: 'Перв' } });
+      act(() => vi.advanceTimersByTime(210));
+      expect(view.container.querySelector('.highlighted')).toBeNull();
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(view.getByRole('region', { name: 'Выбрано: Первый' })).toBeTruthy();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("applyTheme перерисовывает уже открытый граф новыми цветами: светлая → тёмная → светлая", () => {
+    vi.stubGlobal('DOMMatrix', class {});
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue({ setTransform() {}, fillRect() {} } as never);
+    const fills: unknown[] = [];
+    const ctx = {
+      fillStyle: '' as unknown,
+      fillRect() { fills.push(this.fillStyle); }, save() {}, restore() {},
+      createPattern: () => ({ setTransform() {} }),
+    };
+    const view = mount();
+    mocks.draw.mockImplementation(() => drawGrid(ctx as unknown as CanvasRenderingContext2D, 900, 640, 0, 0, 1, 1));
+    for (const id of ['light', 'dark', 'light']) {
+      const theme = BUILTIN_THEMES.find(t => t.id === id)!;
+      fills.length = 0;
+      act(() => applyTheme(theme));
+      expect(fills[0]).toBe(theme.vars['--sheet']);
+    }
+    view.unmount();
+    mocks.draw.mockClear();
+    act(() => applyTheme(BUILTIN_THEMES[1]));
+    expect(mocks.draw).not.toHaveBeenCalled();
+    document.documentElement.removeAttribute('style');
+  });
+
 });

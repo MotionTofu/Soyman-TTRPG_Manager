@@ -338,6 +338,8 @@ export function saveRadiusOverride(px: number | null) {
 // Writes every CSS var for the theme onto :root. Call this on boot (as early
 // as possible, ideally before first paint) and again whenever the user
 // switches themes.
+export const THEME_CHANGE_EVENT = "soyman-theme-change";
+
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
@@ -345,4 +347,5 @@ export function applyTheme(theme: Theme) {
   if (radiusOverride != null) root.style.setProperty("--card-radius", `${radiusOverride}px`);
   root.setAttribute("data-theme-mode", theme.mode);
   root.setAttribute("data-theme-id", theme.id);
+  window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 }
