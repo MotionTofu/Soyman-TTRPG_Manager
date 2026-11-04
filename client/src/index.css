@@ -8780,11 +8780,13 @@ button.mention-link:focus-visible {
 @media (max-width: 900px) {
   .rg-body { grid-template-columns: minmax(0, 1fr); flex: none; }
   .rg-card__band .entity-dots { opacity: 1; }
-  .rg-frame { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(420px, 1fr); }
-  .rg-frame > .relation-graph-wrap { grid-area: 3 / 1; min-height: 420px; }
+  .rg-frame { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(420px, 1fr) auto; }
+  .rg-frame > .relation-graph-wrap { grid-area: 2 / 1; min-height: 420px; }
   .rg-tools { position: static; grid-area: 1 / 1; padding: var(--sp-3); }
-  .rg-card { position: static; grid-area: 2 / 1; width: auto; min-width: 0; margin: 0 var(--sp-3) var(--sp-3); }
-  .rg-rings { bottom: calc(var(--sp-4) + 44px); max-width: calc(100% - 2 * var(--sp-4)); white-space: normal; }
+  .rg-card { position: static; grid-area: 3 / 1; width: auto; min-width: 0; margin: var(--sp-3); }
+  /* Масштаб и подпись колец привязаны к полю, а не к карточке под ним. */
+  .rg-zoom { position: static; grid-area: 2 / 1; align-self: end; justify-self: end; margin: var(--sp-4); }
+  .rg-rings { position: static; grid-area: 2 / 1; align-self: end; justify-self: start; margin: 0 var(--sp-4) calc(var(--sp-4) + 44px); max-width: calc(100% - 2 * var(--sp-4)); white-space: normal; }
 }
 
 .relation-graph-wrap {

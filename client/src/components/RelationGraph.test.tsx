@@ -387,7 +387,7 @@ describe("перетаскивание в графе связей", () => {
     const view = mount();
     const labels = () => [...document.querySelectorAll('.context-menu-label')].map(e => e.textContent);
     fireEvent.contextMenu(view.wrap, { clientX: 100, clientY: 100 });
-    const expected = ['Изолировать узел и связи', 'Изменить размер', 'Карточка сущности', 'Перейти к сущности',
+    const expected = ['Изолировать узел и связи', 'Изменить размер', 'Карточка сущности',
       'Открыть', 'Открыть вторым окном', 'В мешок', 'Закрепить', 'Копировать упоминание', 'В архив'];
     expect(labels()).toEqual(expected);
     expect(view.getByRole('menu', { name: 'Первый' })).toBeTruthy();
@@ -457,6 +457,32 @@ describe("перетаскивание в графе связей", () => {
     fireEvent.click(view.wrap, {clientX:400,clientY:300});
     expect(view.container.querySelector('.rg-card__blurb')).toBeNull();
     expect(view.getByText('Сеттинг · Эстария')).toBeTruthy();
+  });
+
+  it("карточка и чтец считают видимые связи после сворачивания сцен и фильтра видов", () => {
+    const graphData: GraphData = {
+      nodes: [
+        {key:'adventure:1',type:'adventure',id:1,title:'Карта'},
+        {key:'scene:1',type:'scene',id:1,title:'Сцена'},
+        {key:'session:1',type:'session',id:1,title:'Сессия',date:'2026-11-04',campaign_id:1},
+        {key:'being:1',type:'being',id:1,title:'Страж'},
+      ],
+      edges: [
+        {from:'scene:1',to:'adventure:1',kind:'scene',section:'сцена приключения',tone:null},
+        {from:'session:1',to:'scene:1',kind:'scene',section:'набрано',tone:null},
+        {from:'session:1',to:'scene:1',kind:'scene',section:'сыграно',tone:null},
+        {from:'scene:1',to:'being:1',kind:'scene',section:'scene_npcs',tone:null},
+      ],
+    };
+    const view = mount(true, graphData);
+    fireEvent.click(view.getByRole('button',{name:'Приключение: Карта · 2 связи'}));
+    expect(view.getByText('Приключение · 2 связи')).toBeTruthy();
+    expect((mocks.draw.mock.lastCall![0] as DrawInput).visibleEdges).toHaveLength(2);
+    // Сырое ребро к приключению одно; на поле — два после переноса связей сцен.
+    expect(graphData.edges.filter(e=>e.from==='adventure:1'||e.to==='adventure:1')).toHaveLength(1);
+    fireEvent.click(view.getByRole('button',{name:/^Существа\s*1$/}));
+    expect(view.getByRole('button',{name:'Приключение: Карта · 1 связь'})).toBeTruthy();
+    expect(view.getByText('Приключение · 1 связь')).toBeTruthy();
   });
 
 });

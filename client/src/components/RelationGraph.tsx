@@ -9,7 +9,7 @@ import React, {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { ContextMenuItem } from "./ContextMenu";
 import { EntityMenuButton } from "./PageContextMenu";
 import { entityMark, openEntityMenu } from "../pageMenu";
@@ -837,7 +837,6 @@ function GraphCanvas({
 // ─── Outer component — React state for toolbar/legend ────────────
 
 export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false, focusKey = null, typesExtra, fill = false }: Props) {
-  const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -1124,7 +1123,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       { label: "Изолировать узел и связи", onClick: () => isolate(node.key) },
       { label: "Изменить размер", onClick: () => setResizeTarget({ title: node.title, keys: [node.key] }) },
       { label: "Карточка сущности", onClick: () => setPreview({ type: node.type, id: node.id }) },
-      ...(TYPE_ROUTES[node.type] ? [{ label: "Перейти к сущности", onClick: () => navigate(`${TYPE_ROUTES[node.type]}/${node.id}`) }] : []),
       ...(expandedGroups.has(node.key) ? [{ label: "Свернуть группу", onClick: () => setExpandedGroups((prev) => { const next = new Set(prev); next.delete(node.key); return next; }) }] : []),
     ];
   }
@@ -1328,7 +1326,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const cardKey = focusedKey ?? isolation?.key ?? null;
   const cardNode = cardKey ? nodesByKey.get(cardKey) : undefined;
   const cardIsolated = !!isolation && isolation.key === cardKey;
-  const cardLinks = cardKey ? data.edges.filter((e) => e.from === cardKey || e.to === cardKey).length : 0;
+  const cardLinks = cardKey ? visibleLinkCounts.get(cardKey) ?? 0 : 0;
   const cardTint = cardNode ? typeTint(cardNode.type) : null;
   const cardRoute = cardNode ? TYPE_ROUTES[cardNode.type] : undefined;
   const card = cardNode && cardKey && (
