@@ -6,6 +6,7 @@ import { db } from "../db/db";
 import { playerFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { unpaidSessionsForPlayer } from "../services/finance";
+import { parseDueSession, withDue } from "../services/reminderDue";
 import { normalizeDndCharacter } from "@soyman/shared";
 
 export const playersRouter = Router();
@@ -287,17 +288,20 @@ playersRouter.get("/:id/unpaid", (req, res) => {
 playersRouter.get("/:id/reminders", (req, res) => {
   const rows = db
     .prepare("SELECT * FROM gm_reminders WHERE target_type = 'player' AND target_id = ? ORDER BY created_at DESC")
-    .all(req.params.id);
-  res.json(rows);
+    .all(req.params.id) as { due_session_id: number | null }[];
+  res.json(withDue(rows));
 });
 
 playersRouter.post("/:id/reminders", (req, res) => {
-  const { message } = req.body as { message?: string };
+  const { message, due_session_id } = req.body as { message?: string; due_session_id?: number | null };
   if (!message) return res.status(400).json({ error: "message is required" });
+  const due = parseDueSession(due_session_id);
+  if (due === "invalid") return res.status(400).json({ error: "due_session_id: нужна запланированная сессия" });
   const info = db
-    .prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('player', ?, ?)")
-    .run(req.params.id, message);
-  res.status(201).json(db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid));
+    .prepare("INSERT INTO gm_reminders (target_type, target_id, message, due_session_id) VALUES ('player', ?, ?, ?)")
+    .run(req.params.id, message, due);
+  const row = db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid) as { due_session_id: number | null };
+  res.status(201).json(withDue([row])[0]);
 });
 
 playersRouter.delete("/:id/reminders/:reminderId", (req, res) => {

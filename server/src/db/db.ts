@@ -7615,6 +7615,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
        WHERE live_mode IS NOT NULL`
     );
   }
+
+  // Срок напоминания игрокам — «к сессии №N» (гриллинг В4, 2026-11-04).
+  // Только ссылка: номер и дата считаются при чтении (services/reminderDue).
+  if (!columnExists(database, "gm_reminders", "due_session_id")) {
+    database.exec("ALTER TABLE gm_reminders ADD COLUMN due_session_id INTEGER");
+  }
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { unpaidSessionsForPlayer } from "../services/finance";
+import { forPlayer } from "../services/reminderDue";
 import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
@@ -202,7 +203,7 @@ playerRouter.get("/dashboard", (req: AuthedRequest, res) => {
        WHERE (target_type = 'player' AND target_id = ?)${campaignClause}
        ORDER BY created_at DESC`
     )
-    .all(...reminderParams);
+    .all(...reminderParams) as { due_session_id: number | null }[];
 
   // Unfiltered (all statuses, no date/LIMIT bound) — feeds the calendar grid
   // on Главная, unlike upcomingSessions above which is the trimmed "next 3" list.
@@ -218,7 +219,7 @@ playerRouter.get("/dashboard", (req: AuthedRequest, res) => {
         .all(...campaignIds)
     : [];
 
-  res.json({ upcomingSessions, unpaidSessions, reminders, sessions });
+  res.json({ upcomingSessions, unpaidSessions, reminders: forPlayer(reminders), sessions });
 });
 
 // Systems used by any of the player's campaigns — not every system in the
@@ -881,9 +882,11 @@ playerRouter.get("/characters/:id/inbox", (req: AuthedRequest, res) => {
     params.push(campaignId as number);
   }
   res.json(
-    db
-      .prepare(`SELECT * FROM gm_reminders WHERE ${clause} ORDER BY read_at IS NOT NULL, created_at DESC`)
-      .all(...params)
+    forPlayer(
+      db
+        .prepare(`SELECT * FROM gm_reminders WHERE ${clause} ORDER BY read_at IS NOT NULL, created_at DESC`)
+        .all(...params) as { due_session_id: number | null }[]
+    )
   );
 });
 

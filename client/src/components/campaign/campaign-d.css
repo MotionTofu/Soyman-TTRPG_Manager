@@ -55,6 +55,9 @@
 }
 .campaign-reminders__list .nav-icon { width: 18px; height: 18px; color: var(--ink-2); }
 .campaign-reminders__text { white-space: pre-wrap; }
+/* Истекло (В4): сессия проведена — у игроков уже не видно, Мастеру бледной строкой с ✕. */
+.campaign-reminders__list li.is-expired { color: var(--muted); }
+.campaign-reminders__list li.is-expired .nav-icon { color: var(--muted); }
 .campaign-reminders__empty { margin: var(--sp-5) 0; color: var(--muted); }
 .campaign-reminders__add { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-top: var(--sp-6); }
 .campaign-reminders__add .d-field { flex: 1 1 260px; height: 40px; }

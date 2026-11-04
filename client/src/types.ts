@@ -490,6 +490,17 @@ export interface GmReminder {
   message: string;
   created_at: string;
   read_at?: string | null;
+  /** «К сессии №N» (В4): ссылка; номер и дата считает сервер при чтении. */
+  due_session_id?: number | null;
+  due?: ReminderDue | null;
+}
+
+/** Вычисленный срок: сессия в архиве уже заменена следующей; истёкшее — проведена. */
+export interface ReminderDue {
+  session_id: number;
+  number: number;
+  date: string;
+  expired: boolean;
 }
 
 export type StatblockFormat =

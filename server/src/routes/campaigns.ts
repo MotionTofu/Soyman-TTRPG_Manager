@@ -29,6 +29,7 @@ import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
 import { broadcastCharacterUpdate, broadcastToCampaign } from "../services/realtime";
 import { parseCampaignPassport, serializeCampaignPassport } from "../services/settingWorld";
+import { parseDueSession, withDue } from "../services/reminderDue";
 
 export const campaignsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -473,17 +474,20 @@ campaignsRouter.put("/:id/restore", (req, res) => {
 campaignsRouter.get("/:id/reminders", (req, res) => {
   const rows = db
     .prepare("SELECT * FROM gm_reminders WHERE target_type = 'campaign' AND target_id = ? ORDER BY created_at DESC")
-    .all(req.params.id);
-  res.json(rows);
+    .all(req.params.id) as { due_session_id: number | null }[];
+  res.json(withDue(rows));
 });
 
 campaignsRouter.post("/:id/reminders", (req, res) => {
-  const { message } = req.body as { message?: string };
+  const { message, due_session_id } = req.body as { message?: string; due_session_id?: number | null };
   if (!message) return res.status(400).json({ error: "message is required" });
+  const due = parseDueSession(due_session_id, Number(req.params.id));
+  if (due === "invalid") return res.status(400).json({ error: "due_session_id: нужна запланированная сессия этой кампании" });
   const info = db
-    .prepare("INSERT INTO gm_reminders (target_type, target_id, message) VALUES ('campaign', ?, ?)")
-    .run(req.params.id, message);
-  res.status(201).json(db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid));
+    .prepare("INSERT INTO gm_reminders (target_type, target_id, message, due_session_id) VALUES ('campaign', ?, ?, ?)")
+    .run(req.params.id, message, due);
+  const row = db.prepare("SELECT * FROM gm_reminders WHERE id = ?").get(info.lastInsertRowid) as { due_session_id: number | null };
+  res.status(201).json(withDue([row])[0]);
 });
 
 campaignsRouter.delete("/:id/reminders/:reminderId", (req, res) => {

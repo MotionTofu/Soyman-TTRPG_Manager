@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import type { GmReminder, RosterPlayer } from "../../types";
+import type { GmReminder, RosterPlayer, SessionSummary } from "../../types";
 import { useConfirm } from "../../hooks/useConfirm";
 import { resourceQuery, useAction, useResource, write } from "../../data/hooks";
-import { remindersPath } from "../../data/sessions";
+import { reminderDueLabel, remindersPath, sessionPaths } from "../../data/sessions";
 import { NavIcon } from "../NavIcons";
 
 const NO_REMINDERS: GmReminder[] = [];
@@ -26,21 +26,29 @@ export function CampaignReminders({ campaignId, roster }: { campaignId: number; 
   const rows = [
     ...common.map((r) => ({ r, path: campaignPath, who: "Всем" })),
     ...players.flatMap((p, i) => (personal[i]?.data ?? NO_REMINDERS).map((r) => ({ r, path: remindersPath("player", p.id), who: p.name }))),
-  ];
+  ].sort((a, b) => Number(!!a.r.due?.expired) - Number(!!b.r.due?.expired)); // истёкшие — в конец (В4, Q1)
+  // Срок — только запланированные сессии этой кампании (В4, Q2); сервер отдаёт их по дате.
+  const planned = (useResource<SessionSummary[]>(sessionPaths.campaignSessions(campaignId)).data ?? []).filter(
+    (s) => s.status === "planned" && s.session_number != null
+  );
   const [draft, setDraft] = useState("");
   const [to, setTo] = useState("all");
+  const [due, setDue] = useState("");
   const [viewer, setViewer] = useState<number | null>(null);
   const viewerId = viewer ?? players[0]?.id ?? null;
   const viewerIndex = players.findIndex((p) => p.id === viewerId);
-  const seen = [...common, ...(viewerIndex >= 0 ? (personal[viewerIndex]?.data ?? NO_REMINDERS) : NO_REMINDERS)];
+  const seen = [...common, ...(viewerIndex >= 0 ? (personal[viewerIndex]?.data ?? NO_REMINDERS) : NO_REMINDERS)].filter(
+    (r) => !r.due?.expired
+  );
 
   async function add() {
     const message = draft.trim();
     if (!message) return;
     const path = to === "all" ? campaignPath : remindersPath("player", Number(to));
     // Без повтора: ответ мог потеряться после записи, и повтор завёл бы второе.
-    const done = await run(async () => (await write.post(path, { message }), true), { affects: [{ path }], retry: false });
-    if (done) setDraft("");
+    const body = { message, due_session_id: due ? Number(due) : null };
+    const done = await run(async () => (await write.post(path, body), true), { affects: [{ path }], retry: false });
+    if (done) { setDraft(""); setDue(""); }
   }
 
   async function remove(path: string, id: number) {
@@ -66,10 +74,13 @@ export function CampaignReminders({ campaignId, roster }: { campaignId: number; 
       ) : (
         <ul className="campaign-reminders__list">
           {rows.map(({ r, path, who }) => (
-            <li key={`${path}/${r.id}`}>
+            <li key={`${path}/${r.id}`} className={r.due?.expired ? "is-expired" : undefined}>
               <NavIcon name="bell" />
               <span className="campaign-reminders__text">{r.message}</span>
-              <span className="d-mono">{who}</span>
+              <span className="d-mono" title={r.due ? reminderDueLabel(r.due) : undefined}>
+                {who}
+                {r.due && (r.due.expired ? " · истекло" : ` · к №${r.due.number}`)}
+              </span>
               <button type="button" className="d-dots" aria-label="Удалить напоминание" onClick={() => void remove(path, r.id)}>
                 ✕
               </button>
@@ -85,6 +96,10 @@ export function CampaignReminders({ campaignId, roster }: { campaignId: number; 
           <option value="all">Всем</option>
           {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        <select className="d-select" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Срок">
+          <option value="">Без срока</option>
+          {planned.map((s) => <option key={s.id} value={s.id}>{reminderDueLabel({ number: s.session_number!, date: s.date }).replace(/^к/, "К")}</option>)}
+        </select>
         <button type="submit" className="d-btn" disabled={!draft.trim()}>Добавить</button>
       </form>
       {players.length > 0 && (
@@ -96,7 +111,7 @@ export function CampaignReminders({ campaignId, roster }: { campaignId: number; 
             </select>{" "}
             на Главной
           </div>
-          {seen.length ? <ul>{seen.map((r) => <li key={r.id + r.target_type}>{r.message}</li>)}</ul> : <p className="d-note">Пусто.</p>}
+          {seen.length ? <ul>{seen.map((r) => <li key={r.id + r.target_type}>{r.message}{r.due && <span className="d-mono"> · {reminderDueLabel(r.due)}</span>}</li>)}</ul> : <p className="d-note">Пусто.</p>}
         </div>
       )}
     </section>

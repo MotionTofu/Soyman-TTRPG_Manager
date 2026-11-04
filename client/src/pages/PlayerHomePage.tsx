@@ -3,6 +3,8 @@ import { useResource } from "../data/hooks";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
 import { PageFrame } from "../components/PageFrame";
 import { loadHideFinance } from "../financePrivacy";
+import { reminderDueLabel } from "../data/sessions";
+import type { ReminderDue } from "../types";
 
 interface DashboardSession {
   id: number;
@@ -30,6 +32,7 @@ interface GmReminder {
   target_id: number;
   message: string;
   created_at: string;
+  due?: ReminderDue | null;
 }
 
 interface Dashboard {
@@ -71,6 +74,7 @@ export function PlayerHomePage() {
             <div key={r.id} className="card" style={{ gap: 4, borderLeft: "1px solid var(--accent)" }}>
               <span className="muted">
                 {r.target_type === "campaign" ? "Напоминание по кампании" : "Напоминание от мастера"}
+                {r.due && ` · ${reminderDueLabel(r.due)}`}
               </span>
               <div style={{ whiteSpace: "pre-wrap" }}>{r.message}</div>
             </div>

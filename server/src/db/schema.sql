@@ -1651,7 +1651,8 @@ CREATE TABLE IF NOT EXISTS gm_reminders (
   target_id INTEGER NOT NULL,
   message TEXT NOT NULL,
   read_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  due_session_id INTEGER -- «к сессии №N»; номер/дата — при чтении, services/reminderDue.ts
 );
 CREATE INDEX IF NOT EXISTS idx_gm_reminders_target ON gm_reminders(target_type, target_id);
 

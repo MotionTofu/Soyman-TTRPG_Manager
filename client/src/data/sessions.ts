@@ -1,5 +1,6 @@
 import type { AttendanceRow } from "../types";
 import type { Affect } from "./entities";
+import { formatDateKeyRu } from "../utils/date";
 
 /**
  * Сессия и пульт в слое данных (docs/adr/0001, группа «пульт и сессии»).
@@ -43,6 +44,11 @@ function linksPrefix(entityType: string, entityId: number): string {
 }
 
 /** Напоминания цели: игрока, кампании или персонажа. */
+/** «к сессии №19 · 8 ноября» — подпись срока напоминания (В4). */
+export function reminderDueLabel(due: { number: number; date: string }): string {
+  return `к сессии №${due.number} · ${formatDateKeyRu(due.date)}`;
+}
+
 export function remindersPath(targetType: "player" | "campaign" | "character", targetId: number): string {
   const base = targetType === "player" ? "/players" : targetType === "campaign" ? "/campaigns" : "/characters";
   return `${base}/${targetId}/reminders`;

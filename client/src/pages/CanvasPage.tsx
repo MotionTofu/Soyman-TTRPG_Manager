@@ -1987,7 +1987,9 @@ function BoardTile({
   const [renaming, setRenaming] = useState<string | null>(null);
   const run = useAction();
   const title = board.name || "Без имени";
-  const count = `${board.nodes} ${plural(board.nodes, "объект", "объекта", "объектов")}`;
+  // «Элементы», а не «объекты» (В3, 2026-11-04): здесь считаются все ноды доски,
+  // включая рамки и пины; «объекты» в шапке открытой доски — без них.
+  const count = `${board.nodes} ${plural(board.nodes, "элемент", "элемента", "элементов")}`;
 
   async function move(owner_type: string | null, owner_id: number | null) {
     await run(labelled("Перенос доски", () => write.put(`/canvas/free-boards/${board.scope_id}/owner`, { owner_type, owner_id })), {
