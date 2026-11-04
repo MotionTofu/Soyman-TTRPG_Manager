@@ -4,17 +4,19 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../data/hooks";
 import { dataKeys } from "../data/entities";
-import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
+import { campaignAdventureAffects, campaignPaths, sceneStatusAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
 import { SCENE_STATUSES, clueNeed, nodeLabel, plural, sceneWord } from "../sceneKinds";
 import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignReveals, CampaignTreeScene, SceneMakeup, SceneStatus, StoryScene } from "../types";
 import { NavIcon, type NavIconName } from "./NavIcons";
-import { ContextMenu } from "./ContextMenu";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+import { entityMark, openEntityMenu } from "../pageMenu";
 import { arcCluesPath } from "../data/canvas";
 import "./campaign-chapters.css";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
+import { useConfirm } from "../hooks/useConfirm";
 
 // Раздел «Главы и сцены» кампании: приключение → главы → сцены. Базово
 // свёрнуто всё, включая сами приключения: у книжной кампании тут сотни строк,
@@ -36,7 +38,55 @@ export interface ChaptersNavStats {
     done: number;
     pending: number;
     skipped: number;
+    /** У кампании есть свои правки или прогресс — предупредить при «Убрать». */
+    has_edits: boolean;
   }[];
+}
+
+/** Местный блок ПКМ приключения кампании (§6.12): «⋯», шапка, карточка, строка слева. */
+export type AdventureMenu = (adv: { id: number; name: string; has_campaign_edits?: boolean }) => ContextMenuItem[];
+
+/**
+ * «Убрать из кампании»: уходит только участие — правки и прогресс кампании
+ * остаются в базе и вернутся при повторной привязке (тот же маршрут, что на
+ * холсте). Возвращает диалог подтверждения и местный блок меню.
+ */
+export function useAdventureDetach(campaignId: number, onDetached?: (adventureId: number) => void): [ReactNode, AdventureMenu] {
+  const run = useAction();
+  const [confirmDialog, confirm] = useConfirm();
+  const menu: AdventureMenu = (adv) => [
+    {
+      label: "Убрать из кампании",
+      danger: true,
+      onClick: async () => {
+        const warning = adv.has_campaign_edits
+          ? "\n\nУ кампании есть свои правки и отметки по этому приключению — они сохранятся и вернутся, если привязать его снова."
+          : "";
+        if (!(await confirm({ message: `Убрать «${adv.name}» из кампании?${warning}`, confirmLabel: "Убрать", danger: true }))) return;
+        const ok = await run(
+          labelled("Приключение из кампании", () =>
+            write.del(`/story/campaign-adventures?campaign_id=${campaignId}&arc_id=${adv.id}`).then(() => true)
+          ),
+          { affects: campaignAdventureAffects(campaignId) }
+        );
+        if (ok) onDetached?.(adv.id);
+      },
+    },
+  ];
+  return [confirmDialog, menu];
+}
+
+/** ПКМ по приключению: общий блок сущности + местный. */
+function adventureContextMenu(adv: CampaignAdventureTree, menu: AdventureMenu | undefined) {
+  if (adv.is_default) return {};
+  return {
+    ...entityMark("adventure", adv.id, adv.name),
+    onContextMenu: (e: MouseEvent) => {
+      if (e.shiftKey) return;
+      e.preventDefault();
+      openEntityMenu({ type: "adventure", id: adv.id, name: adv.name }, e.clientX, e.clientY, menu?.(adv) ?? []);
+    },
+  };
 }
 
 const EMPTY: CampaignAdventureTree[] = [];
@@ -48,6 +98,7 @@ export function CampaignChaptersScenes({
   chapterId,
   onStats,
   onPickAdventure,
+  adventureMenu,
 }: {
   campaignId: number;
   settingId: number | null;
@@ -58,6 +109,8 @@ export function CampaignChaptersScenes({
   onStats?: (s: ChaptersNavStats) => void;
   /** Щелчок по карточке в «Все приключения». */
   onPickAdventure?: (adventureId: number) => void;
+  /** Местный блок ПКМ приключения (useAdventureDetach страницы). */
+  adventureMenu?: AdventureMenu;
 }) {
   const path = campaignPaths.tree(campaignId);
   const tree = useResource<CampaignAdventureTree[]>(path).data ?? EMPTY;
@@ -81,6 +134,7 @@ export function CampaignChaptersScenes({
           done,
           pending,
           skipped,
+          has_edits: !!adv.has_campaign_edits,
         };
       }),
     });
@@ -141,7 +195,7 @@ export function CampaignChaptersScenes({
       {adventureId != null && visibleTree.length === 0 && (
         <p className="muted">Приключение не найдено — возможно, его открепили.</p>
       )}
-      {adventureId == null && <AdventuresOverview tree={tree} campaignId={campaignId} onPick={onPickAdventure} />}
+      {adventureId == null && <AdventuresOverview tree={tree} campaignId={campaignId} onPick={onPickAdventure} adventureMenu={adventureMenu} />}
       {adventureId != null && visibleTree.map((adv) => (
         <AdventureSection
           key={adv.id}
@@ -152,6 +206,7 @@ export function CampaignChaptersScenes({
           chapterId={chapterId ?? null}
           current={adv.id === current}
           onStatus={applyStatus}
+          adventureMenu={adventureMenu}
         />
       ))}
     </div>
@@ -260,10 +315,12 @@ function AdventuresOverview({
   tree,
   campaignId,
   onPick,
+  adventureMenu,
 }: {
   tree: CampaignAdventureTree[];
   campaignId: number;
   onPick?: (adventureId: number) => void;
+  adventureMenu?: AdventureMenu;
 }) {
   const navigate = useNavigate();
   const reveals = useResource<CampaignReveals>(`/story/campaigns/${campaignId}/reveals`).data;
@@ -301,6 +358,7 @@ function AdventuresOverview({
             role={roleOf.get(adv.id)}
             current={adv.id === current}
             onPick={onPick}
+            adventureMenu={adventureMenu}
           />
         ))}
       </div>
@@ -314,12 +372,14 @@ function AdventureCard({
   role,
   current,
   onPick,
+  adventureMenu,
 }: {
   adv: CampaignAdventureTree;
   campaignId: number;
   role: string | undefined;
   current: boolean;
   onPick?: (adventureId: number) => void;
+  adventureMenu?: AdventureMenu;
 }) {
   const { nodeBy, unmarked } = useClueNodes(adv, campaignId);
   const all = allScenes(adv);
@@ -333,6 +393,7 @@ function AdventureCard({
       type="button"
       className={`campaign-adv-card${adv.is_default ? " is-dim" : ""}${current ? " is-current" : ""}`}
       onClick={() => onPick?.(adv.id)}
+      {...adventureContextMenu(adv, adventureMenu)}
     >
       {kicker && <span className="d-mono campaign-adv-card__kicker">{kicker}</span>}
       {current && <span className="campaign-adv-card__now" aria-label="текущее" />}
@@ -367,6 +428,7 @@ function AdventureSection({
   chapterId,
   current,
   onStatus,
+  adventureMenu,
 }: {
   adv: CampaignAdventureTree;
   campaignId: number;
@@ -376,6 +438,7 @@ function AdventureSection({
   /** Текущее приключение кампании — главный блок вкладки, в тушь-рамке (Q4). */
   current: boolean;
   onStatus: (sceneId: number, status: string) => void;
+  adventureMenu?: AdventureMenu;
 }) {
   const navigate = useNavigate();
   const { clues, nodeBy, unmarked } = useClueNodes(adv, campaignId);
@@ -406,7 +469,7 @@ function AdventureSection({
 
   return (
     <section className="campaign-chapters__adventure">
-      <header className={`${current ? "d-focal" : "d-block"} campaign-adv__head`}>
+      <header className={`${current ? "d-focal" : "d-block"} campaign-adv__head`} {...adventureContextMenu(adv, adventureMenu)}>
         <div className="campaign-adv__title">
           {current && <span className="d-mono">Текущее приключение</span>}
           <h2>{adv.name}</h2>
@@ -452,6 +515,18 @@ function AdventureSection({
               </button>
               <button type="button" className="d-btn d-btn--quiet" onClick={() => navigate(`/adventures/${adv.id}?campaign=${campaignId}`)}>
                 Редактировать
+              </button>
+              <button
+                type="button"
+                className="d-dots"
+                aria-label={`Ещё действия с «${adv.name}»`}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  openEntityMenu({ type: "adventure", id: adv.id, name: adv.name }, r.left, r.bottom + 2, adventureMenu?.(adv) ?? []);
+                }}
+              >
+                ⋯
               </button>
             </span>
           )}

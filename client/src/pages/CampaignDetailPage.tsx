@@ -30,7 +30,7 @@ import { CampaignIssuanceTab } from "../components/CampaignIssuanceTab";
 import { TaskTracker } from "../components/TaskTracker";
 import { CampaignSecrets } from "../components/CampaignSecrets";
 import { CampaignMilestones } from "../components/CampaignMilestones";
-import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
+import { CampaignChaptersScenes, useAdventureDetach, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignReminders } from "../components/campaign/CampaignReminders";
@@ -254,6 +254,10 @@ export function CampaignDetailPage() {
     selectTab("Сюжет");
   }
   const [chapStats, setChapStats] = useState<ChaptersNavStats | null>(null);
+  // «Убрать из кампании» — местный пункт ПКМ приключения; после — к «Все приключения».
+  const [adventureDetachDialog, adventureMenu] = useAdventureDetach(campaignId, (adventureId) =>
+    setStorySel((sel) => (sel.item === String(adventureId) ? { section: "chapters", item: "all" } : sel))
+  );
   // Пока Мастер сам ничего не выбрал, «Сюжет» открывается на текущем
   // приключении, а без него — на всех (Q7). Один раз: дальше выбор его.
   const storyPicked = useRef(false);
@@ -556,6 +560,7 @@ export function CampaignDetailPage() {
         <TaskTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />
       )}
 
+      {adventureDetachDialog}
       {tab === "Сюжет" && (
         <EntityTabWorkspace
           sections={[
@@ -568,7 +573,17 @@ export function CampaignDetailPage() {
                 { id: "all", label: "Все приключения" },
                 ...(chapStats?.adventures ?? [])
                   .filter((a) => !a.is_default || a.scenes > 0)
-                  .map((a) => ({ id: String(a.id), label: a.name, count: a.scenes, current: a.current, dim: a.is_default })),
+                  .map((a) => ({
+                    id: String(a.id),
+                    label: a.name,
+                    count: a.scenes,
+                    current: a.current,
+                    dim: a.is_default,
+                    ...(!a.is_default && {
+                      entity: { type: "adventure", id: a.id, name: a.name },
+                      menu: adventureMenu({ id: a.id, name: a.name, has_campaign_edits: a.has_edits }),
+                    }),
+                  })),
               ],
               // «+ Приключение» кислотой под списком (Q4, макет Camp-Story).
               footer: campaign.setting_id != null && (
@@ -607,6 +622,7 @@ export function CampaignDetailPage() {
                 storyPicked.current = true;
                 setStorySel({ section: "chapters", item: String(id) });
               }}
+              adventureMenu={adventureMenu}
             />
           )}
           {storySel.section === "milestones" && (

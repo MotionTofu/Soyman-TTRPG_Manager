@@ -52,6 +52,7 @@ import { formatByPrecision } from "../inworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { EmptyState } from "../components/EmptyState";
 import { Loading } from "../components/Loading";
+import { LoadErrorCard } from "../components/Loadable";
 import { createPortal } from "react-dom";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { CreatureCardLoader } from "../components/CreatureCard";
@@ -5022,11 +5023,73 @@ export function CanvasPage() {
             onClick: () => void removeFromGroup(node),
           });
         }
+      // Рамка, набор и маршрут (приёмка «Д» 2026-11-04, находка 3): в меню —
+      // то же, что в их панели свойств, чтобы не ходить туда ради одного поля.
+      if (type === "frame") {
+        const frame = boardNodesOfType(board, "frame").find((n) => n.node_id === Number(id))?.frame;
+        items.push({
+          label: "Переименовать",
+          onClick: async () => {
+            const name = await promptText({ title: "Переименовать", message: "Новое имя", defaultValue: frame?.name ?? "" });
+            if (!name?.trim()) return;
+            await boardAction(() => write.put(`/canvas/frames/${id}`, { name: name.trim() }), { failure: "Имя группы" });
+          },
+        });
+        items.push({
+          label: "Цвет",
+          children: FRAME_SWATCHES.map((sw) => ({
+            label: sw.label,
+            onClick: () => void boardAction(() => write.put(`/canvas/frames/${id}`, { color: sw.value }), { failure: "Цвет группы" }),
+          })),
+        });
+        if (frame) items.push({ label: frame.collapsed ? "Развернуть" : "Свернуть", onClick: () => toggleFrame(Number(id), !frame.collapsed) });
+      }
+      if (type === "sound_set") {
+        items.push({ label: "Открыть в Аудиотеке", onClick: () => navigate(`/audio-library?set=${id}`) });
+        items.push({
+          label: "Переименовать",
+          onClick: async () => {
+            const name = await promptText({ title: "Переименовать", message: "Новое имя", defaultValue: nodeTitle(node.data) ?? "" });
+            if (!name?.trim()) return;
+            await boardAction(() => write.put(`/sound-sets/${id}`, { name: name.trim() }), {
+              failure: "Имя набора",
+              affects: [{ path: "/sound-sets" }, { path: `/sound-sets/${id}` }],
+            });
+          },
+        });
+      }
       if (type === "route") {
         // Второй пункт удаления рераута: «Удалить с ребром» убирает не только
         // разрыв, но и само реальное ребро (переход между сценами). Пункт
-        // «Удалить» ниже по-прежнему лишь снимает разрыв (блок #6).
+        // «Убрать разрыв» ниже по-прежнему лишь снимает разрыв (блок #6).
         const row = boardNodesOfType(board, "route").find((n) => n.route.id === Number(id))?.route;
+        // Переход — строка сцены: снятое и правленное здесь видно на её странице.
+        const sceneAffects: Affect[] = [{ kind: "scene" }];
+        if (row?.kind === "transition" && row.transition_id != null) {
+          const transitionId = row.transition_id;
+          items.push({
+            label: "Условие перехода…",
+            onClick: async () => {
+              const label = await promptText({ title: "Условие перехода", message: "Когда партия идёт этим путём", defaultValue: row.transition_label ?? "" });
+              if (label == null || label.trim() === (row.transition_label ?? "")) return;
+              await boardAction(() => write.put(`/story/transitions/${transitionId}`, { label: label.trim() }), { failure: "Условие перехода", affects: sceneAffects });
+            },
+          });
+        }
+        if ((row?.outputs ?? []).length > 1) {
+          items.push({
+            label: "Снять выход",
+            children: row!.outputs!.map((o) => ({
+              label: o.to_name ?? o.to_key,
+              onClick: () =>
+                void boardAction(() => write.del(`/canvas/routes/${id}/outputs?to_key=${encodeURIComponent(o.to_key)}`), {
+                  retry: false,
+                  failure: "Снятие выхода",
+                  affects: sceneAffects,
+                }),
+            })),
+          });
+        }
         if (row?.kind === "transition" && row.transition_id != null) {
           items.push({
             label: "Удалить с ребром",
@@ -5043,7 +5106,7 @@ export function CanvasPage() {
         }
       }
         if (!["scene", "chapter", "adventure"].includes(type)) items.push({
-          label: entity ? "Снять с доски" : "Удалить",
+          label: entity ? "Снять с доски" : type === "route" ? "Убрать разрыв" : "Удалить",
           danger: true,
           onClick: async () => {
           // Архивация сцены и главы — это правка самой записи: её видят и
@@ -5073,7 +5136,7 @@ export function CanvasPage() {
       if (entity) { setContextMenu(null); openEntityMenu(entity, event.clientX, event.clientY, items); }
       else setContextMenu({ x: event.clientX, y: event.clientY, title: selected.length > 1 && node.selected ? "Выбранные объекты" : nodeTitle(node.data) ?? "Объект", items });
     },
-    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm, groupColorItems]
+    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm, groupColorItems, toggleFrame]
   );
 
   // Убрать ноду сущности/набора/проверки — значит убрать её С ХОЛСТА или удалить сущность.
@@ -5600,6 +5663,26 @@ export function CanvasPage() {
     const node = nodes.find((item) => item.id === id);
     if (node) handleNodeContextMenu(new MouseEvent("contextmenu", { clientX: x, clientY: y, cancelable: true }), node);
   });
+  // Доска по ссылке не нашлась или не загрузилась — сказать об этом, а не
+  // крутить «загрузку» вечно (приёмка «Д» 2026-11-04, находка 2).
+  const boardPending = (label: string) =>
+    boardQuery.error ? (
+      <LoadErrorCard
+        message={
+          /not found/i.test(boardQuery.error)
+            ? "Такой доски нет — возможно, её удалили или ссылка устарела."
+            : <>Не удалось открыть доску: {boardQuery.error}</>
+        }
+        action={
+          <span className="row">
+            <button type="button" onClick={boardQuery.reload}>Повторить</button>
+            <button type="button" onClick={() => navigate("/canvas")}>К холстам</button>
+          </span>
+        }
+      />
+    ) : (
+      <Loading full label={label} />
+    );
   const boardSurface = board && (
     <CanvasNodeMenuContext.Provider value={openNodeMenu}>
     <div className="canvas-body">
@@ -6076,17 +6159,17 @@ export function CanvasPage() {
       )}
 
       {freeId ? (
-        !board ? <Loading full label="Фриформ-доска…" /> : boardSurface
+        !board ? boardPending("Фриформ-доска…") : boardSurface
       ) : campaignMapId ? (
         // Карта кампании (блок D4) — тот же холст, но отвечает на вопрос «где
         // мы сейчас»: узлы покрашены прохождением, а состав — приключения
         // кампании, а не всего сеттинга.
-        !board ? <Loading full label="Карта кампании…" /> : boardSurface
+        !board ? boardPending("Карта кампании…") : boardSurface
       ) : settingMapId ? (
         // Схема сеттинга (блок D3) — второй взгляд на тот же сеттинг, а не
         // обязательный шаг на пути к сценам, каким он был до Q17. Список
         // остаётся дорогой по умолчанию, сюда приходят переключателем.
-        !board ? <Loading full label="Схема сеттинга…" /> : boardSurface
+        !board ? boardPending("Схема сеттинга…") : boardSurface
       ) : !arcId ? (
         // Один экран вместо двух (Q21): свои доски и приключения, сгруппированные
         // по сеттингу. Схема сеттинга рядом, переключателем «Список / Схема».

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { readResource } from "../data/imperative";
 
 type LinkedResource = { uid: string; file_url: string | null };
 const UID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -11,7 +11,7 @@ export function ResourceLinkPage() {
   useEffect(() => {
     if (!uid || !UID_RE.test(uid)) { setError("Неверная ссылка на Ресурс"); return; }
     let cancelled = false;
-    void api.get<LinkedResource[]>(`/resources/resolve?uids=${uid}`, { timeoutMs: 15_000 })
+    void readResource<LinkedResource[]>(`/resources/resolve?uids=${uid}`, { fresh: true, timeoutMs: 15_000 })
       .then(rows => {
         if (cancelled) return;
         const fileUrl = rows[0]?.file_url;

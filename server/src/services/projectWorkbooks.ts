@@ -2,9 +2,14 @@ import type Database from "better-sqlite3";
 import {randomUUID} from "node:crypto";
 import {ADVENTURE_WORKBOOK,CAMPAIGN_WORKBOOK,SETTING_WORKBOOK} from "@soyman/shared";
 import {registerPracticalTemplate} from "../db/workbooks";
+import {requireKind} from "../db/entityKinds";
 
 export type WorkbookProject="setting"|"adventure"|"campaign";
-const tables:Record<WorkbookProject,string>={setting:"settings",adventure:"story_arcs",campaign:"campaigns"};
+// Таблицы проектов — из реестра видов, своей карты не держим (entityKindsNoCopies.test).
+const PROJECT_KINDS:readonly WorkbookProject[]=["setting","adventure","campaign"];
+const tables=Object.fromEntries(PROJECT_KINDS.map(k=>[k,requireKind(k).table])) as Record<WorkbookProject,string>;
+/** Таблица проекта тетради по виду; чужой вид (в т.ч. «constructor») — undefined. */
+export function projectTable(type:string|null|undefined):string|undefined{return type&&Object.hasOwn(tables,type)?tables[type as WorkbookProject]:undefined;}
 const templates={setting:SETTING_WORKBOOK,adventure:ADVENTURE_WORKBOOK,campaign:CAMPAIGN_WORKBOOK};
 
 function project(database:Database.Database,type:WorkbookProject,id:number) {

@@ -16,6 +16,9 @@
 .markdown-resource__preview { min-height: 14rem; overflow-wrap: anywhere; }
 .markdown-resource__insert-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
 .markdown-resource__picker { display: grid; gap: .75rem; padding: 1rem; margin-bottom: .75rem; background: var(--paper-2); border: 1px solid var(--line); }
+/* Подсказка клавиш и выбор Ресурса внутри меню «Вставить»: без своей рамки. */
+.markdown-resource__keys { padding: var(--sp-2) var(--sp-5); font-size: var(--fs-meta); }
+.markdown-resource__picker--menu { margin: 0; border: 0; }
 .markdown-resource__picker-head { display: flex; justify-content: space-between; align-items: center; }
 .markdown-resource__picker label { display: grid; gap: .25rem; }
 .markdown-resource__picker input[type="text"], .markdown-resource__picker input:not([type]) { width: 100%; }

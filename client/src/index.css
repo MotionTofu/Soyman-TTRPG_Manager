@@ -7543,7 +7543,7 @@ details.card[open] summary {
   align-items: center;
   gap: var(--sp-3);
   margin-bottom: var(--sp-2);
-  padding: 7px var(--sp-4) 6px;
+  padding: var(--sp-3) var(--sp-4);
   background: var(--surface);
   color: var(--on-surface);
   font-family: var(--font-ui);
@@ -7628,6 +7628,7 @@ details.card[open] summary {
   border: 0;
   background: transparent;
   color: var(--ink-2);
+  /* кегль мимо шкалы намеренно — размер значка «⋯» в квадратной кнопке, а не текста */
   font-size: 18px;
   line-height: 1;
   cursor: pointer;

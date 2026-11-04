@@ -4,7 +4,7 @@ import { migrateBookLibrary } from "./bookLibrary";
 
 function fixture() {
  const db = new Database(':memory:'); db.pragma('foreign_keys=ON');
- db.exec(`CREATE TABLE app_settings (key TEXT PRIMARY KEY,value TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY);
+ db.exec(`CREATE TABLE app_settings (key TEXT PRIMARY KEY,value TEXT); CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE settings (id INTEGER PRIMARY KEY);
  CREATE TABLE mastering_sections (id INTEGER PRIMARY KEY,name TEXT,category TEXT,position INTEGER);
  CREATE TABLE mastering_notes (id INTEGER PRIMARY KEY,uid TEXT,category TEXT,section_id INTEGER,title TEXT,content TEXT,archived_at TEXT);
  CREATE TABLE resources (id INTEGER PRIMARY KEY,uid TEXT,type TEXT,category TEXT,file_path TEXT,archived_at TEXT);

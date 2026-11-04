@@ -600,12 +600,6 @@
 .population__spacer {
   flex: 1;
 }
-.population__create {
-  background: var(--surface);
-  color: var(--paper-acid);
-  border-color: var(--surface);
-  font-weight: 700;
-}
 /* «Мир кампании» (ADR-0006): фильтры — чипы «Населения», кнопка — его же. */
 .campaign-world {
   display: flex;

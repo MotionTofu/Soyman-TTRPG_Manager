@@ -7,7 +7,8 @@ import {SoundLibraryTab} from "../components/SoundLibraryTab";
 import {SoundSetsTab} from "../components/SoundSetsTab";
 import type {SoundButton, SoundSetSummary} from "../sound/types";
 export function AudioLibraryPage(){
- const [tab,setTab]=useState("sounds");
+ // ?set=ID — ссылка на набор (ПКМ набора на холсте): сразу «Наборы» и он.
+ const [tab,setTab]=useState(()=>new URLSearchParams(window.location.search).has("set")?"sets":"sounds");
  const ownership=useAudioOwnership();
  // Счётчики на ярлыках (макет «Д» Roll-Audio); те же ресурсы, что у вкладок.
  const soundCount=useResource<SoundButton[]>("/sounds").data?.length;

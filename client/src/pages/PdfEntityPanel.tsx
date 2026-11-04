@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
 import { useAfterWrite, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import type { Resource } from "../types";
 
 export type PdfEntityKind = "being" | "location" | "community" | "artifact" | "item" | "magic_item";
@@ -76,7 +76,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
 
   useEffect(() => {
     let alive = true;
-    void Promise.all([api.get<Row[]>("/settings"), api.get<Row[]>("/systems")]).then(([s, y]) => {
+    void Promise.all([readResource<Row[]>("/settings"), readResource<Row[]>("/systems")]).then(([s, y]) => {
       if (alive) { setSettings(s); setSystems(y); }
     }).catch((reason) => { if (alive) setError(reason instanceof Error ? reason.message : "Не удалось загрузить контекст"); });
     return () => { alive = false; };
@@ -84,7 +84,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
 
   useEffect(() => {
     let alive = true;
-    void api.get<{ setting_id: number | null; system_id: number | null }>(`/pdf-entity-sources/context/${resource.id}`)
+    void readResource<{ setting_id: number | null; system_id: number | null }>(`/pdf-entity-sources/context/${resource.id}`)
       .then((context) => {
         if (!alive) return;
         if (context.setting_id) setSettingId(context.setting_id);
@@ -96,7 +96,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
   useEffect(() => {
     if (!systemId) { setSections([]); return; }
     let alive = true;
-    void api.get<Section[]>(`/systems/${systemId}/sections`).then((rows) => {
+    void readResource<Section[]>(`/systems/${systemId}/sections`).then((rows) => {
       if (alive) {
         setSections(rows);
         setSectionId((old) => {
@@ -114,7 +114,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
     let alive = true;
     const path = isCompendium ? `/systems/${systemId}/entries?section_id=${sectionId}` :
       `${config.path}?setting_id=${settingId}`;
-    void api.get<Row[]>(path).then((rows) => {
+    void readResource<Row[]>(path).then((rows) => {
       if (alive) setCandidates(isCompendium ? rows.filter((r) => r.kind === kind) : rows);
     }).catch((reason) => { if (alive) setError(reason instanceof Error ? reason.message : "Не удалось загрузить карточки"); });
     return () => { alive = false; };
@@ -124,7 +124,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
     if (mode !== "edit" || !targetId) return;
     let alive = true;
     const path = isCompendium ? `/systems/entries/${targetId}` : `${config.path}/${targetId}`;
-    void api.get<Row>(path).then((row) => {
+    void readResource<Row>(path).then((row) => {
       if (alive) { setName(row.name); setBody(String(row[field] ?? "")); setInserted(false); }
     }).catch((reason) => { if (alive) setError(reason instanceof Error ? reason.message : "Не удалось открыть карточку"); });
     return () => { alive = false; };

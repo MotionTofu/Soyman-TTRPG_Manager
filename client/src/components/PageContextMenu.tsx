@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
-import { api } from "../api/client";
 import { getCachedUser } from "../api/currentUser";
 import { addToBag } from "../bag";
-import { useAfterWrite } from "../data/hooks";
+import { useAfterWrite, write } from "../data/hooks";
 import { entityPath, isEntityKind } from "../data/entities";
 import { openSecondWindow } from "../electronApi";
 import { DETAIL_ROUTES } from "../entityTypes";
@@ -172,7 +171,7 @@ export function PageContextMenu() {
       danger: true,
     });
     if (!ok || !isEntityKind(entity.type)) return;
-    await api.del(entityPath(entity.type, entity.id));
+    await write.del(entityPath(entity.type, entity.id));
     afterWrite([{ kind: entity.type }]);
   }
 

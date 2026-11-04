@@ -305,7 +305,7 @@ export function LocationRootGraph({ settingId, lead }: { settingId: number; lead
       <div className="population__toolbar">
         {lead}
         <span className="population__spacer" />
-        <button type="button" className="population__create" onClick={() => setCreating(true)}>
+        <button type="button" className="d-btn d-btn--primary population__create" onClick={() => setCreating(true)}>
           + Место
         </button>
       </div>

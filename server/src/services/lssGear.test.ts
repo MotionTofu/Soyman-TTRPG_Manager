@@ -145,7 +145,14 @@ describe("что надето — по КЗ из LSS", () => {
     const monk = hero(16, {
       classes: [{ classId: null, className: "Монах", subclassId: null, subclassName: "", level: 3, skillChoiceOptions: [], skillChoiceCount: 0, spellcastingAbility: "" }],
       abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 16, cha: 10 },
-      classFeatures: [{ name: "Защита без доспехов", description: "" } as DndCharacterData["classFeatures"][number]],
+      // Формулу КЗ лист берёт из эффекта умения (модель эффектов), а не по имени.
+      classFeatures: [
+        {
+          name: "Защита без доспехов",
+          description: "",
+          effects: [{ id: "d", type: "defense", when: "always", acBase: { base: 10, abilities: ["dex", "wis"] }, armorCondition: "no_armor_no_shield" }],
+        } as DndCharacterData["classFeatures"][number],
+      ],
     });
     const r = settle({ character: monk, rawNames: ["Болты"], lssAc: 16 });
     expect(r.warning).toBeNull();

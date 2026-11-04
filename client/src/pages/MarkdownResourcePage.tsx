@@ -218,8 +218,8 @@ export function MarkdownResourcePage() {
       {!resourcePicker ? <>
         <button type="button" onClick={() => openPicker("link")}>Ссылка на Ресурс</button>
         <button type="button" onClick={() => openPicker("image")}>Изображение</button>
-        <span className="pdf-markdown__hint" style={{ padding: "4px 14px", fontSize: "var(--fs-meta)" }}>Alt+Q — внутренняя ссылка, Alt+W — цитата</span>
-      </> : <div className="markdown-resource__picker" style={{ margin: 0, border: 0 }}>
+        <span className="pdf-markdown__hint markdown-resource__keys">Alt+Q — внутренняя ссылка, Alt+W — цитата</span>
+      </> : <div className="markdown-resource__picker markdown-resource__picker--menu">
         <div className="markdown-resource__picker-head"><strong>{resourcePicker === "image" ? "Изображение" : "Ресурс"}</strong><button type="button" onClick={() => setResourcePicker(null)}>Назад</button></div>
         <label>Найти Ресурс <input value={resourceSearch} onChange={event => setResourceSearch(event.target.value)} placeholder="Название" /></label>
         <div className="markdown-resource__picker-list">

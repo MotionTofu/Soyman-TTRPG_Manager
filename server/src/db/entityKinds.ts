@@ -524,6 +524,14 @@ export const UNSWEPT_PAIRS: Readonly<Record<string, UnsweptPair>> = {
     vocabulary: "registry",
     why: "«о ком» узла; удалённая сущность показывается пустым полем, сцена не страдает",
   },
+  "library_books.source_type": {
+    vocabulary: "own",
+    why: "источник книги библиотеки — 'mastering' | 'resource' | 'workbook' (CHECK в bookLibrary.ts), не вид сущности; удалённый источник убирает книгу триггер (bookLibrary.ts, workbooks.ts)",
+  },
+  "workbook_instances.project_type": {
+    vocabulary: "registry",
+    why: "проект тетради — кампания, сеттинг или приключение; тетрадь — документ автора, а не спутник проекта: удалённый проект не стирает её, чтение показывает тетрадь без проекта (routes/workbooks.ts)",
+  },
 };
 
 /** Ключи из явных наборов — для проверки, что там нет опечаток. */

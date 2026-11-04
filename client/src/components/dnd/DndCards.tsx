@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEv
 import { createPortal } from "react-dom";
 import type { CompendiumEntry } from "../../types";
 import { readResource } from "../../data/imperative";
-import { api } from "../../api/client";
 import { MentionText } from "../mentions/MentionText";
 import { openMentionPreview } from "../mentions/mentionPreviewStore";
 import { ContextMenu } from "../ContextMenu";
@@ -61,8 +60,8 @@ export function CardPicture({ id, name, card, thumb }: { id: number; name: strin
         onError={() => {
           if (retried || id < 0) return;
           setRetried(true);
-          api
-            .get<CompendiumEntry>(`/systems/entries/${id}`)
+          // Картинка не загрузилась — перечитать запись мимо кэша: адрес мог смениться.
+          readResource<CompendiumEntry>(`/systems/entries/${id}`, { fresh: true })
             .then((e) => e.avatar_image_url && setFresh(e.avatar_image_url))
             .catch(() => {});
         }}

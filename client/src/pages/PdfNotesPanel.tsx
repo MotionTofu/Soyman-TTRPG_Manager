@@ -56,6 +56,7 @@ function MarginLane({ metric, notes, activeId, actions, onOpen }: {
       cards[index].style.top = `${tops[index]}px`;
     }
   }, [notes, metric.height]);
+  // инлайн-стиль намеренно — дорожка заметок стоит по измеренной странице PDF
   return <div ref={ref} className="pdf-reader__notes-lane" style={{ top: metric.top, height: metric.height }}>
     <div className="pdf-reader__notes-lane-heading">Стр. {metric.page} · {notes.length} заметок</div>
     {notes.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={onOpen} />)}
@@ -140,6 +141,7 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, onCollap
       {loading && <p className="muted">Загружаю заметки…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && !error && !notes.length && <p className="pdf-reader__notes-empty">Выделите цитату в PDF или создайте общую заметку.</p>}
+      {/* инлайн-стиль намеренно — высота полотна заметок повторяет прокрутку читалки, считается на лету */}
       {preferences.note_mode === "list" ?
         <div className="pdf-reader__notes-list">{sorted.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={openNote} />)}</div> :
         <div className="pdf-reader__notes-canvas" style={{ height: Math.max(viewer?.scrollHeight ?? 0, container?.clientHeight ?? 0) }}>

@@ -18,10 +18,10 @@ import { queryClient } from "./queryClient";
  * `fresh` — не верить кэшу: для чтения, поверх которого сразу пишут (чужой
  * лист, в который кладут предмет), и для опроса.
  */
-export function readResource<T>(path: string, options?: { fresh?: boolean }): Promise<T> {
+export function readResource<T>(path: string, options?: { fresh?: boolean; timeoutMs?: number }): Promise<T> {
   return queryClient.fetchQuery({
     queryKey: dataKeys.resource(path),
-    queryFn: ({ signal }) => api.get<T>(path, { signal }),
+    queryFn: ({ signal }) => api.get<T>(path, { signal, timeoutMs: options?.timeoutMs }),
     ...(options?.fresh ? { staleTime: 0 } : {}),
   });
 }

@@ -26,7 +26,9 @@ function legacyDatabase() {
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
-describe("characters rebuild safety", () => {
+// Каждый тест открывает базу со всеми миграциями: один ~1,5 с, под нагрузкой
+// полного прогона — больше 5 с умолчания.
+describe("characters rebuild safety", { timeout: 30_000 }, () => {
   for (const failAt of ["DROP TABLE characters", "ALTER TABLE characters_new RENAME TO characters"]) {
     it(`rolls back and closes the connection after failure at ${failAt}`, () => {
       const dir = legacyDatabase();

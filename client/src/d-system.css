@@ -527,6 +527,7 @@
   content: "";
   width: 9px;
   height: 5px;
+  /* шаг мимо шкалы намеренно — оптическая посадка галочки в квадрате, не отступ */
   margin-top: -3px;
   border: solid var(--sheet);
   border-width: 0 0 2px 2px;

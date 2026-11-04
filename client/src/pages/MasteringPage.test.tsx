@@ -12,7 +12,8 @@ vi.mock("../data/hooks", () => ({
   useAction: () => (action: () => Promise<unknown>) => action(),
   write: { post: mocks.post, put: mocks.put, del: mocks.del },
 }));
-vi.mock("../mentions", () => ({ syncMentionLinks: mocks.sync }));
+// Частично: страница тянет редактор листа, которому нужны и настоящие MENTION_RE.
+vi.mock("../mentions", async (importOriginal) => ({ ...(await importOriginal<typeof import("../mentions")>()), syncMentionLinks: mocks.sync }));
 vi.mock("../api/currentUser", () => ({ getCachedUser: () => ({ id: 1 }) }));
 vi.mock("../hooks/useConfirm", () => ({ useConfirm: () => [null, mocks.confirm] }));
 vi.mock("../components/PageFrame", () => ({ PageFrame: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
@@ -145,10 +146,10 @@ describe("библиотека Мастерения", () => {
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/mastering", expect.objectContaining({ title: "Первая статья", content: "Сохранённый Markdown", section_id: 2 })));
     expect(mocks.sync).toHaveBeenCalledWith("mastering", 101, "", "Сохранённый Markdown");
   });
-  it("редактирует открытый текст, сохраняет ссылки и закладку", async () => {
+  // Закладки переехали в библиотеку книг («В закладки» на полке, состояние на
+  // сервере) — здесь их больше не ставят.
+  it("редактирует открытый текст и сохраняет ссылки", async () => {
     mount(); fireEvent.click(screen.getByRole("button", { name: "Открыть книгу: Книга 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Добавить закладку" }));
-    expect(JSON.parse(localStorage.getItem("masteringBookBookmarks:1")!)).toEqual([1]);
     fireEvent.click(screen.getByRole("button", { name: "Редактировать книгу" }));
     fireEvent.change(screen.getByLabelText("Текст статьи"), { target: { value: "Исправленный текст" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));

@@ -3,7 +3,7 @@ import {randomUUID} from "node:crypto";
 import {z} from "zod";
 import {db} from "../db/db";
 import {requireAuth,type AuthedRequest} from "../services/auth";
-import {ensureProjectWorkbook,placeProjectWorkbooks,type WorkbookProject} from "../services/projectWorkbooks";
+import {ensureProjectWorkbook,placeProjectWorkbooks,projectTable,type WorkbookProject} from "../services/projectWorkbooks";
 import {validateWorkbookTemplate,validateWorkbookAnswers,workbookMarkdown,parseWorkbookMarkdown,suggestWorkbookMapping,convertAnswer,FORMER_LABELS,WORKBOOK_NOTES,workbookProgress,copyActivityLines,type WorkbookTemplate,type WorkbookAnswers,type WorkbookField} from "@soyman/shared";
 export const workbooksRouter=Router();workbooksRouter.use(requireAuth("gm"));
 type Instance={id:number;uid:string;author_user_id:number;template_id:number;title:string;answers_json:string;revision:number;project_type:string|null;project_id:number|null;archived_at:string|null;[key:string]:unknown};
@@ -23,17 +23,16 @@ function templateImport(raw:unknown){const input=raw&&typeof raw==="object"&&"ma
 function instance(req:AuthedRequest){return db.prepare('SELECT * FROM workbook_instances WHERE id=? AND author_user_id=?').get(req.params.id,req.user!.id) as Instance|undefined;}
 function present(row:Instance){
  const {answers_json,...fields}=row;
- const table=row.project_type&&{campaign:'campaigns',adventure:'story_arcs'}[row.project_type];
+ const table=row.project_type!=='setting'?projectTable(row.project_type):undefined;
  const project=table&&row.project_id?db.prepare(`SELECT setting_id FROM ${table} WHERE id=?`).get(row.project_id) as {setting_id:number|null}|undefined:undefined;
  return {...fields,project_setting_id:row.project_type==='setting'?row.project_id:project?.setting_id??null,answers:JSON.parse(answers_json),template:definition(row.template_id)};
 }
 const projectSchema=z.object({project_type:z.enum(['campaign','setting','adventure']).nullable().optional(),project_id:z.number().int().positive().nullable().optional()});
-const projectTables:Record<string,string>={campaign:'campaigns',setting:'settings',adventure:'story_arcs'};
-function validProject(type:string|null|undefined,id:number|null|undefined){if(!type&&!id)return true;if(!type||!id)return false;const table={campaign:'campaigns',setting:'settings',adventure:'story_arcs'}[type];return !!table&&!!db.prepare(`SELECT id FROM ${table} WHERE id=? AND archived_at IS NULL${type==='adventure'?' AND is_default=0':''}`).get(id);}
-workbooksRouter.get('/projects/:type',(req,res)=>{const table={campaign:'campaigns',setting:'settings',adventure:'story_arcs'}[req.params.type];if(!table)return res.status(400).json({error:'Неизвестный вид проекта'});res.json(db.prepare(`SELECT id,name FROM ${table} WHERE archived_at IS NULL${req.params.type==='adventure'?' AND is_default=0':''} ORDER BY name`).all());});
+function validProject(type:string|null|undefined,id:number|null|undefined){if(!type&&!id)return true;if(!type||!id)return false;const table=projectTable(type);return !!table&&!!db.prepare(`SELECT id FROM ${table} WHERE id=? AND archived_at IS NULL${type==='adventure'?' AND is_default=0':''}`).get(id);}
+workbooksRouter.get('/projects/:type',(req,res)=>{const table=projectTable(req.params.type);if(!table)return res.status(400).json({error:'Неизвестный вид проекта'});res.json(db.prepare(`SELECT id,name FROM ${table} WHERE archived_at IS NULL${req.params.type==='adventure'?' AND is_default=0':''} ORDER BY name`).all());});
 workbooksRouter.post('/projects/:type/:projectId/notebook',(req:AuthedRequest,res)=>{
  const type=req.params.type as WorkbookProject,id=Number(req.params.projectId);
- if(!projectTables[type]||!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Неизвестный проект'});
+ if(!projectTable(type)||!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Неизвестный проект'});
  try{req.params.id=String(ensureProjectWorkbook(db,req.user!.id,type,id));res.json(present(instance(req)!));}
  catch(e){res.status(400).json({error:(e as Error).message});}
 });
@@ -168,15 +167,15 @@ workbooksRouter.get('/instances/:id/export',(req:AuthedRequest,res)=>{
  const row=instance(req);if(!row)return res.status(404).json({error:'Тетрадь не найдена'});const template=definition(row.template_id)!;
  if(req.query.format==='markdown')return res.type('text/markdown; charset=utf-8').send(workbookMarkdown(template,row.title,JSON.parse(row.answers_json),{type:row.project_type,id:row.project_id}));
  const links=db.prepare('SELECT b.key,s.sheet_key FROM workbook_book_selection s JOIN library_books b ON b.id=s.book_id WHERE s.instance_id=? AND s.author_user_id=?').all(row.id,req.user!.id);
- const project=row.project_type&&row.project_id&&projectTables[row.project_type]?db.prepare(`SELECT uid FROM ${projectTables[row.project_type]} WHERE id=?`).get(row.project_id) as {uid:string}|undefined:undefined;
+ const project=row.project_type&&row.project_id&&projectTable(row.project_type)?db.prepare(`SELECT uid FROM ${projectTable(row.project_type)} WHERE id=?`).get(row.project_id) as {uid:string}|undefined:undefined;
  res.json({format:'soyman-workbook-instance',schemaVersion:1,template,instance:{uid:row.uid,title:row.title,answers:JSON.parse(row.answers_json),project:project?{type:row.project_type,uid:project.uid}:null},links});
 });
 workbooksRouter.post('/import',(req:AuthedRequest,res)=>{
  try{const bundle=req.body;validateWorkbookTemplate(bundle.template);validateWorkbookAnswers(bundle.template,bundle.instance?.answers);
  if(bundle.format!=='soyman-workbook-instance'||bundle.schemaVersion!==1||!z.string().uuid().safeParse(bundle.instance?.uid).success||typeof bundle.instance?.title!=='string'||!bundle.instance.title.trim()||bundle.instance.title.length>500||!Array.isArray(bundle.links??[])||(bundle.links??[]).length>500)throw new Error('Некорректный файл тетради');
  if(db.prepare('SELECT id FROM workbook_instances WHERE uid=?').get(bundle.instance.uid))return res.status(409).json({error:'Этот экземпляр уже существует. Импорт не перезаписывает ответы.'});
- const project=bundle.instance.project,projectType=project&&typeof project.type==='string'&&Object.hasOwn(projectTables,project.type)?project.type:null;
- const projectRow=projectType&&typeof project.uid==='string'?db.prepare(`SELECT id FROM ${projectTables[projectType]} WHERE uid=? AND archived_at IS NULL`).get(project.uid) as {id:number}|undefined:undefined;
+ const project=bundle.instance.project,projectType=project&&typeof project.type==='string'&&!!projectTable(project.type)?project.type:null;
+ const projectRow=projectType&&typeof project.uid==='string'?db.prepare(`SELECT id FROM ${projectTable(projectType)} WHERE uid=? AND archived_at IS NULL`).get(project.uid) as {id:number}|undefined:undefined;
  const id=db.transaction(()=>{const templateId=templateImport(bundle.template),id=insertInstance(req.user!.id,templateId,bundle.instance.title,bundle.instance.answers,bundle.instance.uid,projectRow?projectType:null,projectRow?.id??null);
  for(const link of bundle.links??[]){const book=db.prepare("SELECT b.id FROM library_books b LEFT JOIN workbook_instances w ON b.source_type='workbook' AND w.id=b.source_id WHERE b.key=? AND (w.id IS NULL OR w.author_user_id=?)").get(link.key,req.user!.id) as {id:number}|undefined;if(!book)continue;const sheet=bundle.template.sheets.some((s:{key:string})=>s.key===link.sheet_key)?link.sheet_key:null;db.prepare('INSERT OR IGNORE INTO workbook_book_links(book_id,template_key,sheet_key) VALUES(?,?,?)').run(book.id,bundle.template.key,sheet);db.prepare('INSERT OR REPLACE INTO workbook_book_selection(book_id,author_user_id,template_key,instance_id,sheet_key) VALUES(?,?,?,?,?)').run(book.id,req.user!.id,bundle.template.key,id,sheet);}return id;})();req.params.id=String(id);res.status(201).json(present(instance(req)!));
  }catch(e){res.status(400).json({error:(e as Error).message});}

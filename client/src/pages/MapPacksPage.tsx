@@ -578,6 +578,7 @@ export function MapPacksPage() {
   return <div className="stack" style={{ position: "relative" }}>
     <SectionBackground />
     <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+      {/* каркас в обход намеренно — экран наборов редактора карт, каркас ставится с блоком «Редактор карт» «Д» */}
       <h1 style={{ margin: 0 }}>Наборы ассетов</h1>
       <div className="row" style={{ gap: 8 }}><Link to="/maps">← К картам</Link>
         <label className="button" title="Набор из файла, выгруженного в SoyMan" aria-disabled={importing}>{importing ? "Загружаю…" : "Загрузить набор…"}

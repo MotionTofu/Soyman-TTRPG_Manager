@@ -1,5 +1,5 @@
-/* РџСЂРёРЅСЏС‚С‹Рµ Set-* РґРѕСЃРєРё. РџРµСЂРµС…РѕРґРЅС‹Рµ РїСЂР°РІРёР»Р° РѕРіСЂР°РЅРёС‡РµРЅС‹ РїСЂРѕС„РёР»РµРј СЃРµС‚С‚РёРЅРіР°:
-   РєР°СЂС‚РѕС‡РєРё РЅР°СЃРµР»РµРЅРёСЏ, РјРµСЃС‚ Рё РїСЂРµРґРјРµС‚РѕРІ РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ С‚Р°РєР¶Рµ РЅР° РґСЂСѓРіРёС… СЌРєСЂР°РЅР°С…. */
+/* Принятые Set-* доски. Переходные правила ограничены профилем сеттинга:
+   карточки населения, мест и предметов используются также на других экранах. */
 :is(.entity-page[data-entity-type="setting"], .population-sheet) > .paper-sheet { background: var(--sheet); container-type: inline-size; }
 .setting-workbooks { min-width: 0; }
 .setting-workbooks__row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-4); padding-block: var(--sp-4); border-bottom: 1px solid var(--line); }
@@ -28,10 +28,10 @@
   .setting-treasury > .row:first-of-type > .d-btn { display: none; }
 }
 
-/* Р“РµРѕРіСЂР°С„РёСЏ Рё РќР°СЃРµР»РµРЅРёРµ: РѕРґРЅРѕ РіР»Р°РІРЅРѕРµ РґРµР№СЃС‚РІРёРµ, РІС‹Р±РѕСЂ вЂ” С‚СѓС€СЊСЋ. */
+/* География и Население: одно главное действие, выбор — тушью. Кислота —
+   общим d-btn--primary, здесь только высота под строку инструментов. */
 :is(.entity-page[data-entity-type="setting"], .population-sheet) :is(.geography-miller, .geography-root, .population) .population__create {
-  height: 40px; padding: 0 var(--sp-6); border: var(--edge-width) solid var(--edge); border-radius: 0;
-  background: var(--acid) var(--skin-acid-wash) center / 360px; color: var(--acid-text); font-family: var(--font-display); font-size: var(--fs-label); font-weight: 500; text-transform: uppercase; letter-spacing: .06em;
+  height: 40px; padding: 0 var(--sp-6); font-size: var(--fs-label);
 }
 :is(.entity-page[data-entity-type="setting"], .population-sheet) :is(.population__search, .geography-miller select, .population__toolbar select) {
   height: 36px; padding-inline: var(--sp-4); border: var(--edge-width) solid var(--edge); border-radius: 0; background: var(--field); color: var(--ink); font-size: var(--fs-data);
@@ -90,7 +90,7 @@
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .creature-card__force dl { display: block; }
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .creature-card__force dl > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); border-top: 1px solid var(--line); }
 
-/* РџСЂРёРєР»СЋС‡РµРЅРёСЏ: РїСЂРµРІСЊСЋ Р±РµР· СЂР°РјРєРё, СЂРµРґРєРёРµ РґРµР№СЃС‚РІРёСЏ РЅР°С…РѕРґСЏС‚СЃСЏ РІ в‹Ї. */
+/* Приключения: превью без рамки, редкие действия находятся в ⋯. */
 .setting-adventures .adventures-preview { border: 0; padding-left: 0; }
 .setting-adventures .adventure-preview-header > .entry-title { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 500; }
 .setting-adventures .entity-row { border-radius: 0; border-bottom: 1px solid var(--line); }
@@ -100,7 +100,7 @@
 .setting-adventures .fav-star.on { color: var(--ink); }
 .setting-adventures > .stack > .row > .primary { min-height: 40px; border-radius: 0; font-family: var(--font-display); font-size: var(--fs-label); }
 
-/* Р“Р°Р»РµСЂРµСЏ: СЃРµСЂС‹Р№ СЃРєРѕС‚С‡, СЃС‚РѕРїРєРё С‚СѓС€СЊСЋ, РѕС‚РєСЂС‹С‚С‹Р№ Р°Р»СЊР±РѕРј вЂ” РµРґРёРЅСЃС‚РІРµРЅРЅР°СЏ СЂР°РјРєР°. */
+/* Галерея: серый скотч, стопки тушью, открытый альбом — единственная рамка. */
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .setting-gallery { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-6); }
 .setting-gallery > * { grid-column: 1 / -1; }
 .setting-gallery > .setting-gallery__upload { grid-column: 2; grid-row: 1; align-self: start; height: 40px; }
@@ -120,7 +120,7 @@
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .setting-gallery__photo > img { height: auto; aspect-ratio: 4/3; }
 :is(.entity-page[data-entity-type="setting"], .population-sheet) :is(.setting-gallery__stack-name > span, .setting-gallery__more) { color: var(--muted); }
 
-/* РџРѕР»РєРё СѓР¶Рµ РѕР±С‰РёРµ СЃ Р‘РёР±Р»РёРѕС‚РµРєРѕР№. РђСѓРґРёРѕРЅР°Р±РѕСЂС‹ СЃРѕС…СЂР°РЅСЏСЋС‚ С‡РµС‚С‹СЂРµ РєР°РЅР°Р»Р°. */
+/* Полки уже общие с Библиотекой. Аудионаборы сохраняют четыре канала. */
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .setting-audio__sounds li { border-bottom-color: var(--line); color: var(--ink); }
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .setting-audio__play { width: 28px; height: 28px; border: 1px solid var(--edge); border-radius: 0; color: var(--ink); }
 :is(.entity-page[data-entity-type="setting"], .population-sheet) .setting-audio .paper-label { color: var(--ink); font-family: var(--font-mono); font-size: var(--fs-label); }

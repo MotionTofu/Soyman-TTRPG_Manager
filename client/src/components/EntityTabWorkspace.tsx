@@ -19,6 +19,9 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { NavIcon, type NavIconName } from "./NavIcons";
 import { DSeg } from "./DSeg";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import type { ContextMenuItem } from "./ContextMenu";
+import { entityMark, openEntityMenu, type EntityRef } from "../pageMenu";
 
 export interface WorkspaceNavItem {
   id: string;
@@ -30,6 +33,9 @@ export interface WorkspaceNavItem {
   current?: boolean;
   /** Служебный пункт — бледнее остальных. */
   dim?: boolean;
+  /** Пункт — сущность: общий ПКМ (§6.12) с местным блоком `menu`. */
+  entity?: EntityRef;
+  menu?: ContextMenuItem[];
 }
 
 export interface WorkspaceSection {
@@ -211,6 +217,14 @@ export function EntityTabWorkspace({
                           type="button"
                           className={`etw-nav-item${selected ? " is-selected" : ""}${item.dim ? " is-dim" : ""}`}
                           onClick={() => pick(s.id, item.id)}
+                          {...(item.entity && {
+                            ...entityMark(item.entity.type, item.entity.id, item.entity.name),
+                            onContextMenu: (e: ReactMouseEvent) => {
+                              if (e.shiftKey) return;
+                              e.preventDefault();
+                              openEntityMenu(item.entity!, e.clientX, e.clientY, item.menu ?? []);
+                            },
+                          })}
                           title={item.hint ?? item.label}
                           aria-current={selected ? "true" : undefined}
                         >

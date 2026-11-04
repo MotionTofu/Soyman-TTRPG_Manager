@@ -162,7 +162,7 @@ export function GeographyRegistry({
         <span className="population__spacer" />
         <button
           type="button"
-          className="population__create"
+          className="d-btn d-btn--primary population__create"
           title={selected && locationRoleOf(selected) !== "spot" ? `Новое место внутри «${selected.name}»` : "Новый корень мира"}
           onClick={() => setWizardParent(selected && locationRoleOf(selected) !== "spot" ? selected.id : null)}
         >

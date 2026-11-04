@@ -17,7 +17,10 @@
   "LibraryPage.tsx": 13,
   "LocationDetailPage.tsx": 34,
   "MapEditorPage.tsx": 120,
-  "MapsListPage.tsx": 10,
+  "MapPacksPage.tsx": 69,
+  "MapSheetDialog.tsx": 24,
+  "MapWorkspacePage.tsx": 1,
+  "MapsListPage.tsx": 18,
   "MasteringPage.tsx": 50,
   "MonsterDetailPage.tsx": 2,
   "NowPlayingPage.tsx": 1,
@@ -33,7 +36,6 @@
   "SceneDetailPage.tsx": 50,
   "SessionDetailPage.tsx": 11,
   "SessionLivePage.tsx": 20,
-  "sessionLivePanels.tsx": 36,
   "SessionPanelPopoutPage.tsx": 1,
   "SettingDetailPage.tsx": 63,
   "SettingsListPage.tsx": 4,
@@ -41,5 +43,6 @@
   "StoragesSettingsPage.tsx": 106,
   "SystemDetailPage.tsx": 5,
   "SystemsListPage.tsx": 3,
-  "VehicleDetailPage.tsx": 3
+  "VehicleDetailPage.tsx": 3,
+  "sessionLivePanels.tsx": 36
 }

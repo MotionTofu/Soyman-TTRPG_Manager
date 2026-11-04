@@ -4,8 +4,9 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from "p
 import { EventBus, PDFViewer, PDFLinkService, PDFFindController } from "pdfjs-dist/web/pdf_viewer.mjs";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import "pdfjs-dist/web/pdf_viewer.css";
-import { api, getAuthToken } from "../api/client";
+import { getAuthToken } from "../api/client";
 import { useAfterWrite, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import type { Resource } from "../types";
 import { PdfNotesPanel } from "./PdfNotesPanel";
 import { PdfEntityPanel, type PdfEntitySource } from "./PdfEntityPanel";
@@ -401,7 +402,7 @@ export function PdfReaderPage() {
   async function download() {
     if (!id) return;
     try {
-      const fresh = await api.get<Resource>(`/resources/${id}`);
+      const fresh = await readResource<Resource>(`/resources/${id}`, { fresh: true });
       if (!fresh.file_url) throw new Error("Файл не найден");
       const link = document.createElement("a");
       link.href = fresh.file_url;
@@ -477,6 +478,7 @@ export function PdfReaderPage() {
           Выделите новую цитату для перепривязки заметки.
           <button type="button" onClick={() => setReattachId(null)}>Отмена</button>
         </div>}
+        {/* инлайн-стиль намеренно — меню встаёт у выделенного текста, координаты из выделения */}
         {selectionMenu && <div className="pdf-reader__selection-menu" style={{ left: selectionMenu.left, top: selectionMenu.top }}>
           <div><span title={selectionMenu.draft.quote}>«{selectionMenu.draft.quote}»</span>
             <button type="button" aria-label="Закрыть меню выделения" onClick={() => { setSelectionMenu(null); window.getSelection()?.removeAllRanges(); }}>×</button>

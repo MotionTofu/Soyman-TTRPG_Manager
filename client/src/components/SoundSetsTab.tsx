@@ -71,7 +71,10 @@ export function SoundSetsTab() {
   const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
   const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
   // Открыт один: набор или боевая тема.
-  const [opened, setOpened] = useState<{ kind: "set" | "battle"; id: number } | null>(null);
+  const [opened, setOpened] = useState<{ kind: "set" | "battle"; id: number } | null>(() => {
+    const set = Number(new URLSearchParams(window.location.search).get("set"));
+    return set > 0 ? { kind: "set", id: set } : null;
+  });
   const currentPath = opened?.kind === "set" ? `/sound-sets/${opened.id}` : null;
   const battlePath = opened?.kind === "battle" ? `/playlists/${opened.id}` : null;
   const current = useResource<SoundSetDetail>(currentPath).data ?? null;

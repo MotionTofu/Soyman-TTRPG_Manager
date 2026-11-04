@@ -24,7 +24,9 @@
     "dist:empty": "npm run build && npm run rebuild:native && electron-builder --config electron-builder.empty.json && npm run restore:native",
     "dist:full": "npm run build && npm run build-seed && npm run rebuild:native && electron-builder --config electron-builder.full.json && npm run restore:native",
     "dist:both": "npm run dist:empty && npm run dist:full",
-    "electron": "electron ."
+    "electron": "electron .",
+    "check": "node scripts/check-all.mjs",
+    "check:quick": "node scripts/check-all.mjs --quick"
   },
   "dependencies": {
     "electron-updater": "^6.8.9"

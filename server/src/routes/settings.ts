@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { db } from "../db/db";
+import { requireKind } from "../db/entityKinds";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import type {AuthedRequest} from "../services/auth";
 import { defaultStatus, settingNow, timePatch } from "../services/eventTime";
@@ -989,7 +990,10 @@ settingsRouter.post("/calendar-events/:eventId/to-recurring", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(dateId));
 });
 
-const OWNER_TABLES: Record<string, string> = { being: "setting_beings", location: "setting_locations", community: "setting_communities" };
+// Владелец важной даты — существо, место или сообщество; таблицы из реестра видов.
+const OWNER_TABLES: Record<string, string> = Object.fromEntries(
+  (["being", "location", "community"] as const).map((k) => [k, requireKind(k).table])
+);
 
 settingsRouter.post("/:id/important-dates/:dateId/to-event", (req, res) => {
   const settingId = Number(req.params.id);

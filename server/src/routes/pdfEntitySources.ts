@@ -2,14 +2,15 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/db";
+import { requireKind } from "../db/entityKinds";
 
 export const pdfEntitySourcesRouter = Router();
 
 const targets = {
-  being: { table: "setting_beings", fields: ["description", "history", "behavior", "secret", "player_text"] },
-  location: { table: "setting_locations", fields: ["description", "player_text"] },
-  community: { table: "setting_communities", fields: ["description", "history", "current_situation", "features", "goals", "player_text"] },
-  artifact: { table: "artifacts", fields: ["description", "history", "power", "notes", "secret"] },
+  being: { table: requireKind("being").table, fields: ["description", "history", "behavior", "secret", "player_text"] },
+  location: { table: requireKind("location").table, fields: ["description", "player_text"] },
+  community: { table: requireKind("community").table, fields: ["description", "history", "current_situation", "features", "goals", "player_text"] },
+  artifact: { table: requireKind("artifact").table, fields: ["description", "history", "power", "notes", "secret"] },
   item: { table: "compendium_entries", fields: ["description"] },
   magic_item: { table: "compendium_entries", fields: ["description"] },
 } as const;

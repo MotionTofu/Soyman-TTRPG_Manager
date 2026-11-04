@@ -239,6 +239,7 @@ function CampaignDTile({ campaign: c, menuFor }: { campaign: Campaign; menuFor: 
   return (
     <article className="campaign-dtile" {...entityMark("campaign", c.id, c.name)} onContextMenu={(event) => { if (event.shiftKey) return; event.preventDefault(); openEntityMenu({ type: "campaign", id: c.id, name: c.name }, event.clientX, event.clientY, menuFor(c)); }}>
     <Link to={`/campaigns/${c.id}`} className="campaign-dtile__link" title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}>
+      {/* инлайн-стиль намеренно — обложка кампании: адрес картинки приходит из данных */}
       <span className={`campaign-dtile__cover${bg ? "" : " is-empty"}`} style={bg ? { backgroundImage: bg } : undefined}>
         {c.system_name && <span className="d-plate">{c.system_name}</span>}
       </span>

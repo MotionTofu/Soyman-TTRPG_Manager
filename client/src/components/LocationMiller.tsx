@@ -590,7 +590,7 @@ export function LocationMiller({ settingId, lead }: { settingId: number; lead?: 
         <span className="population__spacer" />
         <button
           type="button"
-          className="population__create"
+          className="d-btn d-btn--primary population__create"
           title={canNest ? `Новое место внутри «${focus!.name}»` : "Новый корень мира"}
           onClick={() => (canNest ? setWizardParentId(focus!.id) : setCreating(true))}
         >
