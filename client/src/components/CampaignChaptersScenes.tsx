@@ -15,6 +15,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { entityMark, openEntityMenu } from "../pageMenu";
 import { arcCluesPath } from "../data/canvas";
 import "./campaign-chapters.css";
+import { plannedSession, sceneSession, isAhead, countHoles, holesLabel } from "./profiles/sceneProgress";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
 import { CampaignAdventureActions } from "./CampaignAdventureActions";
 import { useConfirm } from "../hooks/useConfirm";
@@ -208,29 +209,7 @@ export function CampaignChaptersScenes({
   );
 }
 
-/** Узел недостижим: меньше трёх улик и ничто его не освобождает (холст, Q11/Q31). */
-function isHole(n: ArcClueNode | undefined) {
-  return !!n && clueNeed(n.role, n.clue_in, n.passage_in) === "missing";
-}
-
-/** Ближайшая ещё не сыгранная сессия, куда положена сцена (сегодня и позже). */
-function plannedSession(s: CampaignTreeScene) {
-  const today = new Date().toLocaleDateString("sv");
-  return s.sessions.find((x) => !x.played && x.date >= today) ?? null;
-}
-
 const isPending = (s: StoryScene) => (s.state?.status ?? "pending") === "pending";
-
-/**
- * Сцена ещё впереди: не отмечена и ни разу не запускалась. Запуск без отметки —
- * партия до сцены дошла, как и «посещён» в «Выводах».
- */
-const isAhead = (s: CampaignTreeScene) => isPending(s) && !s.sessions.some((x) => x.played);
-
-/** Дыры правила трёх — только у сцен впереди: у пройденной улики уже ничего не решают. */
-function countHoles(list: CampaignTreeScene[], nodeBy: Map<number, ArcClueNode>) {
-  return list.filter((s) => isAhead(s) && isHole(nodeBy.get(s.id))).length;
-}
 
 /**
  * Граф улик приключения для «Сюжета». Приключение, где улик нет вовсе, ещё не
@@ -276,10 +255,10 @@ function Makeup({ m, words }: { m: SceneMakeup; words?: boolean }) {
   return <span className={`campaign-makeup${words ? " campaign-makeup--words" : ""}`}>{cells}</span>;
 }
 /** Подписи над столбцами состава — строкой той же сетки, что у сцен. */
-function MakeupHeads() {
+function MakeupHeads({ inCampaign = true }: { inCampaign?: boolean }) {
   return (
     <div className="campaign-scene__summary campaign-scene__heads" aria-hidden="true">
-      <span />
+      {inCampaign && <span />}
       <span />
       <span className="campaign-makeup">
         {MAKEUP_WORDS.map(([k, , head]) => (
@@ -287,7 +266,7 @@ function MakeupHeads() {
         ))}
       </span>
       <span className="campaign-scene__clues" />
-      <span className="campaign-scene__session" />
+      {inCampaign && <span className="campaign-scene__session" />}
       <span className="campaign-scene__more" />
     </div>
   );
@@ -299,7 +278,7 @@ function adventureMakeup(scenes: CampaignTreeScene[]): SceneMakeup {
   return { characters: uniq("characters"), locations: uniq("locations"), obstacles: uniq("obstacles"), loot: uniq("loot") };
 }
 
-const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
+
 const ADV_ROLE: Record<string, string> = { start: "старт", finale: "финал", proactive: "приходит само" };
 
 /**
@@ -613,7 +592,7 @@ function currentAdventureId(tree: CampaignAdventureTree[]): number | null {
   return (next ?? last)?.adv ?? null;
 }
 
-const SceneList = memo(function SceneList({
+export const SceneList = memo(function SceneList({
   scenes,
   campaignId,
   settingId,
@@ -621,36 +600,44 @@ const SceneList = memo(function SceneList({
   title,
   clues,
   nodeBy,
+  actions,
+  reorder,
+  footer,
 }: {
   scenes: CampaignTreeScene[];
-  campaignId: number;
+  campaignId: number | null;
   settingId: number | null;
-  onStatus: (sceneId: number, status: string) => void;
+  onStatus?: (sceneId: number, status: string) => void;
   title: string | null;
   clues: ArcClues | undefined;
   nodeBy: Map<number, ArcClueNode>;
+  actions?: (scene: StoryScene) => ContextMenuItem[];
+  reorder?: (from: number, to: number) => void;
+  footer?: ReactNode;
 }) {
   // Смена статуса сцены правит одну строку: перечитывать всё дерево
   // приключений (у книжной кампании это сотни строк) из-за неё нельзя.
   // Статус меняется сразу; при отказе возвращается прежний и появляется плашка.
   const run = useAction();
+  const [dragged, setDragged] = useState<number | null>(null);
   const setStatus = useCallback(
     async (scene: StoryScene, status: string) => {
+      if (campaignId == null) return;
       const previous = scene.state?.status ?? "pending";
-      onStatus(scene.id, status);
+      onStatus?.(scene.id, status);
       const saved = await run(
         labelled("Статус сцены", () => write.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status }).then(() => true)),
         { affects: sceneStatusAffects(campaignId, scene.id) }
       );
-      if (!saved) onStatus(scene.id, previous);
+      if (!saved) onStatus?.(scene.id, previous);
     },
     [campaignId, onStatus, run]
   );
 
   return (
-    <div className="campaign-scene-list">
+    <div className={`campaign-scene-list${campaignId == null ? " campaign-scene-list--setting" : ""}`}>
       {title && <span className="campaign-scene-list__title muted">{title}</span>}
-      {scenes.length > 0 && <MakeupHeads />}
+      {scenes.length > 0 && <MakeupHeads inCampaign={campaignId != null} />}
       {scenes.map((s) => (
         <SceneRow
           key={s.id}
@@ -660,9 +647,13 @@ const SceneList = memo(function SceneList({
           onStatus={setStatus}
           node={nodeBy.get(s.id)}
           clues={clues}
+          actions={actions?.(s)}
+          onDragStart={reorder ? () => setDragged(s.id) : undefined}
+          onDrop={reorder ? () => { if (dragged != null) reorder(dragged, s.id); setDragged(null); } : undefined}
         />
       ))}
       {scenes.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сцен пока нет.</span>}
+      {footer}
     </div>
   );
 });
@@ -681,21 +672,25 @@ const SceneRow = memo(function SceneRow({
   onStatus,
   node,
   clues,
+  actions,
+  onDragStart,
+  onDrop,
 }: {
   scene: CampaignTreeScene;
-  campaignId: number;
+  campaignId: number | null;
   settingId: number | null;
   onStatus: (scene: StoryScene, status: string) => void;
   node: ArcClueNode | undefined;
   clues: ArcClues | undefined;
+  actions?: ContextMenuItem[];
+  onDragStart?: () => void;
+  onDrop?: () => void;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const status = s.state?.status ?? "pending";
   const kind = s.node_type || s.node_role !== "normal" ? nodeLabel(s) : null;
   const navigate = useNavigate();
-  const played = s.sessions.filter((x) => x.played);
-  const lastPlayed = played[played.length - 1] ?? null;
-  const planned = lastPlayed ? null : plannedSession(s);
+  const { lastPlayed, planned } = sceneSession(s);
 
   // Улики: красным — только у сцены впереди (isAhead), которой не хватает до трёх.
   const need = node ? clueNeed(node.role, node.clue_in, node.passage_in) : null;
@@ -717,12 +712,15 @@ const SceneRow = memo(function SceneRow({
     e.stopPropagation();
   };
   const canvasUrl =
-    settingId != null ? `/canvas?setting=${settingId}&arc=${s.arc_id ?? ""}&campaign=${campaignId}&focus=scene:${s.id}` : null;
+    settingId != null ? `/canvas?setting=${settingId}&arc=${s.arc_id ?? ""}${campaignId ? `&campaign=${campaignId}` : ""}&focus=scene:${s.id}` : null;
 
   return (
-    <details className={`campaign-scene is-${status}`}>
+    <details className={`campaign-scene is-${status}`} draggable={!!onDragStart} onDragStart={onDragStart}
+      onDragOver={onDrop ? (e) => e.preventDefault() : undefined}
+      onDrop={onDrop ? (e) => { e.preventDefault(); e.stopPropagation(); onDrop(); } : undefined}
+      onContextMenu={actions ? (e) => { if (e.shiftKey) return; e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }); } : undefined}>
       <summary className="campaign-scene__summary">
-        <button
+        {campaignId != null && (<button
           type="button"
           className="campaign-scene__mark"
           aria-label={status === "done" ? `Снять отметку «пройдена» со сцены «${s.name}»` : `Отметить сцену «${s.name}» пройденной`}
@@ -731,22 +729,22 @@ const SceneRow = memo(function SceneRow({
             stop(e);
             onStatus(s, status === "done" ? "pending" : "done");
           }}
-        />
+        />)}
         <span className="campaign-scene__name">
-          {s.name}
+          {s.name || <span className="muted">Без названия</span>}
           {kind && <span className="campaign-scene__kind"> · {kind}</span>}
           {s.is_override && <span className="campaign-scene__note">правка</span>}
           {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
         </span>
         <Makeup m={s.makeup} />
         {clueChip ?? <span className="campaign-scene__clues is-none" />}
-        <span className="campaign-scene__session">
+        {campaignId != null && <span className="campaign-scene__session">
           {lastPlayed ? `Сессия №${lastPlayed.number}` : planned ? <span className="muted">в сессии №{planned.number}</span> : null}
-        </span>
+        </span>}
         <button
           type="button"
           className="d-dots campaign-scene__more"
-          aria-label={`Статус сцены «${s.name}»`}
+          aria-label={`${campaignId != null ? "Статус" : "Действия"} сцены «${s.name}»`}
           aria-haspopup="menu"
           onClick={(e) => {
             stop(e);
@@ -763,11 +761,11 @@ const SceneRow = memo(function SceneRow({
           x={menu.x}
           y={menu.y}
           title={s.name}
-          ariaLabel={`Статус сцены «${s.name}»`}
-          items={SCENE_STATUSES.filter((st) => st.key !== status).map((st) => ({
+          ariaLabel={`${campaignId != null ? "Статус" : "Действия"} сцены «${s.name}»`}
+          items={[...(campaignId != null ? SCENE_STATUSES.filter((st) => st.key !== status).map((st) => ({
             label: st.label,
             onClick: () => onStatus(s, st.key),
-          }))}
+          })) : []), ...(actions ?? [])]}
           onClose={() => setMenu(null)}
         />,
         document.body
@@ -787,7 +785,7 @@ const SceneRow = memo(function SceneRow({
             <Makeup m={s.makeup} words />
           </span>
           <div className="campaign-scene__actions">
-            <button type="button" className="d-btn d-btn--sm" onClick={() => navigate(`/scenes/${s.id}?campaign=${campaignId}`)}>Открыть сцену</button>
+            <button type="button" className="d-btn d-btn--sm" onClick={() => navigate(`/scenes/${s.id}${campaignId ? `?campaign=${campaignId}` : ""}`)}>Открыть сцену</button>
             {canvasUrl && (
               <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={() => navigate(canvasUrl)}>
                 На холсте
@@ -796,7 +794,7 @@ const SceneRow = memo(function SceneRow({
           </div>
         </div>
         {node && clues && <SceneClues node={node} clues={clues} />}
-        {s.sessions.length > 0 && (
+        {campaignId != null && s.sessions.length > 0 && (
           <span className="campaign-scene__sessions">
             {s.sessions.map((x) => `${x.played ? "Запускалась" : "Запланирована"} в №${x.number}`).join(" · ")}
           </span>
