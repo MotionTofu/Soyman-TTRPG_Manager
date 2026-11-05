@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { MapEditorPage } from "./MapEditorPage";
@@ -194,20 +194,21 @@ describe("MapEditorPage", () => {
     mockMap("square");
     renderEditor();
     await screen.findByRole("group", { name: "Способ рисования рельефа" });
-    const surface = within(screen.getByRole("group", { name: "Способ рисования рельефа" }));
-    expect(surface.getByRole("button", { name: "По клеткам" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(surface.getByRole("button", { name: "Свободная кисть" }));
-    expect(surface.getByRole("button", { name: "Свободная кисть" }).getAttribute("aria-pressed")).toBe("true");
+    // При смене слоя React может заменить панель: проверяем текущую группу в документе.
+    const surface = () => within(screen.getByRole("group", { name: "Способ рисования рельефа" }));
+    expect(surface().getByRole("button", { name: "По клеткам" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(surface().getByRole("button", { name: "Свободная кисть" }));
+    await waitFor(() => expect(surface().getByRole("button", { name: "Свободная кисть" }).getAttribute("aria-pressed")).toBe("true"));
     expect(screen.getByText("Маска")).toBeTruthy();
     const modeTools = within(screen.getByRole("toolbar", { name: "Инструменты режима" }));
     fireEvent.click(modeTools.getByRole("button", { name: "Дорога" }));
     fireEvent.click(modeTools.getByRole("button", { name: "Кисть" }));
-    expect(surface.getByRole("button", { name: "Свободная кисть" }).getAttribute("aria-pressed")).toBe("true");
+    expect(surface().getByRole("button", { name: "Свободная кисть" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(within(screen.getByRole("toolbar", { name: "Основные инструменты" })).getByRole("button", { name: "Туман" }));
     fireEvent.click(screen.getByRole("button", { name: "Включить туман · скрыть всё" }));
     expect(screen.getByText("Открыто 0 из 64 клеток")).toBeTruthy();
-    fireEvent.click(surface.getByRole("button", { name: "По клеткам" }));
-    expect(surface.getByRole("button", { name: "По клеткам" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(surface().getByRole("button", { name: "По клеткам" }));
+    expect(surface().getByRole("button", { name: "По клеткам" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("переключает дороги и реки между клетками и сплайнами", async () => {

@@ -5,22 +5,27 @@ import { useAction, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
-import { LazyDetails } from "../components/LazyDetails";
 import { NODE_ROLES, NODE_TYPES, SCENE_STATUSES, nodeLabel } from "../sceneKinds";
 import type { Setting, StoryArc, StoryScene, StorySceneDetail } from "../types";
-import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
+import { ContextMenu } from "../components/ContextMenu";
+import { NavIcon } from "../components/NavIcons";
+import { ProfileHero, ProfileText, ProfileBlock, ProfileEntityLink } from "../components/profiles/ProfileParts";
+import { SceneTable, SceneLinks, SceneMaterials, SceneClueSummary, SCENE_TABS, SCENE_TAB_ALIASES, sceneCanvasHref, type SceneProfileClues } from "../components/profiles/SceneProfile";
+import { sceneSession, originalSceneHref } from "../components/profiles/sceneProgress";
+import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
+import { arcCluesPath } from "../data/canvas";
+import { TYPE_GRAPH_VIEW } from "../graphTypes";
+import type { ArcClues, CampaignAdventureTree, ScenePresentation } from "../types";
 import { LoadErrorCard } from "../components/Loadable";
-import { PresentationEditor } from "../components/presentation/PresentationEditor";
-import { SceneMaps } from "../components/presentation/SceneMaps";
 import { useTabState } from "../hooks/useTabState";
 import "../session.css";
+import "../components/profiles/scene-adventure.css";
 import { useConfirm } from "../hooks/useConfirm";
 
 // Лист — всё, что нужно за столом; фон, карты и звук готовятся отдельно.
 // «Связи» — откуда сюда приходят (гриллинг 2026-10-02, Q13, доска 35).
-const SCENE_TABS = ["Лист", "Представление", "Карта", "Аудионабор", "Связи"] as const;
+
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -57,12 +62,15 @@ export function SceneDetailPage() {
   const [reward, setReward] = useState({ what: "", where_found: "", notes: "" });
   const [transitionTarget, setTransitionTarget] = useState("");
   const [transitionLabel, setTransitionLabel] = useState("");
-  // каркас в обход намеренно — сцена за столом читается одним листом, без досье (гриллинг 2026-10-02, Q13)
-  const [tab, selectTab] = useTabState(SCENE_TABS, "Лист", {
-    Досье: "Лист",
-    Наполнение: "Лист",
-    "Входы и выходы": "Лист",
-  });
+  const [addingTransition, setAddingTransition] = useState(false);
+  // каркас в обход намеренно — «Лист» первым сохранён по Scene-Sheet v74; каркас профиля общий.
+  const [tab, selectTab] = useTabState(SCENE_TABS, "Лист", SCENE_TAB_ALIASES);
+  const parentAdventure = useResource<StoryArc>(adventure?.parent_id ? `/story/arcs/${adventure.parent_id}` : null).data;
+  const presentation = useResource<ScenePresentation>(scene ? `/story/scenes/${scene.id}/presentation${campaignId ? `?campaign_id=${campaignId}` : ""}` : null).data;
+  const clueState = useResource<SceneProfileClues>(scene ? `/story/scenes/${scene.id}/profile-clues${campaignId ? `?campaign_id=${campaignId}` : ""}` : null);
+  const graph = useResource<ArcClues>(scene?.arc_id ? arcCluesPath(scene.arc_id, campaignId) : null).data;
+  const tree = useResource<CampaignAdventureTree[]>(campaignId ? campaignPaths.tree(campaignId) : null).data;
+  const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null);
 
   if (sceneState.error && !scene) {
     return <LoadErrorCard message={<>Не удалось загрузить сцену: {sceneState.error}</>} onRetry={sceneState.reload} />;
@@ -83,7 +91,7 @@ export function SceneDetailPage() {
     const body = { ...patch, campaign_id: campaignId };
     const updated = await run(() => write.put<StoryScene>(`/story/scenes/${sceneId}`, body), { affects });
     if (!updated) throw new Error("Не сохранилось");
-    if (updated.id !== sceneId) navigate(`/scenes/${updated.id}?campaign=${campaignId}`, { replace: true });
+    if (updated.id !== sceneId) navigate(`/scenes/${updated.id}?campaign=${campaignId}${tab !== "Лист" ? `&tab=${encodeURIComponent(tab)}` : ""}`, { replace: true });
   }
 
   function saveQuietly(patch: Record<string, unknown>) {
@@ -118,6 +126,7 @@ export function SceneDetailPage() {
     if (!done) return;
     setTransitionTarget("");
     setTransitionLabel("");
+    setAddingTransition(false);
   }
 
   async function revert() {
@@ -132,7 +141,10 @@ export function SceneDetailPage() {
 
   async function setStatus(status: string) {
     if (!campaignId) return;
-    await run(() => write.put(`/story/scenes/${sceneId}/state`, { campaign_id: campaignId, status }), { affects });
+    const shownId = scene?.id ?? sceneId;
+    await run(() => write.put(`/story/scenes/${shownId}/state`, { campaign_id: campaignId, status }), {
+      affects: [...sceneStatusAffects(campaignId, shownId), { path: `/story/scenes/${sceneId}` }],
+    });
   }
 
   async function archiveScene() {
@@ -144,6 +156,13 @@ export function SceneDetailPage() {
     else navigate(`/settings/${scene?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
 
+  const peerScenes = siblings.filter((s) => s.arc_id === scene.arc_id);
+  const peerIndex = peerScenes.findIndex((s) => s.id === scene.id || s.id === scene.source_scene_id);
+  const neighbour = (offset: number) => { const row = peerIndex < 0 ? undefined : peerScenes[peerIndex + offset]; return row ? { name: row.name, href: `/scenes/${row.id}${campaignId ? `?campaign=${campaignId}` : ""}` } : undefined; };
+  const treeScene = tree?.flatMap((a) => [...a.scenes, ...a.chapters.flatMap((c) => c.scenes)]).find((s) => s.id === scene.id);
+  const session = treeScene ? sceneSession(treeScene) : null;
+  const canvas = sceneCanvasHref(scene, campaignId);
+  const fieldProps = { entityType: "scene", entityId: scene.id, defaultSettingId: scene.setting_id ?? undefined };
   return (
     <EntityPage
       crumbs={
@@ -173,159 +192,101 @@ export function SceneDetailPage() {
       }
       entityType="scene"
       title={scene.name}
-      paper
-      badges={
-        <>
-          {(scene.node_type || scene.node_role !== "normal") && (
-            <span className="badge tag">{nodeLabel(scene)}</span>
-          )}
-          {scene.is_override && <span className="badge tag">правка кампании</span>}
-          {scene.campaign_only && <span className="badge tag">только в кампании</span>}
-        </>
-      }
-      meta={
-        <div className="row scene-header-controls">
-          {campaignId && (
-            <>
-              <span className="campaign-field-label">Статус:</span>
-              <select value={scene.state?.status ?? "pending"} onChange={(e) => setStatus(e.target.value)}>
-                {SCENE_STATUSES.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <span className="scene-header-sep" aria-hidden="true" />
-            </>
-          )}
-          <label className="row scene-header-toggle">
-            <input
-              type="checkbox"
-              checked={scene.hidden_from_players === 1}
-              onChange={(e) => saveQuietly({ hidden_from_players: e.target.checked })}
-            />
-            <span>Скрыта от игроков</span>
-          </label>
-        </div>
-      }
-      // «Вернуть к оригиналу» есть только у сцены, правленной в кампании.
+      profile={{ id: scene.id, previous: neighbour(-1), next: neighbour(1) }}
       actions={[
-        ...(scene.is_override ? [{ label: "Вернуть к оригиналу", onClick: revert }] : []),
+        { label: "На холсте", onClick: () => navigate(canvas) },
+        { label: "Показать в графе", onClick: () => navigate(`/graph/${TYPE_GRAPH_VIEW.scene ?? "world"}?focus=scene:${scene.id}&depth=2`) },
+        ...(campaignId && scene.is_override ? [{ label: "Вернуть к оригиналу", onClick: revert }] : []),
         { label: "Архивировать", danger: true, onClick: archiveScene },
       ]}
       tabs={SCENE_TABS}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof SCENE_TABS)[number])}
-      overlays={confirmDialog}
+      overlays={<>{confirmDialog}{statusMenu && <ContextMenu x={statusMenu.x} y={statusMenu.y} title="Статус сцены" items={SCENE_STATUSES.map((s) => ({ label: s.label, onClick: () => void setStatus(s.key) }))} onClose={() => setStatusMenu(null)} />}</>}
     >
-      {tab === "Лист" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            {/* «Зачитать игрокам» — вырезкой на месте портрета: его читают
-                вслух первым (гриллинг 2026-10-02, Q12, доска 35). */}
-            <div className="scene-read-aloud">
-              <EditableTextCard
-                title="Зачитать игрокам"
-                help="Текст, который мастер читает вслух при входе в сцену."
-                value={scene.read_aloud}
-                onSave={(v) => save({ read_aloud: v })}
-                rows={5}
-                entityType="scene"
-                entityId={sceneId}
-                defaultSettingId={scene.setting_id ?? undefined}
-                emptyLabel="текст для чтения вслух"
-              />
-            </div>
-            <div className="dossier__search">
-              <Link
-                className="paper-more"
-                to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
-              >
-                На холсте ›
-              </Link>
-              <GraphNeighbourhoodLink type="scene" id={scene.id} />
-            </div>
-          </aside>
+      {tab === "Лист" && <>
+        <ProfileHero type="scene" name={scene.name} subtype={nodeLabel(scene)} createdAt={scene.created_at}
+          image={presentation?.background_url ?? presentation?.layers[0]?.image_url}
+          coverLabel={presentation?.background_url || presentation?.layers.length ? "Картинка показа · щелчок — Материалы" : "+ картинка показа"}
+          onGallery={() => selectTab("Материалы")}
+          labels={<>
+            {parentAdventure && <><ProfileEntityLink type="adventure" id={parentAdventure.id} name={parentAdventure.name} to={`/adventures/${parentAdventure.id}${campaignId ? `?campaign=${campaignId}` : ""}`} /><span>›</span></>}
+            {adventure && <ProfileEntityLink type="adventure" id={adventure.id} name={adventure.name} to={`/adventures/${adventure.id}${campaignId ? `?campaign=${campaignId}` : ""}`} />}
+            {campaignId && <button className={`gch scene-profile-status is-${scene.state?.status ?? "pending"}`} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setStatusMenu({ x: r.left, y: r.bottom }); }}>{SCENE_STATUSES.find((s) => s.key === (scene.state?.status ?? "pending"))?.label} ▾</button>}
+            {session?.label && <span className="gch">{session.label}</span>}
+            {scene.is_override && <Link className="gch" to={originalSceneHref(scene)}>правка кампании ›</Link>}
+            {scene.campaign_only && <span className="gch">только в кампании</span>}
+          </>}>
+          <ProfileText {...fieldProps} title="В двух словах" value={scene.summary} onSave={(v) => save({ summary: v })} focal
+            fields={[
+              { key: "name", label: "Имя сцены", value: scene.name, required: true },
+              { key: "node_type", label: "Тип узла", value: scene.node_type ?? "", options: [{ value: "", label: "—" }, ...NODE_TYPES.map((t) => ({ value: t.key, label: t.label }))] },
+              { key: "node_role", label: "Роль", value: scene.node_role, options: NODE_ROLES.map((r) => ({ value: r.key, label: r.label })) },
+            ]} onSaveFields={(v) => save({ name: v.name.trim(), node_type: v.node_type || null, node_role: v.node_role })} />
+        </ProfileHero>
+        <div className="profile-visibility"><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><button className="profile-text-link" onClick={() => saveQuietly({ hidden_from_players: !scene.hidden_from_players })}>{scene.hidden_from_players ? "скрыто" : "открыто"} ›</button></div>
+        <div className="scene-profile-read"><ProfileText {...fieldProps} title="Зачитать" value={scene.read_aloud} onSave={(v) => save({ read_aloud: v })} emptyLabel="Текст для чтения вслух при входе в сцену." /></div>
+        <SceneTable scene={scene} onSave={save} />
+        <ProfileBlock title="Состав"><div className="scene-profile-cast">
+          <section><h3>Сюжетные персонажи</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_plot_characters" participation acceptTypes={PLOT_TYPES} placeholder="Перетащите существо или персонажа" /></section>
+          <section><h3>Локации</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_location" acceptTypes={LOCATION_TYPES} placeholder="Перетащите локацию" /></section>
+          <section><h3>Препятствия</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_obstacles" participation acceptTypes={OBSTACLE_TYPES} placeholder="Перетащите препятствие" /></section>
+          <section><h3>Потенциальный лут</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_loot" acceptTypes={LOOT_TYPES} placeholder="Перетащите находку" /></section>
+        </div></ProfileBlock>
+        <div className="scene-profile-entry"><ProfileBlock title="Вход и выход">
+          <div className="profile-columns"><ProfileText {...fieldProps} title="Условие входа" value={scene.entry_condition} onSave={(v) => save({ entry_condition: v })} /><ProfileText {...fieldProps} title="Возможные исходы" value={scene.outcomes} onSave={(v) => save({ outcomes: v })} /></div>
+          <SceneClueSummary scene={scene} clues={graph} onLinks={() => selectTab("Связи")} />
+                <details className="scene-profile-transitions" open>
+                  <summary className="campaign-overview-header">Переходы · {scene.transitions.length}</summary>
+                  <div className="stack" style={{ marginTop: 8 }}>
+                    {scene.transitions.map((t) => (
+                      <div key={t.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
+                        <span style={{ maxWidth: "62ch" }}>
+                          Дальше:{" "}
+                          <a href={`/scenes/${t.to_scene_id}${campaignId ? `?campaign=${campaignId}` : ""}`}>
+                            {t.to_scene_name}
+                          </a>
+                          {t.label && <span className="muted"> — {t.label}</span>}
+                        </span>
+                        <button
+                          className="danger comp-mini"
+                          onClick={() => void run(() => write.del(`/story/transitions/${t.id}`), { affects })}
+                          aria-label="Удалить"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {!addingTransition && <div className="profile-invitation">{scene.transitions.length === 0 && <><NavIcon name="canvas" /><span>Куда ведёт сцена дальше и на каком условии.</span></>}<button className="d-btn d-btn--sm" onClick={() => setAddingTransition(true)}>+ Переход</button></div>}
+                    {addingTransition && (
+                    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+                      <select value={transitionTarget} onChange={(e) => setTransitionTarget(e.target.value)} style={{ flex: "1 1 160px" }}>
+                        <option value="">Следующая сцена…</option>
+                        {siblings
+                          .filter((s) => s.id !== sceneId)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        placeholder="Условие перехода"
+                        value={transitionLabel}
+                        onChange={(e) => setTransitionLabel(e.target.value)}
+                        style={{ flex: "1 1 140px" }}
+                      />
+                      <button className="primary" onClick={addTransition} disabled={!transitionTarget}>
+                        Добавить
+                      </button>
+                      <button className="d-btn d-btn--ghost" onClick={() => setAddingTransition(false)}>Отмена</button>
+                    </div>
+                    )}
+                  </div>
+                </details>
 
-          <div className="dossier__main">
-            <SceneHead scene={scene} campaignId={campaignId} onSave={save} />
-            <EditableTextCard
-              title="Что происходит"
-              value={scene.whats_happening}
-              onSave={(v) => save({ whats_happening: v })}
-              rows={5}
-              entityType="scene"
-              entityId={sceneId}
-              defaultSettingId={scene.setting_id ?? undefined}
-              emptyLabel="что происходит"
-            />
-            <EditableTextCard
-              title="Повороты"
-              help="Что меняется по ходу сцены — по одному на строку."
-              value={scene.twists}
-              onSave={(v) => save({ twists: v })}
-              rows={4}
-              entityType="scene"
-              entityId={sceneId}
-              defaultSettingId={scene.setting_id ?? undefined}
-              emptyLabel="поворот"
-            />
-
-            <section className="scene-cast">
-              <div className="sp-prep-row">
-                <LazyDetails
-                  title="Сюжетные персонажи"
-                  className="card stack sp-card--plot"
-                  defaultOpen
-                >
-                  <SectionDropZone
-                    entityType="scene"
-                    entityId={sceneId}
-                    section="scene_plot_characters"
-            participation
-                    acceptTypes={PLOT_TYPES}
-                    placeholder="Перетащите сюда существо или персонажа из поиска"
-                  />
-                </LazyDetails>
-                <LazyDetails
-                  title="Локации"
-                  className="card stack sp-card--location"
-                  defaultOpen
-                >
-                  <SectionDropZone
-                    entityType="scene"
-                    entityId={sceneId}
-                    section="scene_location"
-                    acceptTypes={LOCATION_TYPES}
-                    placeholder="Перетащите сюда локацию из поиска"
-                  />
-                </LazyDetails>
-              </div>
-              <div className="sp-prep-row">
-                <LazyDetails title="Препятствия" className="card stack sp-card--enemies" defaultOpen>
-                  <SectionDropZone
-                    entityType="scene"
-                    entityId={sceneId}
-                    section="scene_obstacles"
-            participation
-                    acceptTypes={OBSTACLE_TYPES}
-                    placeholder="Перетащите сюда препятствие — существо, локацию, артефакт…"
-                  />
-                </LazyDetails>
-                <LazyDetails
-                  title="Потенциальный лут"
-                  className="card stack sp-card--loot"
-                  defaultOpen
-                >
-                  <SectionDropZone
-                    entityType="scene"
-                    entityId={sceneId}
-                    section="scene_loot"
-                    acceptTypes={LOOT_TYPES}
-                    placeholder="Перетащите сюда ресурс, артефакт или предмет из компендиума"
-                  />
-                </LazyDetails>
-              </div>
+        </ProfileBlock></div>
+        <details className="paper-fold"><summary>Справка <span className="profile-fold-note">проверки {scene.checks.length} · награды {scene.rewards.length}</span></summary><div className="paper-fold__body stack">
               <details className="card" open>
                 <summary className="campaign-overview-header">Проверки · {scene.checks.length}</summary>
                 <div className="stack" style={{ marginTop: 8 }}>
@@ -455,333 +416,11 @@ export function SceneDetailPage() {
                   </div>
                 </div>
               </details>
-            </section>
 
-            <details className="paper-fold">
-              <summary>Описание для мастера</summary>
-              <div className="paper-fold__body">
-                <EditableTextCard
-                  title="Описание для мастера"
-                  value={scene.summary}
-                  onSave={(v) => save({ summary: v })}
-                  rows={4}
-                  entityType="scene"
-                  entityId={sceneId}
-                  defaultSettingId={scene.setting_id ?? undefined}
-                          fields={[
-                    { key: "name", label: "Имя сцены", value: scene.name, required: true },
-                    {
-                      key: "node_type",
-                      label: "Тип узла",
-                      value: scene.node_type ?? "",
-                      options: [{ value: "", label: "—" }, ...NODE_TYPES.map((t) => ({ value: t.key, label: t.label }))],
-                    },
-                    {
-                      key: "node_role",
-                      label: "Роль",
-                      value: scene.node_role,
-                      options: NODE_ROLES.map((r) => ({ value: r.key, label: r.label })),
-                    },
-                  ]}
-                  onSaveFields={(v) => save({ name: v.name.trim(), node_type: v.node_type || null, node_role: v.node_role })}
-                />
-              </div>
-            </details>
-
-            <details className="paper-fold">
-              <summary>
-                Куда дальше <span className="paper-fold__count">· {scene.transitions.length}</span>
-              </summary>
-              <div className="paper-fold__body">
-                <EditableTextCard
-                  title="Условие входа"
-                  help="Что должно произойти, чтобы сцена началась."
-                  value={scene.entry_condition}
-                  onSave={(v) => save({ entry_condition: v })}
-                  rows={3}
-                  entityType="scene"
-                  entityId={sceneId}
-                  defaultSettingId={scene.setting_id ?? undefined}
-                  collapsible
-                  defaultOpen
-                />
-                <EditableTextCard
-                  title="Возможные исходы"
-                  value={scene.outcomes}
-                  onSave={(v) => save({ outcomes: v })}
-                  rows={4}
-                  entityType="scene"
-                  entityId={sceneId}
-                  defaultSettingId={scene.setting_id ?? undefined}
-                  collapsible
-                  defaultOpen
-                />
-                <details className="card" open>
-                  <summary className="campaign-overview-header">Переходы · {scene.transitions.length}</summary>
-                  <div className="stack" style={{ marginTop: 8 }}>
-                    {scene.transitions.map((t) => (
-                      <div key={t.id} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
-                        <span style={{ maxWidth: "62ch" }}>
-                          Дальше:{" "}
-                          <a href={`/scenes/${t.to_scene_id}${campaignId ? `?campaign=${campaignId}` : ""}`}>
-                            {t.to_scene_name}
-                          </a>
-                          {t.label && <span className="muted"> — {t.label}</span>}
-                        </span>
-                        <button
-                          className="danger comp-mini"
-                          onClick={() => void run(() => write.del(`/story/transitions/${t.id}`), { affects })}
-                          aria-label="Удалить"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    {scene.transitions.length === 0 && (
-                      <div className="card" style={{ borderStyle: "dashed" }}>
-                        <p className="muted" style={{ maxWidth: "62ch" }}>Переходов нет — куда ведёт эта сцена дальше, и на каком условии.</p>
-                      </div>
-                    )}
-                    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
-                      <select value={transitionTarget} onChange={(e) => setTransitionTarget(e.target.value)} style={{ flex: "1 1 160px" }}>
-                        <option value="">Следующая сцена…</option>
-                        {siblings
-                          .filter((s) => s.id !== sceneId)
-                          .map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                      </select>
-                      <input
-                        placeholder="Условие перехода"
-                        value={transitionLabel}
-                        onChange={(e) => setTransitionLabel(e.target.value)}
-                        style={{ flex: "1 1 140px" }}
-                      />
-                      <button className="primary" onClick={addTransition} disabled={!transitionTarget}>
-                        Добавить
-                      </button>
-                    </div>
-                  </div>
-                </details>
-              </div>
-            </details>
-          </div>
-        </div>
-      )}
-
-      {tab === "Представление" && (
-        <PresentationEditor owner={{ kind: "scene", sceneId, sceneName: scene.name, campaignId }} />
-      )}
-
-      {tab === "Карта" && <SceneMaps sceneId={sceneId} campaignId={campaignId} />}
-      {tab === "Аудионабор" && <SceneAudioCard sceneId={sceneId} />}
-      {tab === "Связи" && <SceneIncomingCard sceneId={sceneId} campaignId={campaignId} />}
+        </div></details>
+      </>}
+      {tab === "Материалы" && <SceneMaterials scene={scene} campaignId={campaignId} />}
+      {tab === "Связи" && <SceneLinks scene={scene} campaignId={campaignId} clues={clueState.data} clueError={clueState.error} />}
     </EntityPage>
-  );
-}
-
-function SceneAudioCard({ sceneId }: { sceneId: number }) {
-  const sets = useResource<{ id: number; name: string }[]>("/sound-sets").data ?? [];
-  const current = useResource<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).data ?? null;
-  const run = useAction();
-  async function setSound(id: number | null) {
-    // Набор звука сцены слышен на пульте и виден на полотне.
-    await run(() => write.put(`/story/scenes/${sceneId}/sound-set`, { sound_set_id: id }), {
-      affects: [{ path: `/story/scenes/${sceneId}/sound-set` }, { path: "/sessions" }, { path: "/canvas" }],
-    });
-  }
-  return (
-    <div className="stack scene-audio">
-      <label className="stack">
-        <span className="campaign-field-label">Звук сцены</span>
-        <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">— без звука —</option>
-          {sets.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </label>
-      <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На холсте — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
-    </div>
-  );
-}
-
-// Откуда сюда можно прийти: явные переходы других сцен + исходы проверок,
-// ведущие в эту. Зеркало «Переходов» (те — «куда дальше»).
-function SceneIncomingCard({ sceneId, campaignId }: { sceneId: number; campaignId: number | null }) {
-  const incoming = useResource<{
-    transitions: { id: number; from_scene_id: number; label: string; from_scene_name: string }[];
-    outcomes: { check_id: number; label: string; consequence: string; check_what: string; from_scene_id: number; from_scene_name: string }[];
-  }>(`/story/scenes/${sceneId}/incoming`);
-  const data = incoming.data ?? (incoming.error ? { transitions: [], outcomes: [] } : null);
-
-  const link = (id: number) => `/scenes/${id}${campaignId ? `?campaign=${campaignId}` : ""}`;
-  const total = (data?.transitions.length ?? 0) + (data?.outcomes.length ?? 0);
-
-  return (
-    <details className="card" open>
-      <summary className="campaign-overview-header">Сюда ведут · {total}</summary>
-      <div className="stack" style={{ marginTop: 8 }}>
-        {!data && <p className="muted">Загрузка…</p>}
-        {data && total === 0 && (
-          <div className="card" style={{ borderStyle: "dashed" }}>
-            <p className="muted" style={{ maxWidth: "62ch" }}>Сюда ничего не ведёт — ни переходов, ни исходов проверок. Вход только из списка «На игру» в пульте.</p>
-          </div>
-        )}
-        {(data?.transitions ?? []).map((t) => (
-          <div key={`t${t.id}`} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
-            <span style={{ maxWidth: "62ch" }}>
-              Откуда: <a href={link(t.from_scene_id)}>{t.from_scene_name}</a>
-              {t.label && <span className="muted"> — {t.label}</span>}
-            </span>
-          </div>
-        ))}
-        {(data?.outcomes ?? []).map((o, i) => (
-          <div key={`o${o.check_id}-${i}`} className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--line)", paddingBottom: 6 }}>
-            <span style={{ maxWidth: "62ch" }}>
-              Исход «{o.label}» проверки <strong>{o.check_what || "—"}</strong> из <a href={link(o.from_scene_id)}>{o.from_scene_name}</a>
-            </span>
-          </div>
-        ))}
-      </div>
-    </details>
-  );
-}
-
-/** Поля шапки сцены: рамка (где · когда · кто · почему сейчас) и ход. */
-const FRAME_FIELDS = [
-  { key: "frame_where", label: "Где" },
-  { key: "frame_when", label: "Когда" },
-  { key: "frame_who", label: "Кто" },
-  { key: "frame_why_now", label: "Почему сейчас" },
-] as const;
-const FLOW_FIELDS = [
-  { key: "pressure", label: "Давление" },
-  { key: "cut_when", label: "Когда резать" },
-] as const;
-type HeadKey = (typeof FRAME_FIELDS)[number]["key"] | (typeof FLOW_FIELDS)[number]["key"];
-
-/**
- * «За столом» сцены (гриллинг 2026-10-02, Q12; словарь граф №14): рамка,
- * давление, когда резать и выходы строкой — то, что Мастер ловит взглядом
- * посреди игры. Правится на месте, как карточка существа.
- */
-function SceneHead({
-  scene,
-  campaignId,
-  onSave,
-}: {
-  scene: StorySceneDetail;
-  campaignId: number | null;
-  onSave: (patch: Record<string, unknown>) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<Record<HeadKey, string>>({} as Record<HeadKey, string>);
-  const [saving, setSaving] = useState(false);
-  const all = [...FRAME_FIELDS, ...FLOW_FIELDS];
-  const empty = all.every((f) => !scene[f.key]?.trim());
-
-  function startEdit() {
-    setDraft(Object.fromEntries(all.map((f) => [f.key, scene[f.key] ?? ""])) as Record<HeadKey, string>);
-    setEditing(true);
-  }
-  async function submit() {
-    setSaving(true);
-    try {
-      await onSave(draft);
-      setEditing(false);
-    } catch {
-      // Плашку показал слой; набранное остаётся в полях.
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const exits =
-    scene.transitions.length > 0 ? (
-      <div className="scene-head__exits">
-        <span className="creature-card__head-label">Выходы</span>
-        {scene.transitions.map((t) => (
-          <Link key={t.id} to={`/scenes/${t.to_scene_id}${campaignId ? `?campaign=${campaignId}` : ""}`}>
-            → {t.to_scene_name}
-          </Link>
-        ))}
-      </div>
-    ) : null;
-
-  if (editing) {
-    return (
-      <div className="creature-card-editor is-inline">
-        <div className="card stack">
-          <div className="scene-head__grid">
-            {all.map((f) => (
-              <label key={f.key} className="stack editable-card-field">
-                <span>{f.label}</span>
-                <textarea
-                  rows={2}
-                  value={draft[f.key] ?? ""}
-                  onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                />
-              </label>
-            ))}
-          </div>
-          <div className="row">
-            <button type="button" className="primary" onClick={submit} disabled={saving}>
-              Сохранить
-            </button>
-            <button type="button" onClick={() => setEditing(false)} disabled={saving}>
-              Отмена
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <article className="creature-card paper-scope creature-card--page is-embedded">
-      <div className="creature-card__head">
-        <span className="creature-card__head-label">За столом</span>
-        <button type="button" className="creature-card__edit" onClick={startEdit}>
-          Править
-        </button>
-      </div>
-      {empty ? (
-        <div className="creature-card__empty">
-          Рамка сцены не записана: где, когда, кто, почему сейчас.{" "}
-          <button type="button" className="creature-card__more" onClick={startEdit}>
-            Заполнить
-          </button>
-        </div>
-      ) : (
-        <>
-          <dl className="scene-head__grid">
-            {FRAME_FIELDS.filter((f) => scene[f.key]?.trim()).map((f) => (
-              <div key={f.key}>
-                <dt className="creature-card__head-label">{f.label}</dt>
-                <dd>
-                  <MentionText text={scene[f.key]} />
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {FLOW_FIELDS.some((f) => scene[f.key]?.trim()) && (
-            <dl className="scene-head__grid scene-head__flow">
-              {FLOW_FIELDS.filter((f) => scene[f.key]?.trim()).map((f) => (
-                <div key={f.key}>
-                  <dt className="creature-card__head-label">{f.label}</dt>
-                  <dd>
-                    <MentionText text={scene[f.key]} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </>
-      )}
-      {exits}
-    </article>
   );
 }

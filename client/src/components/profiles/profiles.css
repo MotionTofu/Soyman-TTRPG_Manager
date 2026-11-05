@@ -1,5 +1,6 @@
 /* Prof-* v68. Область ограничена профилями Мастера и их быстрыми карточками. */
-.entity-page--profile { --profile-type: var(--ink); gap: var(--sp-4); }
+.entity-page--profile { --profile-type: var(--ink); --type-adventure: #332288; gap: var(--sp-4); }
+[data-theme-mode="dark"] .entity-page--profile { --type-adventure: #8B7FE0; }
 .entity-page--profile > .entity-page__head { justify-content: flex-end; }
 .entity-page--profile .d-sheet { border-left: 8px solid var(--profile-type); padding: var(--sp-6); min-width: 0; }
 .profile-tabbar { display: flex; align-items: end; gap: var(--sp-3); min-width: 0; }

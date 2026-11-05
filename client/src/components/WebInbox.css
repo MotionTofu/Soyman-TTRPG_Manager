@@ -14,7 +14,7 @@
 }
 .web-inbox__row:hover,
 .web-inbox__row:focus-within { background: var(--tab); }
-.web-inbox__kind { width: 16px; height: 16px; margin-top: 2px; color: var(--muted); }
+.web-inbox__kind { width: 16px; height: 16px; margin-top: var(--sp-1); color: var(--muted); }
 .web-inbox__body { min-width: 0; }
 .web-inbox__body b {
   display: block;
@@ -163,6 +163,7 @@
   border: var(--edge-width) solid var(--edge);
   background: var(--field);
   font-family: var(--font-ui);
+  /* кегль мимо шкалы намеренно — шесть цифр одноразового кода подключения читаются с другого устройства. */
   font-size: 56px;
   letter-spacing: 0.16em;
   text-align: center;

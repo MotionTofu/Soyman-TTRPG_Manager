@@ -1,0 +1,59 @@
+/* Scene/Adv v74: тот же каркас и типографика profiles.css. */
+.profile-hero--scene .profile-cover { aspect-ratio: 16/9; }
+.scene-profile-read { border-left: var(--sp-1) solid var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); margin-bottom: var(--sp-4); }
+.scene-profile-read .profile-block { border: 0; background: none; }
+.scene-profile-read .profile-prose { font-style: italic; font-size: var(--fs-lead); }
+.scene-profile-frame { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.scene-profile-frame b, .scene-profile-flow dt { font: var(--fs-micro) var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.scene-profile-flow { margin: 0; min-width: 0; }
+.scene-profile-flow > div { padding-block: var(--sp-3); border-top: 1px solid var(--line); }
+.scene-profile-flow dd { margin: var(--sp-2) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.scene-profile-cast { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
+.scene-profile-cast > section { min-width: 0; }
+.scene-profile-cast h3 { font: var(--fs-micro) var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 var(--sp-3); }
+.scene-profile-cast .drop-zone { border: 0; border-top: 1px solid var(--line); padding: var(--sp-2) 0; min-height: 0; }
+.scene-profile-cast .resource-row { padding-inline: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; flex-wrap: wrap; }
+.scene-profile-cast .resource-row > .row > button { color: var(--ink) !important; background: color-mix(in srgb, var(--profile-type) 42%, var(--sheet)) !important; font-weight: 400 !important; }
+.scene-profile-cast .cast-role { white-space: normal; }
+.scene-profile-status { cursor: pointer; background: transparent; color: var(--ink); }
+.scene-profile-status.is-done { background: var(--ink); color: var(--sheet); }
+.scene-profile-clue-summary { display: block; margin-block: var(--sp-4); text-align: left; }
+.scene-profile-links .profile-link-row { grid-template-columns: 20px minmax(0, 1fr) minmax(0, 2fr); }
+.scene-profile-links summary > button { margin-left: auto; }
+.scene-profile-clue { display: grid; grid-template-columns: 20px minmax(0, 1.5fr) auto minmax(0, 1fr); gap: var(--sp-3); align-items: center; border-top: 1px solid var(--line); padding-block: var(--sp-3); overflow-wrap: anywhere; }
+.scene-profile-clue small { display: block; color: var(--muted); margin-top: var(--sp-1); }
+.scene-profile-materials { min-width: 0; }
+.scene-profile-materials .profile-block { overflow-wrap: anywhere; }
+.scene-material-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--sp-7); align-items: start; }
+.scene-material-layout > div { min-width: 0; }
+.scene-material-layout > .stack { align-items: start; }
+.scene-material-preview { aspect-ratio: 16/9; border: var(--edge-width) solid var(--ink); background: var(--ph); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.scene-material-preview img { width: 100%; height: 100%; object-fit: cover; }
+.scene-material-preview--empty { border: 1px dashed var(--line); }
+.scene-material-preview--empty .type-glyph { width: var(--sp-9); height: var(--sp-9); opacity: .5; }
+.entity-page--profile[data-entity-type="scene"] .profile-tabbar__actions,
+.entity-page--profile[data-entity-type="adventure"] .profile-tabbar__actions { max-width: 50%; }
+.entity-page--profile[data-entity-type="scene"] .profile-tabbar__actions a,
+.entity-page--profile[data-entity-type="adventure"] .profile-tabbar__actions a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 700px) {
+  .scene-profile-cast { grid-template-columns: minmax(0, 1fr); }
+  .scene-material-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+  .scene-profile-links .profile-link-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .scene-profile-clue { grid-template-columns: 20px minmax(0, 1fr); }
+  .scene-profile-clue > :nth-child(3) { display: none; }
+  .scene-profile-clue > :last-child { grid-column: 2; }
+  .scene-profile-materials .row { flex-wrap: wrap; }
+  .scene-profile-materials select { max-width: 100%; }
+}
+
+.scene-profile-flow dd { font-size: var(--fs-body); line-height: 1.5; }
+.scene-material-layout .scene-profile-flow dd { font-size: var(--fs-data); }
+.scene-profile-frame { font-size: var(--fs-data); }
+.scene-profile-cast .resource-row > .row > button { font-size: var(--fs-data); }
+.scene-profile-links .profile-link-row, .scene-profile-clue { font-size: var(--fs-data); }
+.scene-profile-entry .profile-columns > .profile-block { border: 0; padding: 0; background: none; }
+.scene-profile-entry .profile-columns .d-plate { background: none; color: var(--muted); padding: 0; font: var(--fs-micro) var(--font-mono); }
+.scene-profile-entry .profile-columns .profile-block__head { margin-bottom: var(--sp-2); }
+.scene-profile-transitions { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.scene-profile-transitions > summary { background: none; color: var(--muted); padding: 0; font: var(--fs-micro) var(--font-mono); }
+.entity-page--profile[data-entity-type="scene"] .profile-invitation { font-size: var(--fs-body); }

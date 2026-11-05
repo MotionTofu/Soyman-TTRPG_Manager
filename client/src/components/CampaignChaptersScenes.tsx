@@ -15,6 +15,7 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { entityMark, openEntityMenu } from "../pageMenu";
 import { arcCluesPath } from "../data/canvas";
 import "./campaign-chapters.css";
+import { plannedSession, sceneSession, isAhead, countHoles, holesLabel } from "./profiles/sceneProgress";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
 import { useConfirm } from "../hooks/useConfirm";
 
@@ -213,29 +214,7 @@ export function CampaignChaptersScenes({
   );
 }
 
-/** Узел недостижим: меньше трёх улик и ничто его не освобождает (холст, Q11/Q31). */
-function isHole(n: ArcClueNode | undefined) {
-  return !!n && clueNeed(n.role, n.clue_in, n.passage_in) === "missing";
-}
-
-/** Ближайшая ещё не сыгранная сессия, куда положена сцена (сегодня и позже). */
-function plannedSession(s: CampaignTreeScene) {
-  const today = new Date().toLocaleDateString("sv");
-  return s.sessions.find((x) => !x.played && x.date >= today) ?? null;
-}
-
 const isPending = (s: StoryScene) => (s.state?.status ?? "pending") === "pending";
-
-/**
- * Сцена ещё впереди: не отмечена и ни разу не запускалась. Запуск без отметки —
- * партия до сцены дошла, как и «посещён» в «Выводах».
- */
-const isAhead = (s: CampaignTreeScene) => isPending(s) && !s.sessions.some((x) => x.played);
-
-/** Дыры правила трёх — только у сцен впереди: у пройденной улики уже ничего не решают. */
-function countHoles(list: CampaignTreeScene[], nodeBy: Map<number, ArcClueNode>) {
-  return list.filter((s) => isAhead(s) && isHole(nodeBy.get(s.id))).length;
-}
 
 /**
  * Граф улик приключения для «Сюжета». Приключение, где улик нет вовсе, ещё не
@@ -304,7 +283,7 @@ function adventureMakeup(scenes: CampaignTreeScene[]): SceneMakeup {
   return { characters: uniq("characters"), locations: uniq("locations"), obstacles: uniq("obstacles"), loot: uniq("loot") };
 }
 
-const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
+
 const ADV_ROLE: Record<string, string> = { start: "старт", finale: "финал", proactive: "приходит само" };
 
 /**
@@ -698,9 +677,7 @@ const SceneRow = memo(function SceneRow({
   const status = s.state?.status ?? "pending";
   const kind = s.node_type || s.node_role !== "normal" ? nodeLabel(s) : null;
   const navigate = useNavigate();
-  const played = s.sessions.filter((x) => x.played);
-  const lastPlayed = played[played.length - 1] ?? null;
-  const planned = lastPlayed ? null : plannedSession(s);
+  const { lastPlayed, planned } = sceneSession(s);
 
   // Улики: красным — только у сцены впереди (isAhead), которой не хватает до трёх.
   const need = node ? clueNeed(node.role, node.clue_in, node.passage_in) : null;

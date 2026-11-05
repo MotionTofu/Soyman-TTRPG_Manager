@@ -13,7 +13,7 @@ import type { GalleryImage, Resource, ScenePresentation } from "../../types";
 interface SceneRef {
   sceneId: number;
   sceneName: string;
-  campaignId: number;
+  campaignId: number | null;
 }
 
 export function AddScenePicture({ sceneId, sceneName, campaignId, onAdded, onClose }: SceneRef & {
@@ -41,7 +41,8 @@ export function AddScenePicture({ sceneId, sceneName, campaignId, onAdded, onClo
     setError(null);
     try {
       const base = `/story/scenes/${sceneId}/presentation`;
-      const payload = body instanceof FormData ? (body.append("campaign_id", String(campaignId)), body) : { ...body, campaign_id: campaignId };
+      if (body instanceof FormData && campaignId != null) body.append("campaign_id", String(campaignId));
+      const payload = body instanceof FormData ? body : { ...body, ...(campaignId != null ? { campaign_id: campaignId } : {}) };
       const pres = await write.post<ScenePresentation>(`${base}/background`, payload, { timeoutMs: 120_000 });
       afterWrite([{ path: base }, { kind: "scene" }, { path: "/sessions" }]);
       onAdded(pres);
@@ -158,8 +159,8 @@ export function AddSceneMap({ sceneId, sceneName, campaignId, onAdded, onClose }
   );
 
   async function link(mapId: number) {
-    const res = await write.post<{ scene_id: number }>(`/story/scenes/${sceneId}/maps`, { map_id: mapId, campaign_id: campaignId });
-    afterWrite([{ path: `/story/scenes/${sceneId}/maps?campaign_id=${campaignId}` }, { kind: "scene" }, { path: "/sessions" }]);
+    const res = await write.post<{ scene_id: number }>(`/story/scenes/${sceneId}/maps`, { map_id: mapId, ...(campaignId != null ? { campaign_id: campaignId } : {}) });
+    afterWrite([{ path: `/story/scenes/${sceneId}/maps` }, { kind: "scene" }, { path: "/sessions" }]);
     return res.scene_id;
   }
   async function run(job: () => Promise<void>) {

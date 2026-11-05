@@ -82,6 +82,7 @@ import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
 import { campaignSettingEntitiesRouter } from "./routes/campaignSettingEntities";
 import { storyRouter } from "./routes/story";
+import { sceneProfileRouter } from "./routes/sceneProfile";
 import { participationsRouter } from "./routes/participations";
 import { entityRecordsRouter } from "./routes/entityRecords";
 import { vehiclePlansRouter } from "./routes/vehiclePlans";
@@ -525,6 +526,7 @@ app.use("/api/world-exploration-entries", worldExplorationEntriesRouter);
 app.use("/api/visibility-grants", visibilityGrantsRouter);
 app.use("/api/campaign-setting-entities", campaignSettingEntitiesRouter);
 app.use("/api/story", storyRouter);
+app.use("/api/story", sceneProfileRouter);
 app.use("/api/participations", participationsRouter);
 // Записи слоя кампании: /campaigns/:id/records и /records/:id (ADR-0006).
 app.use("/api", entityRecordsRouter);

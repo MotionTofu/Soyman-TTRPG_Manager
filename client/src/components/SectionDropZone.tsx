@@ -11,6 +11,7 @@ import { parseMentions, resolveMention } from "../mentions";
 import type { SearchResult, SessionUnionRow } from "../types";
 import { ToInitiativeButton } from "./ToInitiativeButton";
 import { Modal } from "./Modal";
+import { profileStyle, ProfileTypeGlyph } from "./profiles/ProfileParts";
 
 interface GenericLink {
   id: number;
@@ -77,6 +78,8 @@ interface Props {
   /** Пилюлями в колонке «Кого они приведут» подготовки (макет Roll-Prep,
    *  Q6): имя, количество и крестик у своих; без фильтра и подписей сцен. */
   pills?: boolean;
+  /** Только лист сцены «Д»: маркер и знак из общей палитры профилей. */
+  profile?: boolean;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -98,6 +101,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   toInitiative,
   participation,
   pills,
+  profile,
 }: Props) {
   // Связи секции — из кэша слоя данных. Запуск сцены подменяет состав панели на
   // сервере и задевает связи сессии (data/sessions.ts): зона перечитывается
@@ -278,6 +282,7 @@ export const SectionDropZone = memo(function SectionDropZone({
             data-type={entry.type}
             data-initial={entry.label.trim().charAt(0).toUpperCase()}
             style={{
+              ...(profile ? profileStyle(entry.type) : {}),
               justifyContent: "space-between",
               background: entry.origin === "live" ? "color-mix(in srgb, #c0392b 12%, transparent)" : undefined,
             }}
@@ -298,6 +303,7 @@ export const SectionDropZone = memo(function SectionDropZone({
             }}
           >
             <div className="row" style={{ minWidth: 0, flex: 1 }}>
+              {profile && <ProfileTypeGlyph type={entry.type} />}
               {DETAIL_ROUTES[entry.type] ? (
                 <button
                   type="button"
