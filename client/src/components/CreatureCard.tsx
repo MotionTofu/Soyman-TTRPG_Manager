@@ -7,6 +7,8 @@ import { MentionText } from "./mentions/MentionText";
 import { DndCreatureView, normalizeDndCreature } from "./dnd/DndCreatureForm";
 import type { BeingForce, DndCreatureAction, DndCreatureData, DndCreatureSpeed } from "../types";
 import { FORCE_FIELDS, NARROW_FORCE_KEYS, hasForce } from "../beingForce";
+import { ProfileTypeLabel, profileStyle } from "./profiles/ProfileParts";
+import { TypeGlyph } from "./TypeGlyph";
 
 // Карточка существа — быстрый взгляд (design_revision.md, шаг 4). Показывает
 // то, чем существо отличается от других; за полным статблоком Мастер идёт
@@ -222,7 +224,7 @@ export type ForceExtras = Partial<Record<string, ReactNode>>;
 export function ForceBlock({ force, wide, extras }: { force: BeingForce; wide: boolean; extras?: ForceExtras }) {
   const [all, setAll] = useState(false);
   const filled = FORCE_FIELDS.filter((f) => force[f.key]?.trim() || extras?.[f.key]);
-  const shown = wide || all ? filled : filled.filter((f) => NARROW_FORCE_KEYS.includes(f.key));
+  const shown = all ? filled : wide ? filled.filter((f) => f.core) : filled.filter((f) => NARROW_FORCE_KEYS.includes(f.key));
   const rest = filled.length - shown.length;
   return (
     <div className={`creature-card__force${wide ? " is-wide" : ""}`}>
@@ -239,7 +241,7 @@ export function ForceBlock({ force, wide, extras }: { force: BeingForce; wide: b
       </dl>
       {rest > 0 && (
         <button type="button" className="creature-card__more" onClick={() => setAll(true)}>
-          ещё: {filled.filter((f) => !shown.includes(f)).map((f) => f.label.toLowerCase()).join(", ")} ›
+          {wide ? "Ещё поля: " : "ещё: "}{filled.filter((f) => !shown.includes(f)).map((f) => f.label.toLowerCase()).join(" · ")} · развернуть ▾
         </button>
       )}
     </div>
@@ -377,7 +379,7 @@ export function CreatureCard({
   const showForce = !playerSafe && (hasForce(force) || hasExtras);
   const showSecret = !playerSafe && !!data.secret.trim();
   const hasMechanics = !!creature || (!playerSafe && tactics.length > 0);
-  const hasDescription = !embedded && !!prose;
+  const hasDescription = !embedded && !!prose && (playerSafe || data.type !== "being");
   const isEmpty = !hasMechanics && !hasDescription && roles.length === 0 && !showForce && !showSecret;
 
   const profilePath = `${PROFILE_PATH[data.type] ?? "/beings"}/${data.id}`;
@@ -387,8 +389,17 @@ export function CreatureCard({
   // картинку ты меняешь.
   const avatar = data.avatar_image_url ?? null;
 
+  if (!playerSafe && embedded && data.category === "bestiary") return <article className="creature-card creature-card--d creature-card--page is-embedded d-focal" style={profileStyle(data.type)}>
+    <div className="creature-card__head"><span className="creature-card__head-label">В бою</span>{onEdit && <button type="button" className="creature-card__edit" onClick={onEdit}>Править</button>}</div>
+    {creature && <div className="profile-combat-stats"><div><small>КЗ</small><b>{cardArmorClass(creature)}</b></div><div><small>Хиты</small><b>{cardHitPoints(creature) || "—"}</b></div>{speedText && <div><small>Скорость</small><b>{speedText}</b></div>}{creature.challenge.rating && <div><small>Опасность</small><b>{creature.challenge.rating}</b></div>}</div>}
+    {!!roles.length && <div className="creature-card__chips">{roles.map((r) => <span className="creature-card__chip" key={r}>{r}</span>)}</div>}
+    {!!tactics.length && <div className="creature-card__tactics"><div className="creature-card__sublabel">Тактика</div>{tactics.map((t,i) => <div key={i}><MentionText text={t} /></div>)}</div>}
+    {showForce ? <ForceBlock force={force} wide extras={forceExtras} /> : <p className="muted">Двигатель силы у бестиария выключен{onEdit && <> — <button type="button" className="creature-card__more" onClick={onEdit}>включить</button></>}</p>}
+    {showSecret && <SecretSeal text={data.secret} />}
+  </article>;
+
   return (
-    <article className={`creature-card paper-scope${variant === "page" ? " creature-card--page" : ""}${embedded ? " is-embedded" : ""}`}>
+    <article className={`creature-card paper-scope${!playerSafe ? " creature-card--d" : ""}${variant === "page" ? " creature-card--page" : ""}${embedded ? " is-embedded d-focal" : ""}`} style={!playerSafe ? profileStyle(data.type) : undefined}>
       {embedded ? (
         <div className="creature-card__head">
           <span className="creature-card__head-label">За столом</span>
@@ -409,10 +420,11 @@ export function CreatureCard({
           // (design_revision.md §1.13), по нему тварь узнают.
           <img className="creature-card__portrait" src={avatar} alt="" />
         ) : (
-          <span className="creature-card__portrait creature-card__portrait--empty" />
+          <span className="creature-card__portrait creature-card__portrait--empty"><TypeGlyph type={data.type} /></span>
         )}
         <div className="creature-card__title">
           <div className="creature-card__name">{data.name || "Без названия"}</div>
+          {!playerSafe && <ProfileTypeLabel type={data.type} />}
           {creature && formatChallenge(creature) && (
             <div className="creature-card__cr">{formatChallenge(creature)}</div>
           )}
@@ -490,7 +502,7 @@ export function CreatureCard({
 
       {!collapsed && hasMechanics && (
         <Section
-          title="Механика"
+          title={data.category === "bestiary" ? "В бою" : "Механика"}
           open={sectionsOpen.mechanics}
           onToggle={() => toggleSection("mechanics")}
         >

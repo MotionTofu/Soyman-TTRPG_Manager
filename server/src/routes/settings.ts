@@ -1,3 +1,4 @@
+import { withAvatarUrl } from "./settingBeings";
 import { Router } from "express";
 import { eventSessions, withEventSessions, validCyclePointColor } from "../services/chronicle";
 import multer from "multer";
@@ -456,7 +457,7 @@ settingsRouter.get("/calendar-events/:eventId", (req, res) => {
     )
     .get(req.params.eventId) as Record<string, unknown> | undefined;
   if (!event) return res.status(404).json({ error: "not found" });
-  res.json({ ...event, sessions: eventSessions("setting_event", Number(req.params.eventId)) });
+  res.json({ ...withAvatarUrl(event), sessions: eventSessions("setting_event", Number(req.params.eventId)) });
 });
 
 // When a setting-calendar event's description @-mentions a being/location/
@@ -1564,7 +1565,7 @@ async function insertGalleries(
   }
 }
 
-function linkRelationsAndCalendar(
+async function linkRelationsAndCalendar(
   body: SettingExportData,
   maps: {
     locationIdMap: Map<number, number>;
@@ -1572,7 +1573,7 @@ function linkRelationsAndCalendar(
     communityIdMap: Map<number, number>;
     newSettingId: number;
   }
-): void {
+): Promise<void> {
   const { locationIdMap, beingIdMap, communityIdMap, newSettingId } = maps;
   const remap: Record<string, Map<number, number>> = {
     location: locationIdMap,
@@ -1630,13 +1631,18 @@ function linkRelationsAndCalendar(
       ) {
         continue;
       }
-      insertEvent.run(
+      const insertedEvent = insertEvent.run(
         newSettingId,
         ...cols.map((c) => {
           const v = row[c];
           return v === undefined || typeof v === "object" ? null : (v as string | number);
         })
       );
+      if (e.avatar_data || e.thumbnail_data) {
+        const setting = db.prepare("SELECT folder_path FROM settings WHERE id = ?").get(newSettingId) as { folder_path: string };
+        const images = await writeEntityImages(ensureSubfolder(ensureSubfolder(setting.folder_path, "Events"), `event-${insertedEvent.lastInsertRowid}`), e);
+        db.prepare("UPDATE setting_calendar_events SET avatar_image_path = ?, thumbnail_image_path = ? WHERE id = ?").run(images.avatarPath, images.thumbnailPath, insertedEvent.lastInsertRowid);
+      }
     }
   }
 }
@@ -2003,6 +2009,14 @@ export function buildSettingExportData(
     payload.calendarEvents = db
       .prepare("SELECT * FROM setting_calendar_events WHERE setting_id = ?")
       .all(settingId) as SettingExportData["calendarEvents"];
+    for (const event of payload.calendarEvents ?? []) {
+      if (withImages) {
+        event.avatar_data = readFileAsBase64(event.avatar_image_path);
+        event.thumbnail_data = readFileAsBase64(event.thumbnail_image_path);
+      }
+      delete event.avatar_image_path;
+      delete event.thumbnail_image_path;
+    }
     // Важные даты — частный срез сеттинга (фаза 0): локации/существа/сообщества этого сеттинга.
     // Экспортируем вместе с календарём (U-P2-3). source_event_id не вывозим — на приёмнике события получат новые id и sync их пересоздаст.
     const importantRows = db.prepare(`
@@ -2212,7 +2226,7 @@ export interface SettingExportData {
   }[];
   calendarMonths?: { position: number; name: string; days: number }[];
   calendarWeekdays?: { position: number; name: string }[];
-  calendarEvents?: { title: string; description: string; recurrence: string; day: number; month: number | null; year: number | null; important: number }[];
+  calendarEvents?: { avatar_data?: FileData | null; thumbnail_data?: FileData | null; avatar_image_path?: string | null; thumbnail_image_path?: string | null; title: string; description: string; recurrence: string; day: number; month: number | null; year: number | null; important: number }[];
   importantDates?: { owner_type: string; owner_id: number; title: string; description: string; date_type: string; color: string; recurrence: string; year: number | null; month: number | null; day: number; custom_rule: string }[];
   cycles?: {
     name: string; period_days: number; anchor_year: number; anchor_month: number; anchor_day: number; position: number;
@@ -2612,7 +2626,7 @@ export async function importSettingExport(
 
   const maps = { locationIdMap, beingIdMap, communityIdMap, newSettingId };
   linkImportedSetting(body, maps);
-  linkRelationsAndCalendar(body, maps);
+  await linkRelationsAndCalendar(body, maps);
   linkLocationExits(body, locationIdMap);
   if (withImages) await insertGalleries(body, folder, maps);
 
@@ -3065,7 +3079,7 @@ export async function updateSettingFromExport(
 
   const mergeMaps = { locationIdMap, beingIdMap, communityIdMap, newSettingId: targetSettingId };
   linkImportedSetting(body, mergeMaps);
-  linkRelationsAndCalendar(body, mergeMaps);
+  await linkRelationsAndCalendar(body, mergeMaps);
   linkLocationExits(body, locationIdMap);
 
   imported.resolve();

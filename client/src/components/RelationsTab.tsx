@@ -65,6 +65,7 @@ function ToneMark({ tone }: { tone: RelationTone }) {
 const ToneDot = ToneMark;
 
 interface Props {
+  initialTarget?: SearchResult;
   entityType: RelationEntityType;
   entityId: number;
   entityName: string;
@@ -96,7 +97,7 @@ export interface RelationStats {
 // entity being viewed sees its own declared relations (outgoing) plus
 // whatever others have declared about it (incoming), since those can
 // legitimately disagree.
-export function RelationsTab({ entityType, entityId, entityName, defaultSettingId, section, tone, onStats }: Props) {
+export function RelationsTab({ entityType, entityId, entityName, defaultSettingId, section, tone, onStats, initialTarget }: Props) {
   const data = useResource<EntityRelationsResponse>(settingPaths.relations(entityType, entityId)).data ?? null;
   const run = useAction();
   const [sortMode, setSortMode] = useState<SortMode>("tone");
@@ -105,7 +106,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const [query, setQuery] = useState("");
   // Адресатов может быть сразу несколько: тон и название у них общие, а лор —
   // свой у каждой связи, поэтому он спрашивается только когда адресат один.
-  const [targets, setTargets] = useState<SearchResult[]>([]);
+  const [targets, setTargets] = useState<SearchResult[]>(initialTarget ? [initialTarget] : []);
   const [direction, setDirection] = useState<"outgoing" | "incoming">("outgoing");
   const [mirror, setMirror] = useState(false);
   const [draftTone, setDraftTone] = useState<RelationTone>("neutral");

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { resourceQuery, useAction, useResource, write } from "../data/hooks";
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId, showCreation = true, onCreateSection, onCreated }: Props) {
+  const [searchParams] = useSearchParams();
   const client = useQueryClient();
   const run = useAction();
   const sectionsPath = campaignPaths.playerSections(campaignId);
@@ -50,7 +52,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [filter, setFilter] = useState("");
   // Master–Detail: выбранный раздел и (для статей) статья. Пункты статей
   // в навигации — из кэша, который докладывает ArticlesList при загрузке.
-  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number; imageId?: number }>({ sectionId: null });
+  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number; imageId?: number }>(() => ({ sectionId: Number(searchParams.get("section")) || null, imageId: Number(searchParams.get("image")) || undefined }));
   const [uploadGallery, setUploadGallery] = useState(false);
   const [artCache, setArtCache] = useState<Record<number, CampaignPlayerArticle[]>>({});
 
@@ -112,13 +114,14 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
 
   // Выбор пережил удаление/фильтр: нет выбранного — берём первый раздел.
   useEffect(() => {
+    if (loading) return;
     if (filtered.length === 0) {
       if (sel.sectionId !== null) setSel({ sectionId: null });
       return;
     }
     if (!filtered.some((s) => s.id === sel.sectionId)) setSel({ sectionId: filtered[0].id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, sel.sectionId]);
+  }, [filtered, sel.sectionId, loading]);
 
   // Счётчики галерей для навигации (статьи докладывает ArticlesList сам) —
   // под тем же ключом, что читает сама галерея подраздела.

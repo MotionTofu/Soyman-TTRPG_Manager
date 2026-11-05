@@ -266,7 +266,7 @@ export function LocationMap({
 
   return (
     <>
-      <PinBoard
+      <PinBoard typeBackground
         words={WORDS}
         imageUrl={mapImageUrl}
         pins={resolved}

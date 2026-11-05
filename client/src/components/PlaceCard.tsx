@@ -1,3 +1,6 @@
+import { TypeGlyph } from "./TypeGlyph";
+import { BEING_CATEGORY_LABELS } from "../beingCategories";
+import { ProfileEntityLink } from "./profiles/ProfileParts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
@@ -17,6 +20,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import { sessionLabel } from "../sessionLabel";
 
 interface Named {
+  category?: import("../types").BeingCategory;
   id: number;
   name: string;
 }
@@ -126,6 +130,8 @@ export function PlaceCard({
   collapsed = false,
   onToggleCollapse,
   onClose,
+  hideHistory = false,
+  readOnly = false,
 }: {
   locationId: number;
   variant?: "panel" | "dock" | "page";
@@ -139,6 +145,8 @@ export function PlaceCard({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onClose?: () => void;
+  hideHistory?: boolean;
+  readOnly?: boolean;
 }) {
   const dock = variant === "dock";
   const page = variant === "page";
@@ -170,7 +178,7 @@ export function PlaceCard({
     dock && sessionId && campaignId == null
       ? null
       : `/setting-locations/${locationId}/history${historyQuery ? `?${historyQuery}` : ""}`;
-  const { data: history } = useResource<PlaceHistory>(collapsed ? null : historyPath);
+  const { data: history } = useResource<PlaceHistory>(collapsed || hideHistory ? null : historyPath);
 
   const partyHere = dock ? party?.location?.id === locationId : (partyCampaigns?.length ?? 0) > 0;
 
@@ -259,22 +267,25 @@ export function PlaceCard({
   const pathShown = dock ? d.ancestors.slice(1) : d.ancestors;
 
   const who = [
-    ...d.inhabitant_beings.map((b) => ({ key: `b${b.id}`, to: routeFor("being", b.id), name: b.name, where: "" })),
-    ...d.inhabitant_communities.map((c) => ({ key: `c${c.id}`, to: routeFor("community", c.id), name: c.name, where: "" })),
+    ...d.inhabitant_beings.map((b) => ({ key: `b${b.id}`, to: routeFor("being", b.id), name: b.name, weight: b.category ? BEING_CATEGORY_LABELS[b.category] : "", where: "" })),
+    ...d.inhabitant_communities.map((c) => ({ key: `c${c.id}`, to: routeFor("community", c.id), name: c.name, weight: "", where: "" })),
     ...d.nested_inhabitant_beings.map((b) => ({
       key: `nb${b.id}`,
       to: routeFor("being", b.id),
       name: b.name,
+      weight: b.category ? BEING_CATEGORY_LABELS[b.category] : "",
       where: b.location_names.join(", "),
     })),
     ...d.nested_inhabitant_communities.map((c) => ({
       key: `nc${c.id}`,
       to: routeFor("community", c.id),
       name: c.name,
+      weight: "",
       where: c.location_names.join(", "),
     })),
   ];
-  const shownWho = whoAll ? who : who.slice(0, WHO_LIMIT);
+  const whoLimit = page ? 4 : WHO_LIMIT;
+  const shownWho = whoAll ? who : who.slice(0, whoLimit);
   const spots = d.children.filter((c) => locationRoleOf(c) === "spot");
   const shownSpots = spotsAll ? spots : spots.slice(0, SPOT_LIMIT);
   const showContent = d.content.length > 0 || adding;
@@ -335,76 +346,11 @@ export function PlaceCard({
       <button type="button" className={className} onClick={() => onPick(id)} title={`Перейти: ${name}`}>
         {name}
       </button>
-    ) : (
-      <Link className={className} to={`/locations/${id}`}>
-        {name}
-      </Link>
-    );
+    ) : page ? <ProfileEntityLink type="location" id={id} name={name} /> : <Link className={className} to={`/locations/${id}`}>{name}</Link>;
   }
 
-  return (
-    <div className={`place-card${dock ? " place-card--dock" : ""}${page ? " place-card--page" : ""}`}>
-      {confirmDialog}
-      {plate}
-      <div className="place-card__scroll">
-        {safeThumb && <img src={safeThumb} alt="" className="place-card__hero" />}
-        {page ? (
-          <span className="place-card__title">За столом</span>
-        ) : dock ? (
-          (pathShown.length > 0 || d.kind?.trim()) && (
-            <div className="place-card__path">
-              {pathShown.map((a, i) => (
-                <span key={a.id} className="place-card__path-seg">
-                  {i > 0 && <span aria-hidden="true">/ </span>}
-                  {placeLink(a.id, a.name)}
-                </span>
-              ))}
-              {d.kind?.trim() && <span className="place-card__tag place-card__end">{d.kind}</span>}
-            </div>
-          )
-        ) : (
-          <div className="place-card__head">
-            <div className="place-card__badge">
-              <NavIcon name={locationRoleIcon(d)} />
-              {badge}
-            </div>
-            <h2 className="place-card__name">{d.name}</h2>
-            {pathShown.length > 0 && (
-              <nav className="place-card__path" aria-label="Где находится">
-                {pathShown.map((a, i) => (
-                  <span key={a.id} className="place-card__path-seg">
-                    {i > 0 && <span aria-hidden="true">/ </span>}
-                    {placeLink(a.id, a.name)}
-                  </span>
-                ))}
-              </nav>
-            )}
-          </div>
-        )}
-
-        {!dock && partyHere && (
-          <div className="place-card__party">
-            <NavIcon name="flag" />
-            <span>
-              <strong>Партия здесь</strong> · {partyCampaigns!.join(", ")}
-            </span>
-          </div>
-        )}
-
-        {description && !page && (
-          <div className="stack" style={{ gap: 4 }}>
-            <div className={`place-card__desc${longDesc && !descOpen ? " is-clamped" : ""}`}>
-              <MentionText text={description} />
-            </div>
-            {longDesc && (
-              <button type="button" className="place-card__more" onClick={() => setDescOpen((v) => !v)}>
-                {descOpen ? "свернуть" : "ещё"}
-              </button>
-            )}
-          </div>
-        )}
-
-        {who.length > 0 && (
+  const whoSection = (<>
+    {who.length > 0 && (
           <section className="place-card__sec">
             <div className="place-card__sech">
               <span className="place-card__title">Кто здесь</span>
@@ -412,30 +358,30 @@ export function PlaceCard({
             </div>
             {shownWho.map((w) => (
               <div key={w.key} className="place-card__row">
+                {page && <TypeGlyph type={w.to?.startsWith("/communities") ? "community" : "being"} />}
                 {w.to ? (
-                  <Link className="place-card__row-name" to={w.to}>
-                    {w.name}
-                  </Link>
+                  page ? <ProfileEntityLink type={w.to.startsWith("/communities") ? "community" : "being"} id={Number(w.to.split("/").pop())} name={w.name} to={w.to} /> : <Link className="place-card__row-name" to={w.to}>{w.name}</Link>
                 ) : (
                   <span className="place-card__row-name">{w.name}</span>
                 )}
-                {w.where && <span className="place-card__note">({w.where})</span>}
+                {w.where && <span className="place-card__note">({w.where})</span>}{page && w.weight && <span className="place-card__end d-note">{w.weight}</span>}
               </div>
             ))}
-            {who.length > WHO_LIMIT && (
+            {who.length > whoLimit && (
               <button type="button" className="place-card__more" onClick={() => setWhoAll((v) => !v)}>
-                {whoAll ? "свернуть" : `ещё ${who.length - WHO_LIMIT}`}
+                {whoAll ? "свернуть" : `ещё ${who.length - whoLimit}`}
               </button>
             )}
           </section>
         )}
-
-        {showContent && (
+  </>);
+  const contentSection = (<>
+    {showContent && (
           <section className="place-card__sec">
             <div className="place-card__sech">
               <span className="place-card__title">Что здесь</span>
               {d.content.length > 0 && <span className="place-card__count">{d.content.length}</span>}
-              {!adding && (
+              {!readOnly && !adding && (
                 <button type="button" className="place-card__add" onClick={() => setAdding(true)}>
                   <NavIcon name="plus" /> Добавить
                 </button>
@@ -491,47 +437,9 @@ export function PlaceCard({
             )}
           </section>
         )}
-
-        {showExits && (
-          <section className="place-card__sec">
-            <div className="place-card__sech">
-              <span className="place-card__title">Выходы</span>
-              {d.exits.length > 0 && <span className="place-card__count">{d.exits.length}</span>}
-              {!addingExit && (
-                <button type="button" className="place-card__add" onClick={() => setAddingExit(true)}>
-                  <NavIcon name="plus" /> Добавить
-                </button>
-              )}
-            </div>
-            {d.exits.map((e) => (
-              <div key={e.id} className="place-card__row" title={e.note || undefined}>
-                <NavIcon name={e.one_way ? "arrowRight" : "twoWay"} />
-                {placeLink(e.other_id, e.other_name, "place-card__row-name")}
-                {e.how && <span className="place-card__note">{e.how}</span>}
-                {e.travel_time || e.secret ? (
-                  <span className="place-card__end">
-                    {e.travel_time ? <span className="place-card__time">{e.travel_time}</span> : null}
-                    {e.secret ? <span className="place-card__tag">тайный</span> : null}
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="comp-mini place-card__row-del"
-                  onClick={() => void removeExit(e)}
-                  aria-label={`Удалить выход: ${e.other_name}`}
-                  title="Удалить выход"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            {addingExit && (
-              <PlaceExitForm settingId={d.setting_id} fromId={d.id} onClose={() => setAddingExit(false)} />
-            )}
-          </section>
-        )}
-
-        {spots.length > 0 && (
+  </>);
+  const spotSection = (<>
+    {spots.length > 0 && (
           <section className="place-card__sec">
             <div className="place-card__sech">
               <span className="place-card__title">Точки</span>
@@ -554,8 +462,9 @@ export function PlaceCard({
             )}
           </section>
         )}
-
-        {d.artifacts.length > 0 && (
+  </>);
+  const artifactSection = (<>
+    {d.artifacts.length > 0 && (
           <section className="place-card__sec">
             <div className="place-card__sech">
               <span className="place-card__title">Артефакты здесь</span>
@@ -566,9 +475,7 @@ export function PlaceCard({
               return (
                 <div key={a.id} className="place-card__row">
                   {to ? (
-                    <Link className="place-card__row-name" to={to}>
-                      {a.name}
-                    </Link>
+                    page ? <ProfileEntityLink type="artifact" id={a.id} name={a.name} to={to} /> : <Link className="place-card__row-name" to={to}>{a.name}</Link>
                   ) : (
                     <span className="place-card__row-name">{a.name}</span>
                   )}
@@ -578,8 +485,116 @@ export function PlaceCard({
             })}
           </section>
         )}
+  </>);
 
-        {history && (history.ahead.length > 0 || history.visits.length > 0) && (
+  return (
+    <div className={`place-card${dock ? " place-card--dock" : ""}${page ? " place-card--page d-focal" : ""}`}>
+      {confirmDialog}
+      {plate}
+      <div className="place-card__scroll">
+        {safeThumb && <img src={safeThumb} alt="" className="place-card__hero" />}
+        {page ? (
+          <div className="creature-card__head"><span className="d-plate">За столом</span>{!readOnly && <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => setAdding(true)}>Править</button>}</div>
+        ) : dock ? (
+          (pathShown.length > 0 || d.kind?.trim()) && (
+            <div className="place-card__path">
+              {pathShown.map((a, i) => (
+                <span key={a.id} className="place-card__path-seg">
+                  {i > 0 && <span aria-hidden="true">/ </span>}
+                  {placeLink(a.id, a.name)}
+                </span>
+              ))}
+              {d.kind?.trim() && <span className="place-card__tag place-card__end">{d.kind}</span>}
+            </div>
+          )
+        ) : (
+          <div className="place-card__head">
+            <div className="place-card__badge">
+              <NavIcon name={locationRoleIcon(d)} />
+              {badge}
+            </div>
+            <h2 className="place-card__name">{d.name}</h2>
+            {pathShown.length > 0 && (
+              <nav className="place-card__path" aria-label="Где находится">
+                {pathShown.map((a, i) => (
+                  <span key={a.id} className="place-card__path-seg">
+                    {i > 0 && <span aria-hidden="true">/ </span>}
+                    {placeLink(a.id, a.name)}
+                  </span>
+                ))}
+              </nav>
+            )}
+          </div>
+        )}
+
+        {!dock && partyHere && (
+          <div className="place-card__party">
+            <NavIcon name="flag" />
+            <span>
+              <strong>Партия здесь</strong> · {partyCampaigns!.join(", ")}
+            </span>
+          </div>
+        )}
+
+        {description && !page && (
+          <div className="stack" style={{ gap: 4 }}>
+            <div className={`place-card__desc${longDesc && !descOpen ? " is-clamped" : ""}`}>
+              <MentionText text={description} />
+            </div>
+            {longDesc && (
+              <button type="button" className="place-card__more" onClick={() => setDescOpen((v) => !v)}>
+                {descOpen ? "свернуть" : "ещё"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {page ? contentSection : whoSection}
+        {page ? whoSection : contentSection}
+
+        {showExits && (
+          <section className="place-card__sec">
+            <div className="place-card__sech">
+              <span className="place-card__title">Выходы</span>
+              {d.exits.length > 0 && <span className="place-card__count">{d.exits.length}</span>}
+              {!readOnly && !addingExit && (
+                <button type="button" className="place-card__add" onClick={() => setAddingExit(true)}>
+                  <NavIcon name="plus" /> Добавить
+                </button>
+              )}
+            </div>
+            {d.exits.map((e) => (
+              <div key={e.id} className="place-card__row" title={e.note || undefined}>
+                <NavIcon name={e.one_way ? "arrowRight" : "twoWay"} />
+                {placeLink(e.other_id, e.other_name, "place-card__row-name")}
+                {e.how && <span className="place-card__note">{e.how}</span>}
+                {e.travel_time || e.secret ? (
+                  <span className="place-card__end">
+                    {e.travel_time ? <span className="place-card__time">{e.travel_time}</span> : null}
+                    {e.secret ? <span className="place-card__tag">тайный</span> : null}
+                  </span>
+                ) : null}
+                {!readOnly && <button
+                  type="button"
+                  className="comp-mini place-card__row-del"
+                  onClick={() => void removeExit(e)}
+                  aria-label={`Удалить выход: ${e.other_name}`}
+                  title="Удалить выход"
+                >
+                  ✕
+                </button>}
+              </div>
+            ))}
+            {addingExit && (
+              <PlaceExitForm settingId={d.setting_id} fromId={d.id} onClose={() => setAddingExit(false)} />
+            )}
+          </section>
+        )}
+
+        {page ? artifactSection : spotSection}
+        {page ? spotSection : artifactSection}
+
+        {!hideHistory && history && (history.ahead.length > 0 || history.visits.length > 0) && (
           <section className="place-card__sec">
             <div className="place-card__sech">
               <span className="place-card__title">Что здесь было</span>
@@ -657,7 +672,7 @@ export function PlaceCard({
           </section>
         )}
 
-        {(!showContent || !showExits) && (
+        {!readOnly && (!showContent || !showExits) && (
           <div className="place-card__quick">
             {!showContent && (
               <button type="button" className="place-card__add" onClick={() => setAdding(true)}>

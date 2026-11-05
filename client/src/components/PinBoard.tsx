@@ -12,6 +12,7 @@ import { isSafeImageUrl } from "../utils/safeUrl";
 import { pickTextOn } from "../themes";
 import { useConfirm, useAlert } from "../hooks/useConfirm";
 import type { SearchResult } from "../types";
+import { mapPinPalette } from "./profiles/mapPinPalette";
 
 // Картинка с пинами (гриллинг профилей 2026-10-02, Q9; тикет 04): ядро
 // карты места, не знающее о месте. Картинка, зум и панорама, пины с
@@ -84,6 +85,8 @@ interface Props {
   showToast: (msg: string, onUndo?: () => void) => void;
   /** Только знаки, без цвета типа — например, метки-подписи. */
   defaultsFor?: (kind: string) => { color: string; border: string } | null;
+  /** Карта места «Д»: цвет типа в подложке, контрастный знак (О-11). */
+  typeBackground?: boolean;
 }
 
 interface View {
@@ -194,6 +197,7 @@ export function PinBoard({
   brokenImageHint,
   showToast,
   defaultsFor,
+  typeBackground = false,
 }: Props) {
   const startZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, rawStartZoom));
   const gotoZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, rawGotoZoom));
@@ -590,9 +594,9 @@ export function PinBoard({
             ? {
                 width: pinSize,
                 height: pinSize,
-                background: pickTextOn(glyphColor),
+                background: typeBackground ? mapPinPalette(p.kind,p.color).background : pickTextOn(glyphColor),
                 borderColor: p.border_color ?? "transparent",
-                color: glyphColor,
+                color: typeBackground ? mapPinPalette(p.kind,p.color).color : glyphColor,
                 cursor: locked ? "pointer" : "grab",
               }
             : {
@@ -846,7 +850,7 @@ export function PinBoard({
                       {/* инлайн-стиль намеренно — цвет пина задаёт Мастер */}
                       <span
                         className="location-map-row__mark"
-                        style={p.id === selectedPinId ? undefined : { color: p.color ?? pinDefaults(p.kind).color }}
+                        style={!typeBackground && p.id === selectedPinId ? undefined : { color: typeBackground ? mapPinPalette(p.kind,p.color).background : p.color ?? pinDefaults(p.kind).color }}
                       >
                         {glyphName(p.kind) ? (
                           <span className={`type-glyph type-glyph--${glyphName(p.kind)}`} aria-hidden="true" />

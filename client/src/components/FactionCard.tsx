@@ -1,3 +1,5 @@
+import { TypeGlyph } from "./TypeGlyph";
+import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ForceBlock, SecretSeal, type ForceExtras } from "./CreatureCard";
@@ -23,7 +25,7 @@ export function FactionCard({
 }: {
   force: BeingForce;
   secret: string;
-  members: { id: number; name: string }[];
+  members: { id: number; name: string; category?: import("../types").BeingCategory }[];
   settingId: number;
   /** Нет — карточка только читается (сообщество в контексте кампании). */
   onSave?: (patch: { force: BeingForce; secret: string }) => Promise<boolean>;
@@ -93,7 +95,7 @@ export function FactionCard({
 
   const faces = members.slice(0, SHOWN_FACES);
   return (
-    <article className="creature-card paper-scope creature-card--page is-embedded">
+    <article className="creature-card paper-scope creature-card--page is-embedded creature-card--d d-focal">
       <div className="creature-card__head">
         <span className="creature-card__head-label">За столом</span>
         {onSave && (
@@ -116,13 +118,12 @@ export function FactionCard({
       )}
       {members.length > 0 && (
         <div className="faction-card__faces">
-          <span className="creature-card__head-label">Лица · {members.length}</span>{" "}
-          {faces.map((m, i) => (
-            <span key={m.id}>
-              {i > 0 && ", "}
+          <span className="d-note">Лица · {members.length}</span>{" "}
+          {faces.map((m) => (
+            <span className="profile-face" key={m.id}><TypeGlyph type="being" />
               <Link className={`mention-link mention--${mentionTone("being", m.id)}`} to={`/beings/${m.id}`}>
                 {m.name}
-              </Link>
+              </Link>{m.category && <small className="d-note">{BEING_CATEGORY_LABELS[m.category]}</small>}
             </span>
           ))}
           {members.length > faces.length && (

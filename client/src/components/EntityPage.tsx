@@ -4,6 +4,10 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityTypeChip } from "./EntityTypeChip";
 import { ListSkeleton, LoadErrorCard } from "./Loadable";
 import { NavIcon, type NavIconName } from "./NavIcons";
+import { Link } from "react-router-dom";
+import { openEntityMenu } from "../pageMenu";
+import { profileStyle } from "./profiles/ProfileParts";
+import type { TimeTone } from "./chronicle/time";
 
 // Каркас карточки сущности.
 //
@@ -82,6 +86,8 @@ export interface EntityPageTab {
 }
 
 export interface EntityPageProps {
+  /** Prof-* v68: отдельный opt-in, не меняет лист персонажа и вид игрока. */
+  profile?: { id: number; tone?: TimeTone; previous?: { href: string; name: string }; next?: { href: string; name: string } };
   /** Крошки. Обязательны даже у хаба — там это одна ступень («Сеттинги ▸
    *  Вотердип»): ответ на «где я» и дорога обратно к списку. */
   crumbs: Crumb[];
@@ -182,8 +188,10 @@ export function EntityPage({
   sheet,
   titleAbove,
   hideIdent,
+  profile,
   children,
 }: EntityPageProps) {
+  sheet = sheet || !!profile;
   // Меню «…» открывается под своей кнопкой, а не там, где щёлкнули: у кнопки
   // в шапке место постоянное, и меню должно появляться там же каждый раз.
   const moreRef = useRef<HTMLButtonElement>(null);
@@ -225,7 +233,12 @@ export function EntityPage({
 
   function openMenu() {
     const r = moreRef.current?.getBoundingClientRect();
-    if (r) setMenuAt({ x: r.right, y: r.bottom });
+    if (r && profile) openEntityMenu({ type: entityType, id: profile.id, name: title }, r.left, r.bottom, [
+      ...(profile.previous ? [{ label: `‹ ${profile.previous.name}`, onClick: () => window.location.assign(profile.previous!.href) }] : []),
+      ...(profile.next ? [{ label: `${profile.next.name} ›`, onClick: () => window.location.assign(profile.next!.href) }] : []),
+      ...(actions ?? []),
+    ]);
+    else if (r) setMenuAt({ x: r.right, y: r.bottom });
   }
 
   const ident = (
@@ -258,7 +271,7 @@ export function EntityPage({
   // правого края полосы (владелец, 2026-10-01). Значка вида на бумаге нет, а
   // на остальных вкладках нет и имени: оно в крошках, и Мастер помнит, чей
   // профиль открыл.
-  const moreInTabs = paper && !!tabs?.length;
+  const moreInTabs = (paper || !!profile) && !!tabs?.length;
 
   const tabStrip = tabs && tabs.length > 0 && (
     <div ref={tabsRef} className={sheet ? "tabs d-tabs" : "tabs"} role="tablist">
@@ -308,14 +321,21 @@ export function EntityPage({
           +
         </button>
       )}
-      {moreInTabs && more}
+      {moreInTabs && !profile && more}
     </div>
     );
 
   return (
     <div
-      className={`stack entity-page${fill ? " page-fill" : ""}${paper ? " entity-page--paper" : ""}`}
+      className={`stack entity-page${fill ? " page-fill" : ""}${paper ? " entity-page--paper" : ""}${profile ? " entity-page--profile" : ""}`}
       data-entity-type={entityType}
+      style={profile ? profileStyle(entityType, profile.tone) : undefined}
+      onContextMenu={profile ? (e) => {
+        if (e.defaultPrevented || e.shiftKey || window.getSelection()?.toString().trim()) return;
+        if ((e.target as Element).closest("input,textarea,select,button,a,img,[contenteditable=true],[data-entity-id]")) return;
+        e.preventDefault();
+        openEntityMenu({ type: entityType, id: profile.id, name: title }, e.clientX, e.clientY, actions);
+      } : undefined}
     >
       {overlays}
 
@@ -331,7 +351,7 @@ export function EntityPage({
         </div>
       )}
 
-      <Breadcrumbs items={crumbs} />
+      <Breadcrumbs items={crumbs} compact={!!profile} />
 
       {(!paper || titleAbove || avatar || primaryAction || (more && !moreInTabs)) && (
         <div className="entity-page__head">
@@ -339,7 +359,7 @@ export function EntityPage({
 
           {/* Вид «лист»: на первой вкладке название стоит на самом листе
               (герой обзора), над ярлыками его нет — макет «Д». */}
-          {(titleAbove || (!paper && !(sheet && tab === shownTabs[0]?.id))) && ident}
+          {!profile && (titleAbove || (!paper && !(sheet && tab === shownTabs[0]?.id))) && ident}
 
           {(primaryAction || (more && !moreInTabs)) && (
             <div className="entity-page__actions">
@@ -374,7 +394,11 @@ export function EntityPage({
         // Ярлыки и лист — одним блоком: зазор колонки .stack не должен
         // отрывать ярлыки от листа.
         <div className="d-tabbed">
-          {tabStrip}
+          {profile && tabs?.length ? <div className="profile-tabbar">{tabStrip}<div className="profile-tabbar__actions">
+            {profile.previous && <Link to={profile.previous.href}>‹ {profile.previous.name}</Link>}
+            {profile.next && <Link to={profile.next.href}>{profile.next.name} ›</Link>}
+            {more}
+          </div></div> : tabStrip}
           <div className="d-sheet">
             {error ? (
               <LoadErrorCard message={<>Ошибка загрузки: {error}</>} onRetry={onRetry} />

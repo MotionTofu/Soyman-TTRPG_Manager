@@ -82,7 +82,14 @@ export interface StorageProfile {
   createdAt: string;
 }
 
+export interface GalleryIssue {
+  image_id: number; campaign_id: number; campaign_name: string; section_id: number; section_name: string; players: { id: number; name: string }[];
+}
+
 export interface GalleryImage {
+  source_image_id?: number | null;
+  issues?: GalleryIssue[];
+  width?: number; height?: number; source_name?: string;
   archived_at?: string | null;
   id: number;
   owner_type: "character" | "being" | "location" | "community" | "campaign_player_section";
@@ -245,6 +252,8 @@ export interface ChronicleSession {
 }
 
 export interface CampaignCalendarEvent extends EventTimeFields {
+  avatar_image_url?: string | null;
+  thumbnail_image_url?: string | null;
   full_description?: string;
   consequences?: string;
   visible_to_players?: number;
@@ -326,6 +335,8 @@ export interface SettingCyclePoint {
 }
 
 export interface SettingCalendarEvent extends EventTimeFields {
+  avatar_image_url?: string | null;
+  thumbnail_image_url?: string | null;
   sessions?: ChronicleSession[];
   id: number;
   setting_id: number;
@@ -954,6 +965,7 @@ export interface Preproduction {
 }
 
 export interface SettingLocation {
+  tags?: string[];
   id: number;
   setting_id: number;
   parent_id: number | null;
@@ -1160,6 +1172,7 @@ export interface SettingCommunityDetail extends SettingCommunity {
 }
 
 export interface BeingEvent {
+  campaign_id?: number | null;
   id: number;
   being_id: number;
   session_id: number | null;

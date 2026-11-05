@@ -44,6 +44,7 @@ function ChronicleRowInner({
   onToggleImportant,
   onSelect,
   selected,
+  dateLabel,
 }: {
   ev: ChronicleRowEvent;
   tone: TimeTone;
@@ -61,6 +62,7 @@ function ChronicleRowInner({
   onToggleImportant?: () => void;
   onSelect?: () => void;
   selected?: boolean;
+  dateLabel?: { big: string; small: string };
 }) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const precision = ev.date_precision ?? "day";
@@ -84,8 +86,8 @@ function ChronicleRowInner({
       onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect?.(); } }}>
       <span className="chr-ev__dot" aria-hidden="true" />
       <span className="chr-ev__date">
-        <b>{big}</b>
-        <span>{small}</span>
+        <b>{dateLabel?.big ?? big}</b>
+        <span>{dateLabel?.small ?? small}</span>
         {ev.inworld_year_end != null && !sameMonth && <span>→ {formatByPrecision(ev.inworld_year_end, ev.inworld_month_end ?? ev.inworld_month, ev.inworld_day_end ?? ev.inworld_day, precision, months, "")}</span>}
       </span>
       <span className="chr-ev__main">

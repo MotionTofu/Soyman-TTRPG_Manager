@@ -1,3 +1,6 @@
+import { Link } from "react-router-dom";
+import { GalleryIssueDialog, type IssueCampaign } from "./GalleryIssueDialog";
+import { ImageLibraryModal } from "./ImageLibraryModal";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAuthToken } from "../api/client";
@@ -29,6 +32,8 @@ interface ThumbnailUploadProps {
 }
 
 interface Props {
+  profile?: boolean;
+  campaignId?: number;
   ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact" | "compendium_entry";
   ownerId: number;
   focusedId?: number;
@@ -40,9 +45,9 @@ interface Props {
   avatarUpload?: ThumbnailUploadProps;
 }
 
-export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, focusedId, hideDelete = false }: Props) {
+export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, focusedId, hideDelete = false, profile = false, campaignId }: Props) {
   const { offerUndo } = useUndoDelete();
-  const galleryPath = settingPaths.gallery(ownerType, ownerId);
+  const galleryPath = settingPaths.gallery(ownerType, ownerId) + (campaignId ? `&campaign_id=${campaignId}` : "");
   const gallery = useResource<GalleryImage[]>(galleryPath);
   const images = gallery.data ?? [];
   const client = useQueryClient();
@@ -58,6 +63,16 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
   const [confirmDialog, confirm] = useConfirm();
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false);
+  const [libraryOpen,setLibraryOpen] = useState(false);
+  const canIssue = profile && ["being", "location", "community", "artifact"].includes(ownerType);
+  const campaigns = useResource<IssueCampaign[]>(canIssue ? `/gallery/issue-options?owner_type=${ownerType}&owner_id=${ownerId}` : null);
+  const issueCampaigns = (campaigns.data ?? []).filter((c) => !campaignId || c.id === campaignId);
+  // Вне контекста кампании отметке нужно её название, раз кампаний у сеттинга больше одной.
+  const showCampaignName = !campaignId && issueCampaigns.length > 1;
+  const [issuing, setIssuing] = useState<number | null>(null);
+  const [sizes, setSizes] = useState<Record<number, string>>({});
+  const [issuedOnly, setIssuedOnly] = useState(false);
+  const issuedCount = images.filter((img) => img.issues?.some((issue) => issue.players.length)).length;
 
   // Порядок меняется на экране сразу; сервер отказал — прежний порядок
   // возвращается, и появляется плашка.
@@ -76,7 +91,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
     afterWrite(galleryAffects(ownerType, ownerId));
   }
 
-  async function uploadFiles(files: FileList | null, resetTarget?: HTMLInputElement | null) {
+  async function uploadFiles(files: FileList | File[] | null, resetTarget?: HTMLInputElement | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadProgress({ done: 0, total: files.length });
@@ -233,29 +248,18 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
     return isSafeImageUrl(url) ? url : "";
   }
 
-  const galleryTitle =
-    ownerType === "being"
-      ? "ИЗОБРАЖЕНИЯ СУЩЕСТВА"
-      : ownerType === "community"
-        ? "ИЗОБРАЖЕНИЯ СООБЩЕСТВА"
-        : ownerType === "character"
-          ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
-          : ownerType === "artifact"
-            ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
-            : ownerType === "compendium_entry"
-              ? "ГАЛЕРЕЯ"
-              : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
-  return (
-    <div className={`stack gallery-tab${focusedId != null ? " gallery-tab--focused" : ""}`}>
-      <div className="gallery-tab-header">
-        <span className="gallery-tab-title">{galleryTitle}</span>
-        <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
-      </div>
-      <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
-        JPG, PNG, GIF, WebP или AVIF до 15MB.
-      </p>
+  async function attachImage(url: string, name: string, portrait = false) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Не удалось прочитать картинку");
+      const blob = await response.blob();
+      const file = new File([blob],name,{type:blob.type});
+      if (portrait) avatarUpload?.onSelect(file);
+      else { await uploadFiles([file]); setLibraryOpen(false); }
+    } catch (e) { showSaveError(errorText(e)); }
+  }
 
-      {(thumbnailUpload || avatarUpload) && (
+  const imageSlots = (thumbnailUpload || avatarUpload) ? (
         <div className="entity-image-slots">
           {thumbnailUpload && (
             <EntityImageSlot
@@ -278,10 +282,36 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
             />
           )}
         </div>
-      )}
+  ) : null;
+
+  const galleryTitle =
+    ownerType === "being"
+      ? "ИЗОБРАЖЕНИЯ СУЩЕСТВА"
+      : ownerType === "community"
+        ? "ИЗОБРАЖЕНИЯ СООБЩЕСТВА"
+        : ownerType === "character"
+          ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
+          : ownerType === "artifact"
+            ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
+            : ownerType === "compendium_entry"
+              ? "ГАЛЕРЕЯ"
+              : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
+  return (
+    <div className={`stack gallery-tab${profile ? " profile-gallery" : ""}${focusedId != null ? " gallery-tab--focused" : ""}`}>
+      <div className="gallery-tab-header">
+        <span className={profile ? "d-plate" : "gallery-tab-title"}>{profile ? "Галерея" : galleryTitle}</span>
+        <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
+        {profile && <div className="profile-block__actions">{images.length > 1 && <button type="button" className="d-btn d-btn--sm" onClick={sortAlphabetically}>А-Я</button>}<button type="button" className="d-btn d-btn--sm" onClick={() => setLibraryOpen(true)}>Из библиотеки</button><label className="d-btn d-btn--sm">+ Загрузить<input type="file" hidden accept={IMAGE_ACCEPT} multiple onChange={(e) => uploadFiles(e.target.files,e.currentTarget)} /></label></div>}
+      </div>
+      <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
+        JPG, PNG, GIF, WebP или AVIF до 15MB.
+      </p>
+
+      {canIssue && <div className="profile-gallery-filter"><button type="button" className="d-btn d-btn--sm d-btn--ghost" aria-pressed={!issuedOnly} onClick={() => setIssuedOnly(false)}>Все {images.length}</button><span>·</span><button type="button" className="d-btn d-btn--sm d-btn--ghost" aria-pressed={issuedOnly} onClick={() => setIssuedOnly(true)}>Выдано игрокам {issuedCount}</button></div>}
+      {profile && imageSlots ? <details className="profile-gallery-settings"><summary>Портрет и миниатюра</summary>{imageSlots}</details> : imageSlots}
       {thumbnailUpload?.modal}
       {avatarUpload?.modal}
-      {images.length > 1 && (
+      {!profile && images.length > 1 && (
         <button type="button" className="comp-mini" onClick={sortAlphabetically} title="Отсортировать по алфавиту (по подписи)" style={{ alignSelf: "flex-start", fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.08em", fontSize: "var(--fs-meta)" }}>
           А-Я
         </button>
@@ -316,6 +346,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
       >
         {images.map((img, i) => {
           if (focusedId != null && img.id !== focusedId) return null;
+          if (issuedOnly && !img.issues?.some((issue) => issue.players.length)) return null;
           const safeUrl = safeImageUrl(img.image_url);
           const label = labelFor(img);
           return (
@@ -349,6 +380,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
                 className="gallery-thumb"
                 loading="lazy"
                 decoding="async"
+                onLoad={(e) => { const image = e.currentTarget; setSizes((prev) => ({...prev, [img.id]:`${image.naturalWidth}×${image.naturalHeight}`})); }}
                 onClick={() => setLightboxIndex(i)}
               />
             ) : (
@@ -363,7 +395,14 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
             >
               ×
             </button>)}
-            {label && <span className="gallery-thumb-caption" aria-hidden="true">{label}</span>}
+            {(profile || label) && <span className="gallery-thumb-caption">{profile ? img.caption || "Без подписи" : label}</span>}
+            {profile && <div className="profile-gallery-meta" onKeyDown={(e) => e.stopPropagation()}><span>{sizes[img.id] ?? "…"}</span><span> · </span><a href={safeUrl} target="_blank" rel="noreferrer" title={img.image_path.split(/[\\/]/).pop()}>источник</a>{avatarUpload && <><span> · </span><button type="button" className="profile-text-link" onClick={(e) => { e.stopPropagation(); void attachImage(img.image_url, img.image_path.split(/[\\/]/).pop() || "image.png", true); }}>сделать портретом</button></>}</div>}
+            {canIssue && <div className="gallery-issue-actions" onKeyDown={(e) => e.stopPropagation()}>
+              <button type="button" className="d-btn d-btn--sm d-btn--ghost" disabled={!issueCampaigns.length} title={issueCampaigns.length ? "Выдать игрокам" : "Нет кампаний этого сеттинга"} onClick={(e) => { e.stopPropagation(); setIssuing(img.id); }}>Выдать игрокам</button>
+              {img.issues?.map((issue) => <Link key={issue.image_id} to={`/campaigns/${issue.campaign_id}?tab=${encodeURIComponent("Для игроков")}&section=${issue.section_id}&image=${issue.image_id}`}>
+                {showCampaignName || new Set(img.issues?.map((v) => v.campaign_id)).size > 1 ? `${issue.campaign_name} · ` : ""}{issue.players.length ? `у игроков: ${issue.players.map((p) => p.name).join(", ")}` : `в разделе «${issue.section_name}», не выдана`}
+              </Link>)}
+            </div>}
           </div>
         );})}
         {focusedId == null && <label className="gallery-upload-tile" title="Нажмите или перетащите файлы сюда">
@@ -396,11 +435,16 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={[{ label: "Удалить", danger: true, onClick: () => removeImage(menu.id) }]}
+          items={[
+            ...(profile && avatarUpload ? [{ label:"Сделать портретом",onClick:() => { const img=images.find((i) => i.id === menu.id); if (img) void attachImage(img.image_url,labelFor(img),true); } }] : []),
+            { label: "Удалить", danger: true, onClick: () => removeImage(menu.id) },
+          ]}
           onClose={() => setMenu(null)}
         />
       )}
       {confirmDialog}
+      {libraryOpen && <ImageLibraryModal onClose={() => setLibraryOpen(false)} onSelect={(file) => uploadFiles([file])} />}
+      {issuing != null && <GalleryIssueDialog imageId={issuing} campaigns={issueCampaigns} campaignId={campaignId} onClose={() => setIssuing(null)} onIssued={() => { setIssuing(null); gallery.reload(); afterWrite([{path:"/gallery"},{path:"/campaign-player-sections"},{path:"/visibility-grants"},{path:"/player"}]); }} />}
     </div>
   );
 }

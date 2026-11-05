@@ -10,6 +10,7 @@ import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { SheetOverlay } from "./sheet/SheetOverlay";
+import { TypeGlyph } from "./TypeGlyph";
 
 /**
  * Главы лежат внутри карточки владельца (`GET ${apiBase}/${ownerId}` отдаёт их
@@ -34,6 +35,7 @@ interface ChapterLike {
 }
 
 interface Props<T extends ChapterLike> {
+  profile?: boolean;
   ownerId: number;
   ownerType: string;
   apiBase: string; // e.g. "/characters" or "/setting-locations"
@@ -80,6 +82,7 @@ export function ChapterList<T extends ChapterLike>({
   emptyState,
   listTitle,
   flat = false,
+  profile = false,
 }: Props<T>) {
   const [confirmDialog, confirm] = useConfirm();
   const run = useAction();
@@ -101,7 +104,7 @@ export function ChapterList<T extends ChapterLike>({
   async function addChapter() {
     const body = {
       ...(section ? { section } : {}),
-      title: `${titlePrefix} ${chapters.length + 1}`,
+      title: `${profile && titlePrefix === "Глава" ? "Статья" : titlePrefix} ${chapters.length + 1}`,
       content: "",
     };
     // Без «Повторить»: ответ мог потеряться после записи, и повтор завёл бы
@@ -159,10 +162,10 @@ export function ChapterList<T extends ChapterLike>({
           visibilityToggle={visibilityToggle}
         />
       ))}
-      <button onClick={addChapter} style={{ alignSelf: "flex-start" }}>
+      {profile && chapters.length === 0 ? <div className="profile-invitation"><TypeGlyph type={ownerType} /><span>Статей пока нет.</span><button type="button" className="d-btn d-btn--sm" onClick={addChapter}>+ Статья</button></div> : profile ? <button type="button" className="d-btn d-btn--sm" onClick={addChapter}>+ Статья</button> : <button onClick={addChapter} style={{ alignSelf: "flex-start" }}>
         + Добавить {label}
-      </button>
-      {chapters.length === 0 && (emptyState ?? <p className="muted">Пока пусто.</p>)}
+      </button>}
+      {!profile && chapters.length === 0 && (emptyState ?? <p className="muted">Пока пусто.</p>)}
     </div>
   );
 }

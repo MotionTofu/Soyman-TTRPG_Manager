@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { profileChronicle } from "../services/profileChronicle";
+import { profileMentions } from "../services/profileMentions";
 import { cardBlurb } from "../services/cardBlurb";
 import { sessionEventLinkError } from "../services/chronicle";
 import { db } from "../db/db";
@@ -15,6 +17,21 @@ import {
 import { parseSceneParticipation } from "../services/beingForce";
 
 export const linksRouter = Router();
+
+linksRouter.get("/profile-mentions", (req, res) => {
+  const id = Number(req.query.id);
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: "Invalid profile id" });
+  res.json(profileMentions(String(req.query.type), id));
+});
+
+linksRouter.get("/profile-chronicle", (req, res) => {
+  const id = Number(req.query.id);
+  const campaignId = req.query.campaign_id == null ? null : Number(req.query.campaign_id);
+  if (!Number.isSafeInteger(id) || id < 1 || (campaignId != null && (!Number.isSafeInteger(campaignId) || campaignId < 1))) return res.status(400).json({ error: "Invalid profile id" });
+  const result = profileChronicle(String(req.query.type), id, campaignId);
+  if (!result) return res.status(404).json({ error: "Profile not found" });
+  res.json(result);
+});
 
 const SAFE_IDENTIFIER = /^[a-z_][a-z_0-9]*$/;
 function assertSafeIdent(kind: string, value: string): asserts value is string {

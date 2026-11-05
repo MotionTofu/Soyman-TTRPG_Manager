@@ -1,7 +1,13 @@
+import { CampaignChronicle } from "../components/campaign/CampaignProfileParts";
+import { MentionText } from "../components/mentions/MentionText";
+import { ProfileHero, ProfileBlock, ProfileText, ProfileEntityLink, ProfileChapterRead } from "../components/profiles/ProfileParts";
+import { ProfileLinks } from "../components/profiles/ProfileLinks";
+import { ProfileChronicle } from "../components/profiles/ProfileChronicle";
+import { useProfileChronicleCount, useProfileNeighbours } from "../components/profiles/useProfileNeighbours";
+import { sessionPaths } from "../data/sessions";
 import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
-import { useState, type DragEvent } from "react";
-import { EntityParticipates } from "../components/EntityParticipates";
+import { useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
@@ -13,44 +19,29 @@ import { AliasesCard } from "../components/AliasesCard";
 import { ChapterList } from "../components/ChapterList";
 import { GalleryTab } from "../components/GalleryTab";
 import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
-import { RelationsTab } from "../components/RelationsTab";
 import { EntityPage } from "../components/EntityPage";
 import { PdfEntitySources } from "../components/PdfEntitySources";
-import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { FactionCard } from "../components/FactionCard";
 import { FORCE_FIELDS } from "../beingForce";
 import {
-  BaseFold,
-  CampaignChronicle,
   CampaignRecords,
-  ContextSwitch,
-  EngagedCampaigns,
-} from "../components/campaign/CampaignProfileParts";
+  ContextSwitch } from "../components/campaign/CampaignProfileParts";
 import { SIDE_PROFILE_ASPECTS } from "../entityRecords";
 import { campaignCrumbs, forceExtras, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { toAliasesList } from "../utils/aliasesList";
-import { mentionTone } from "../mentions";
-import { RELATION_TONE_LABELS } from "../relations";
-import { DETAIL_ROUTES } from "../entityTypes";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { MentionsTab } from "../components/MentionsTab";
 import { useTabState } from "../hooks/useTabState";
-import { useSettingCalendar } from "../hooks/useSettingCalendar";
-import { formatImportantDate } from "../inworldCalendar";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { TagChips } from "../components/TagChips";
 import type {
-  DateRecurrence,
   EntityRelationsResponse,
   SearchResult,
   SettingCommunityDetail,
-  SettingLocation,
-} from "../types";
-import { NavIcon } from "../components/NavIcons";
+  SettingLocation } from "../types";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
@@ -83,10 +74,15 @@ export function CommunityDetailPage() {
 
   const communityState = useEntity<SettingCommunityDetail>("community", communityId);
   const community = communityState.data ?? null;
+  const neighbours = useProfileNeighbours("community", communityId, community?.setting_id);
+  const [linksRequest,setLinksRequest] = useState(0);
+  const portraitInput = useRef<HTMLInputElement>(null);
+  const live = useResource<{ campaign_id: number } | null>(sessionPaths.live()).data;
   const settingCrumbs = useSettingCrumbs(community?.setting_id);
   // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
   const ctx = useCampaignContext(community?.campaigns);
   const inCampaign = ctx.campaign;
+  const chronicleCount = useProfileChronicleCount("community", communityId, community?.important_dates, inCampaign?.id);
   const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "community", communityId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "community", communityId);
   const locations =
@@ -100,14 +96,8 @@ export function CommunityDetailPage() {
   const [membersDragOver, setMembersDragOver] = useState(false);
   const [childName, setChildName] = useState("");
   const [locationsDragOver, setLocationsDragOver] = useState(false);
-  const [dateTitle, setDateTitle] = useState("");
-  const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
-  const [dateYear, setDateYear] = useState("");
-  const [dateMonth, setDateMonth] = useState("");
-  const [dateDay, setDateDay] = useState("");
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const calendar = useSettingCalendar(community?.setting_id);
 
   useUnloadTarget({
     label: "Представители",
@@ -244,43 +234,9 @@ export function CommunityDetailPage() {
     await run(() => write.del(`/setting-communities/${communityId}/locations/${locationId}`), { affects: habitatAffects });
   }
 
-  // Важные даты попадают в календарь сеттинга и кампаний.
-  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
-
-  async function addImportantDate() {
-    if (!dateTitle.trim() || !dateDay) return;
-    const body = {
-      title: dateTitle,
-      recurrence: dateRecurrence,
-      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
-      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
-      day: Number(dateDay),
-    };
-    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
-    const done = await run(
-      () => write.post(`/setting-communities/${communityId}/important-dates`, body).then(() => true),
-      { affects: dateAffects, retry: false }
-    );
-    if (!done) return;
-    setDateTitle("");
-    setDateYear("");
-    setDateMonth("");
-    setDateDay("");
-  }
-
-  async function removeImportantDate(dateId: number) {
-    if (!(await confirm({ message: "Удалить эту важную дату?", confirmLabel: "Удалить", danger: true })))
-      return;
-    await run(() => write.del(`/setting-communities/important-dates/${dateId}`), { affects: dateAffects });
-  }
-
   const aliases = toAliasesList(community.aliases).filter((a) => a.trim());
   const chaptersOf = (section: string) => community.chapters.filter((c) => c.section === section);
   const allRelations = relations ? [...relations.outgoing, ...relations.incoming] : [];
-  // Связь в обе стороны — одно имя в «С кем», а не два.
-  const relationFacts = allRelations.filter(
-    (r, i) => allRelations.findIndex((o) => o.other_type === r.other_type && o.other_id === r.other_id) === i,
-  );
   const linkCount = community.members.length + community.children.length + community.locations.length + allRelations.length;
   const populationTo = `/settings/${community.setting_id}?tab=${encodeURIComponent("Население")}&population=${encodeURIComponent("Сообщества")}`;
 
@@ -290,7 +246,7 @@ export function CommunityDetailPage() {
 
   return (
     <EntityPage
-      paper
+      profile={neighbours}
       crumbs={inCampaign ? campaignCrumbs(inCampaign, community.name) : [
         ...settingCrumbs,
         { label: "Население", to: populationTo },
@@ -304,7 +260,8 @@ export function CommunityDetailPage() {
       // Под именем — другие названия, на месте мазка (макет, доска 27).
       meta={aliases.length > 0 ? aliases.join(" · ") : undefined}
       actions={[
-        { label: "Вложенное сообщество…", onClick: () => selectTab("Связи") },
+        ...(!inCampaign ? [{ label: "Сменить портрет", onClick: () => portraitInput.current?.click() }] : []),
+        { label: "Вложенное сообщество…", onClick: () => { selectTab("Связи");setLinksRequest((n) => n + 1); } },
         { label: "Архивировать", danger: true, onClick: archiveCommunity },
       ]}
       tabs={[
@@ -312,7 +269,7 @@ export function CommunityDetailPage() {
         { id: "Связи", label: linkCount ? `Связи · ${linkCount}` : "Связи" },
         {
           id: "Хроника",
-          label: community.important_dates.length ? `Хроника · ${community.important_dates.length}` : "Хроника",
+          label: chronicleCount ? `Хроника · ${chronicleCount}` : "Хроника",
         },
         "Галерея",
         "Упоминания",
@@ -324,176 +281,23 @@ export function CommunityDetailPage() {
           {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
+          {!inCampaign && <input ref={portraitInput} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />}
         </>
       }
     >
       <ContextSwitch engaged={community.campaigns} campaign={inCampaign} onSelect={ctx.select} />
-      {tab === "Досье" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            {inCampaign ? (
-              <div className="dossier__portrait">
-                {community.avatar_image_url ? (
-                  <img src={community.avatar_image_url} alt={`Знак: ${community.name}`} />
-                ) : (
-                  <span className="dossier__portrait-empty">Знак сообщества</span>
-                )}
-              </div>
-            ) : (
-              <label className="dossier__portrait" title={IMAGE_HINT}>
-                {community.avatar_image_url ? (
-                  <img src={community.avatar_image_url} alt={`Знак: ${community.name}`} />
-                ) : (
-                  <span className="dossier__portrait-empty">Знак сообщества</span>
-                )}
-                <span className="dossier__portrait-hint">{uploadingAvatar ? "Загрузка…" : "Сменить знак"}</span>
-                <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
-              </label>
-            )}
-            <dl className="paper-facts">
-              {community.locations.length > 0 && (
-                <div>
-                  <dt className="paper-label">Где</dt>
-                  <dd>
-                    {community.locations.map((l) => (
-                      <Link key={l.id} className="mention-link mention--loc" to={`/locations/${l.id}`}>
-                        {l.name}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {relationFacts.length > 0 && (
-                <div>
-                  <dt className="paper-label">С кем</dt>
-                  <dd>
-                    {relationFacts.map((r) => (
-                      <span key={r.id}>
-                        <Link
-                          className={`mention-link mention--${mentionTone(r.other_type, r.other_id)}`}
-                          to={`${DETAIL_ROUTES[r.other_type] ?? ""}/${r.other_id}`}
-                        >
-                          {r.other_name ?? "—"}
-                        </Link>{" "}
-                        <span className="paper-rows__sub">{r.label.trim() || RELATION_TONE_LABELS[r.tone].toLowerCase()}</span>
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="paper-label">Входит в</dt>
-                <dd>
-                  {community.parent_id ? (
-                    <Link className="mention-link mention--com" to={`/communities/${community.parent_id}`}>
-                      {community.ancestors[community.ancestors.length - 1]?.name}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </dd>
-              </div>
-              {!inCampaign && (
-                <div>
-                  <dt className="paper-label">Теги</dt>
-                  <dd>
-                    <TagChips tags={community.tags} onChange={saveTags} />
-                  </dd>
-                </div>
-              )}
-              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
-              <PlayerVisibilityFact targetType="setting_community" targetId={communityId} />
-            </dl>
-            <div className="dossier__search">
-              <Link className="paper-more" to={populationTo}>
-                В Населении ›
-              </Link>
-              <GraphNeighbourhoodLink type="community" id={community.id} />
-            </div>
-          </aside>
-
-          {inCampaign ? (
-            <div className="dossier__main">
-              {/* Основу отсюда не правят: значения основы, под ячейкой — записи кампании. */}
-              <FactionCard
-                force={community.force ?? {}}
-                secret={community.secret ?? ""}
-                members={community.members}
-                settingId={community.setting_id}
-                onAllMembers={() => selectTab("Связи")}
-                forceExtras={forceExtras(records, community.setting_id)}
-              />
-              <CampaignRecords
-                campaignId={inCampaign.id}
-                settingId={community.setting_id}
-                ownerType="community"
-                ownerId={communityId}
-                chains={records}
-                title="Что изменилось"
-                aspects={SIDE_PROFILE_ASPECTS}
-                emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)}
-              />
-              <BaseFold
-                description={community.description ?? ""}
-                chapters={CHAPTER_SECTIONS.filter(([section]) => section !== "current_situation").map(([section, title]) => ({
-                  title,
-                  items: chaptersOf(section),
-                }))}
-              />
-            </div>
-          ) : (
-          <div className="dossier__main">
-            <FactionCard
-              force={community.force ?? {}}
-              secret={community.secret ?? ""}
-              members={community.members}
-              settingId={community.setting_id}
-              onSave={(patch) => save(patch)}
-              onAllMembers={() => selectTab("Связи")}
-            />
-
-            <EngagedCampaigns campaigns={community.campaigns} onOpen={ctx.select} title="Задействовано в кампаниях" />
-
-            <EditableTextCard
-              title="Описание"
-              value={community.description ?? ""}
-              onSave={saveDescription}
-              rows={4}
-              entityType="community"
-              entityId={communityId}
-              defaultSettingId={community.setting_id}
-              collapsible
-              defaultOpen
-            />
-
-            {CHAPTER_SECTIONS.map(([section, title]) => (
-              <details
-                key={section}
-                className="paper-fold"
-                open={section !== "current_situation" && chaptersOf(section).length > 0}
-              >
-                <summary>
-                  {title} <span className="paper-fold__count">· {chaptersOf(section).length}</span>
-                </summary>
-                <div className="paper-fold__body">
-                  <ChapterList
-                    ownerId={communityId}
-                    ownerType="community"
-                    apiBase="/setting-communities"
-                    section={section}
-                    chapters={chaptersOf(section)}
-                    titlePrefix="Статья"
-                    addLabel="статью"
-                    defaultSettingId={community.setting_id}
-                  />
-                </div>
-              </details>
-            ))}
-
-            {/* Справка: правится редко, за столом не нужна — свёрнута. */}
-            <details className="paper-fold">
-              <summary>Основное, источники</summary>
-              <div className="paper-fold__body">
+      {tab === "Досье" && <div className="profile-dossier">
+        <ProfileHero type="community" name={community.name} createdAt={community.created_at} image={community.avatar_image_url} onGallery={() => selectTab("Галерея")}
+          labels={<>{community.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{aliases.length > 0 && <span className="d-note">{aliases.join(" · ")}</span>}<TagChips profile tags={community.tags ?? []} onChange={inCampaign ? undefined : saveTags} /></>}>
+          <FactionCard force={community.force ?? {}} secret={community.secret ?? ""} members={community.members} settingId={community.setting_id} onAllMembers={() => selectTab("Связи")} onSave={inCampaign ? undefined : (patch) => save(patch)} forceExtras={inCampaign ? forceExtras(records,community.setting_id) : undefined} />
+        </ProfileHero>
+        <PlayerVisibilityFact line targetType="setting_community" targetId={communityId} />
+        {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={community.description ?? ""} /></div></ProfileBlock> : <ProfileText title="Описание" value={community.description ?? ""} onSave={saveDescription} defaultSettingId={community.setting_id} />}
+        {(community.campaigns ?? []).map((c) => <details key={c.id} className="paper-fold" open={live?.campaign_id === c.id}><summary>В кампании «{c.name}»<small className="profile-fold-note">участие: цель · план · без вмешательства · если помочь</small>{live?.campaign_id !== c.id && <small className="profile-fold-state">свёрнуто — нет идущей сессии ▸</small>}</summary><div className="paper-fold__body"><button type="button" className="d-btn d-btn--sm" onClick={() => ctx.select(c.id)}>Контекст кампании ›</button>{inCampaign?.id === c.id && <CampaignRecords campaignId={c.id} settingId={community.setting_id} ownerType="community" ownerId={communityId} chains={records} title="Что изменилось" aspects={SIDE_PROFILE_ASPECTS} emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)} />}</div></details>)}
+        <div className="profile-columns profile-columns--three">
+          {CHAPTER_SECTIONS.filter(([section]) => section !== "current_situation").map(([section,title]) => <ProfileBlock key={section} title={title} count={chaptersOf(section).length}>{inCampaign ? <ProfileChapterRead chapters={chaptersOf(section)} /> : <ChapterList profile ownerId={communityId} ownerType="community" apiBase="/setting-communities" section={section} chapters={chaptersOf(section)} defaultSettingId={community.setting_id} />}</ProfileBlock>)}
+        </div>
+        {!inCampaign && <details className="paper-fold"><summary>Справка<small className="profile-fold-note">основное · статьи · источники ▸</small></summary><div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${community.id}`}
                   fields={[{ key: "name", label: "Имя", value: community.name, required: true }]}
@@ -504,15 +308,16 @@ export function CommunityDetailPage() {
                   nameOriginal={community.name_original ?? ""}
                   onSave={(next, name_original) => saveOrThrow({ aliases: next, name_original })}
                 />
+                <ProfileBlock title="Текущая ситуация"><ChapterList profile ownerId={communityId} ownerType="community" apiBase="/setting-communities" section="current_situation" chapters={chaptersOf("current_situation")} defaultSettingId={community.setting_id} /></ProfileBlock>
                 <PdfEntitySources kind="community" id={community.id} />
-              </div>
-            </details>
-          </div>
-          )}
-        </div>
-      )}
 
-      {tab === "Связи" && (
+        </div></details>}
+      </div>}
+
+      {tab === "Связи" && <ProfileLinks editRequest={linksRequest} type="community" id={communityId} name={community.name} settingId={community.setting_id} groups={[
+        { title: "Кто", rows: [...community.members.map((b) => ({key:`being:${b.id}`,type:"being",id:b.id,name:b.name,actions:[{label:"Убрать отсюда",onClick:() => void removeMember(b.id)}]})),...community.children.map((c) => ({key:`child:${c.id}`,type:"community",id:c.id,name:c.name,note:"вложенное"}))] },
+        { title: "Где", rows: community.locations.map((l) => ({key:`location:${l.id}`,type:"location",id:l.id,name:l.name,actions:[{label:"Убрать отсюда",onClick:() => void removeLocation(l.id)}]})) },
+      ]} onEntityDrop={(e) => { if (e.type === "being") { void addMember(e); return true; } if (e.type === "location") { void addLocation(e); return true; } return false; }} tools={
         <div className="paper-groups">
           <details className="paper-fold" open>
             <summary>
@@ -612,92 +417,17 @@ export function CommunityDetailPage() {
               С кем · что <span className="paper-fold__count">{allRelations.length}</span>
             </summary>
             <LinkDropZone entityType="community" entityId={communityId} title="Связанные сущности" />
-            <RelationsTab
-              entityType="community"
-              entityId={communityId}
-              entityName={community.name}
-              defaultSettingId={community.setting_id}
-            />
+
           </details>
-          <EntityParticipates entityType="community" entityId={communityId} />
+
         </div>
-      )}
+      } />}
 
-      {tab === "Хроника" && inCampaign && (
-        <CampaignChronicle campaign={inCampaign} settingId={community.setting_id} chains={records} />
-      )}
-
-      {tab === "Хроника" && !inCampaign && (
-        <section>
-          <h2 className="paper-group__head">
-            В мире <span className="paper-group__count">{community.important_dates.length}</span>
-          </h2>
-          <p className="muted">Важные даты — отмечаются на календаре сеттинга и его кампаний.</p>
-          <ul className="paper-rows">
-            {community.important_dates.map((d) => (
-              <li key={d.id}>
-                <span className="paper-rows__main">
-                  <strong>{d.title}</strong>
-                </span>
-                <span className="paper-rows__sub">
-                  {formatImportantDate(d, calendar?.months ?? [], calendar?.weekdays ?? [])}
-                </span>
-                <button className="comp-mini" aria-label={`Удалить «${d.title}»`} onClick={() => removeImportantDate(d.id)}>
-                  <NavIcon name="delete" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="chronicle__add">
-            <div className="row chronicle__line">
-              <input
-                placeholder="Дата (напр. День основания)"
-                value={dateTitle}
-                onChange={(e) => setDateTitle(e.target.value)}
-              />
-              <button className="primary" aria-label="Добавить дату" title="Добавить дату" onClick={addImportantDate}>
-                +
-              </button>
-            </div>
-            <div className="row chronicle__line">
-              <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
-                <option value="once">Разовое</option>
-                <option value="annual">Ежегодное</option>
-                <option value="monthly">Ежемесячное</option>
-              </select>
-              {dateRecurrence === "once" && (
-                <input
-                  type="number"
-                  placeholder="Год"
-                  className="chronicle__num"
-                  value={dateYear}
-                  onChange={(e) => setDateYear(e.target.value)}
-                />
-              )}
-              {dateRecurrence !== "monthly" && (
-                <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
-                  <option value="">Месяц…</option>
-                  {(calendar?.months ?? []).map((m) => (
-                    <option key={m.id} value={m.position}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="number"
-                placeholder="День"
-                className="chronicle__num"
-                value={dateDay}
-                onChange={(e) => setDateDay(e.target.value)}
-              />
-            </div>
-          </div>
-        </section>
-      )}
+      {tab === "Хроника" && <ProfileChronicle type="community" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={community.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={communityId} settingId={community.setting_id} campaignId={inCampaign?.id} dates={community.important_dates} />}
 
       {tab === "Галерея" && (
-        <GalleryTab
+        <GalleryTab profile campaignId={inCampaign?.id}
+          avatarUpload={{ previewUrl: community.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: null }}
           ownerType="community"
           ownerId={communityId}
           thumbnailUpload={{

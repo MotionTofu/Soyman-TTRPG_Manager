@@ -591,7 +591,8 @@ CREATE TABLE IF NOT EXISTS setting_locations (
   map_goto_zoom REAL,
   map_labels_always INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  archived_at TEXT
+  archived_at TEXT,
+  tags TEXT NOT NULL DEFAULT ''
 );
 
 -- Наполнение локации/точки (план «Зоны локаций», этап 6): лёгкие строки
@@ -1337,7 +1338,9 @@ CREATE TABLE IF NOT EXISTS campaign_calendar_events (
   -- переживёт переименование.
   cancel_note TEXT NOT NULL DEFAULT '',
   important INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  avatar_image_path TEXT,
+  thumbnail_image_path TEXT
 );
 
 -- A being/community can inhabit several locations (and a location can host
@@ -1427,7 +1430,9 @@ CREATE TABLE IF NOT EXISTS setting_calendar_events (
   cancel_note TEXT NOT NULL DEFAULT '',
   important INTEGER NOT NULL DEFAULT 0,
   visible_to_players INTEGER NOT NULL DEFAULT 0, -- explicit GM reveal, shown via the player sync API
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  avatar_image_path TEXT,
+  thumbnail_image_path TEXT
 );
 
 -- Large named year ranges ("Эпоха") a GM can define to group the Хроника
@@ -1578,7 +1583,8 @@ CREATE TABLE IF NOT EXISTS gallery_images (
   image_path TEXT NOT NULL,
   caption TEXT DEFAULT '',
   position INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  source_image_id INTEGER
 );
 
 -- Custom GM-defined subsections under a campaign's "Для игроков" tab. Each

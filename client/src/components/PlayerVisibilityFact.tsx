@@ -6,6 +6,7 @@ import { campaignPaths } from "../data/campaigns";
 import { Modal } from "./Modal";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import type { CampaignDetail, VisibilityTargetType } from "../types";
+import { NavIcon } from "./NavIcons";
 
 // «Игрокам: …» в фактах профиля сущности сеттинга (спека campaign-paper,
 // Q34): кому она открыта по кампаниям; щелчок — выбор игроков. Дерева «Мир» в
@@ -31,11 +32,11 @@ const PLAYER_TEXT_TARGETS: Partial<Record<VisibilityTargetType, { base: string; 
   setting_calendar_event: { base: "/settings/calendar-events", kind: "setting_event" },
 };
 
-export function PlayerVisibilityFact({ targetType, targetId }: { targetType: VisibilityTargetType; targetId: number }) {
+export function PlayerVisibilityFact({ targetType, targetId, line = false }: { targetType: VisibilityTargetType; targetId: number; line?: boolean }) {
   const data = useResource<TargetVisibility>(`/visibility-grants/target?target_type=${targetType}&target_id=${targetId}`).data;
   const [open, setOpen] = useState(false);
   const rows = data?.campaigns;
-  if (!data || !rows || rows.length === 0) return null;
+  if (!data || !rows || (!line && rows.length === 0)) return null;
   const seen = rows.filter((r) => r.players.length > 0);
   const text =
     seen.length === 0
@@ -44,17 +45,18 @@ export function PlayerVisibilityFact({ targetType, targetId }: { targetType: Vis
           .map((r) => `${rows.length > 1 ? `${r.campaign_name}: ` : ""}${r.all ? "всем" : r.players.map((p) => p.name).join(", ")}`)
           .join("; ");
   return (
-    <div>
-      <dt className="paper-label">Игрокам</dt>
+    <div className={line ? "profile-visibility" : undefined}>
+      {line ? <><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><span>{seen.length ? `открыто — ${text}` : "скрыто — видят только имя"}</span><button type="button" className="profile-text-link" onClick={() => setOpen(true)}>Что видят игроки ›</button></> : <><dt className="paper-label">Игрокам</dt>
       <dd>
         <button type="button" className="paper-more player-visibility-fact" onClick={() => setOpen(true)}>
           {text} ›
         </button>
-      </dd>
+      </dd></>}
       {open && (
         <Modal onClose={() => setOpen(false)} ariaLabel="Кому открыто">
           <div className="stack">
             <h2>Кому открыто</h2>
+            {!rows.length && <p className="muted">В этом сеттинге пока нет кампаний с игроками.</p>}
             {rows.map((r) => (
               <CampaignRow key={r.campaign_id} row={r} targetType={targetType} targetId={targetId} />
             ))}

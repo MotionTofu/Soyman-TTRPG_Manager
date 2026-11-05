@@ -113,7 +113,7 @@ const GENITIVE_MONTHS: Record<string, string> = {
   "сентябрь": "сентября", "октябрь": "октября", "ноябрь": "ноября", "декабрь": "декабря",
 };
 
-function genitiveMonth(name: string): string {
+export function genitiveMonth(name: string): string {
   const low = name.toLowerCase();
   return GENITIVE_MONTHS[low] ?? name;
 }

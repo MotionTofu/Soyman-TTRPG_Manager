@@ -349,7 +349,8 @@ export function EntityPreviewModal({ type, id, onClose }: Props) {
   const { user } = useCurrentUser();
   const playerSafe = user?.role === "player";
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} ariaLabel={playerSafe ? undefined : "Упоминание"} className={!playerSafe && (type === "being" || type === "compendium_entry") ? "profile-mention-modal" : undefined}>
+      {!playerSafe && <h2>Упоминание</h2>}
       <EntityPreviewContent
         type={type}
         id={id}
