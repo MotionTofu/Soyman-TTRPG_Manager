@@ -1,5 +1,41 @@
 /* Roll-OS-Overview / Themes / Challenges и общие каталоги систем.
    Узкая рабочая область учитывается даже при раскрытой правой панели. */
+/* 212px намеренно — ширина оглавления Sys-DnD v84; 6px — его корешок. */
+.sys-layout { --acc: var(--acid); display: grid; grid-template-columns: 212px minmax(0, 1fr); align-items: start; gap: 0; }
+.sys-toc { min-width: 0; padding-top: var(--sp-2); }
+.sys-toc__head { padding: 0 var(--sp-5) var(--sp-5) 0; }
+.sys-toc__name { font-family: var(--font-ui); font-size: var(--fs-h3); margin-bottom: var(--sp-3); }
+.sys-toc__more { margin-left: auto; }
+.sys-toc__items { display: flex; flex-direction: column; min-width: 0; }
+.sys-toc__items > button { display: flex; align-items: baseline; gap: var(--sp-3); width: 100%; min-height: 36px; padding: var(--sp-3) var(--sp-4); border: 0; border-left: 6px solid transparent; border-radius: 0; background: transparent; color: var(--ink); text-align: left; }
+.sys-toc__items > button span { min-width: 0; overflow-wrap: anywhere; }
+.sys-toc__items > button b { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 400; color: var(--muted); }
+.sys-toc__items > button.active { position: relative; z-index: 1; background: var(--sheet); border-left-color: var(--acc); box-shadow: 2px 0 var(--sheet); font-weight: 700; }
+.sys-toc__items > button:hover { background: var(--tab); }
+.sys-toc__label { padding: var(--sp-5) 0 var(--sp-3) var(--sp-2); font-size: var(--fs-micro); }
+.sys-toc-mobile { display: none; }
+.sys-favourites { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+.sys-favourites a { color: var(--ink); text-decoration: none; }
+.sys-favourites a span { background: color-mix(in srgb, var(--compendium) 45%, transparent); padding: 0 var(--sp-1); box-decoration-break: clone; }
+.entity-page[data-entity-type="system"] .sys-hero2__title { font-size: var(--fs-hero); }
+.entity-page[data-entity-type="system"] .sys-hero2__facts { margin: var(--sp-5) 0 0; }
+.sys-toc-sheet h2 { padding-right: var(--sp-7); font-family: var(--font-ui); font-size: var(--fs-h3); text-transform: uppercase; }
+.sys-toc-sheet .sys-toc__items > button { border-bottom: 1px solid var(--line); }
+.sys-toc-sheet { --acc: var(--acid); }
+.sys-hero2__thumb .entity-image-slot > div { max-width: none !important; }
+.sys-hero2__thumb .entity-image-slot > strong { display: none; }
+.sys-hero2__thumb .image-hint { font-family: var(--font-mono); text-transform: uppercase; }
+@media (max-width: 700px) {
+  .sys-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
+  .sys-toc { display: none; }
+  .sys-toc-mobile { display: block; }
+  .sys-toc-mobile > button { display: flex; justify-content: space-between; gap: var(--sp-3); width: 100%; height: auto; min-height: 44px; text-align: left; }
+  .sys-toc-mobile > button span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .sys-toc-mobile > button span:last-child { flex-shrink: 0; }
+  .sys-toc-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: none; max-height: 90dvh; margin: 0; overflow-y: auto; }
+  .sys-toc-sheet .sys-toc__items { margin-bottom: var(--sp-5); }
+  .entity-page[data-entity-type="system"] .sys-hero2__title { font-size: var(--fs-h1); }
+}
 .entity-page[data-entity-type="system"] > .d-tabbed { min-width: 0; }
 .entity-page[data-entity-type="system"] > .d-tabbed > .d-sheet { container-type: inline-size; }
 .entity-page[data-entity-type="system"] .entity-type-chip { display: none; }
