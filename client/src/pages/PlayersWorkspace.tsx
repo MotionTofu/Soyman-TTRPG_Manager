@@ -9,12 +9,23 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
-import { PlayerGroupMembersModal } from "../components/PlayerGroupMembersModal";
+import { GroupMembersModal, removeFromGroupItem } from "../components/GroupMembersModal";
 import { SectionBackground } from "../components/SectionBackground";
 import { ListPage } from "../components/ListPage";
-import { PlayerListCard } from "../components/players/PlayerListCard";
+import { RegAddRow, RegAddTile, RegArchive, RegMeta, RegRow, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
+import type { ContextMenuItem } from "../components/ContextMenu";
+import { MentionText } from "../components/mentions/MentionText";
+import { formatNearestDate } from "../nearestDate";
 import type { Player, PlayerGroup } from "../types";
 import "./players-d.css";
+
+// «Список» (Q8): Игрок · Заметка · Ближайшая игра; на телефоне — игра (Q15).
+const PLAYER_COLUMNS: RegColumn[] = [
+  { label: "Игрок", width: "minmax(0, 1fr)" },
+  { label: "Заметка", width: "minmax(0, 1.6fr)" },
+  { label: "Ближайшая игра", width: "minmax(130px, 0.8fr)", phone: true },
+];
+const nearest = (p: Player) => (p.next_planned_date ? formatNearestDate(p.next_planned_date) : "не запланирована");
 
 const NO_PLAYERS: Player[] = [];
 const NO_GROUPS: PlayerGroup[] = [];
@@ -47,7 +58,7 @@ export function PlayersWorkspace() {
   });
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"tiles" | "rows">("tiles");
+  const [view, setView] = useListView("players");
   const [saving, setSaving] = useState(false);
 
   // Группы правит каркас списка (ListPage) — после его правки перечитываются
@@ -67,13 +78,15 @@ export function PlayersWorkspace() {
       const groupId = Number(activeTab);
       return players.filter((p) => groupMemberships[p.id]?.includes(groupId));
     })();
-    if (!qq) return byTab;
-    return byTab.filter(
-      (p) =>
-        p.name.toLowerCase().includes(qq) ||
-        (p.notes ?? "").toLowerCase().includes(qq)
-    );
+    const found = qq
+      ? byTab.filter((p) => p.name.toLowerCase().includes(qq) || (p.notes ?? "").toLowerCase().includes(qq))
+      : byTab;
+    // Порядок А–Я (Q16).
+    return [...found].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   })();
+  const currentGroup = activeTab !== null && activeTab !== "ungrouped" ? groups.find((g) => g.id === Number(activeTab)) : undefined;
+  const addToGroup = currentGroup ? () => setGroupMembersModal({ groupId: currentGroup.id, groupName: currentGroup.name }) : undefined;
+  const menuFor = (p: Player): ContextMenuItem[] => (currentGroup ? [removeFromGroupItem("player", currentGroup, p.id, run)] : []);
 
   async function create() {
     if (!name.trim() || saving) return;
@@ -91,13 +104,12 @@ export function PlayersWorkspace() {
   }
 
   return (
-    <div className="stack players-list-d">
+    <div className="stack">
       <SectionBackground />
       <ListPage
         ds
-        groupsAbove
         allLabel="Все игроки"
-        ungroupedLabel="Без группы"
+        ungroupedLabel="Вне групп"
         headingSection="players"
         title="Игроки"
         groups={groups.map((g, index) => ({ id: String(g.id), label: g.name, count: memberQueries[index]?.data?.length }))}
@@ -117,12 +129,8 @@ export function PlayersWorkspace() {
         onSearch={setQ}
         searchPlaceholder="Поиск по имени, заметкам…"
         searchLabel="Поиск по игрокам"
-        toolbarExtra={
-          <div className="d-seg players-list-d__view" role="group" aria-label="Вид списка игроков">
-            <button type="button" className={view === "tiles" ? "active" : ""} aria-pressed={view === "tiles"} onClick={() => setView("tiles")}>Плитки</button>
-            <button type="button" className={view === "rows" ? "active" : ""} aria-pressed={view === "rows"} onClick={() => setView("rows")}>Список</button>
-          </div>
-        }
+        view={view}
+        onViewChange={setView}
         filteredCount={filteredPlayers.length}
         totalCount={players.length}
         onResetSearch={() => setQ("")}
@@ -135,19 +143,41 @@ export function PlayersWorkspace() {
         )}
 
         {loading ? (
-          <ListSkeleton variant="tiles" tilesClassName="players-tiles" label="Загрузка игроков" />
+          <ListSkeleton variant="tiles" label="Загрузка игроков" />
         ) : (
-          <div className="players-workspace">
-            <div className={`players-d-items players-d-items--${view}`}>
-              {filteredPlayers.map((p) => <PlayerListCard key={p.id} player={p} />)}
-            </div>
-            {activeTab !== null && activeTab !== "ungrouped" && (
-              <button type="button" className="d-btn players-list-d__members" onClick={() => {
-                const group = groups.find((g) => g.id === Number(activeTab));
-                if (group) setGroupMembersModal({ groupId: group.id, groupName: group.name });
-              }}>Изменить состав группы</button>
+          <>
+            {view === "tiles" ? (
+              (filteredPlayers.length > 0 || addToGroup) && (
+                <RegTiles>
+                  {filteredPlayers.map((p) => (
+                    <RegTile key={p.id} entity={{ type: "player", id: p.id, name: p.name }} to={`/players/${p.id}`}
+                      image={p.thumbnail_image_url ?? p.avatar_image_url} menu={menuFor(p)}
+                      placeholder={<span className="players-d-glyph" aria-hidden="true" />}>
+                      {p.notes ? <div className="reg-tile__text"><MentionText text={p.notes} /></div> : null}
+                      <RegMeta none={!p.next_planned_date}>{p.next_planned_date ? formatNearestDate(p.next_planned_date) : "игра не запланирована"}</RegMeta>
+                    </RegTile>
+                  ))}
+                  {addToGroup && <RegAddTile label="+ Игрока в группу" onClick={addToGroup} />}
+                </RegTiles>
+              )
+            ) : (
+              <>
+                {filteredPlayers.length > 0 && (
+                  <RegTable columns={PLAYER_COLUMNS} label="Игроки">
+                    {filteredPlayers.map((p) => (
+                      <RegRow key={p.id} entity={{ type: "player", id: p.id, name: p.name }} to={`/players/${p.id}`}
+                        columns={PLAYER_COLUMNS} menu={menuFor(p)}
+                        cells={[
+                          p.notes ? <MentionText text={p.notes} /> : <span className="is-none">—</span>,
+                          <span className={`d-mono${p.next_planned_date ? "" : " is-none"}`}>{nearest(p)}</span>,
+                        ]} />
+                    ))}
+                  </RegTable>
+                )}
+                {addToGroup && <RegAddRow label="+ Игрока в группу" onClick={addToGroup} />}
+              </>
             )}
-            {players.length > 0 && filteredPlayers.length === 0 && (
+            {players.length > 0 && filteredPlayers.length === 0 && !addToGroup && (
               <EmptyState kind="search"
                 title="Ничего не найдено"
                 hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
@@ -159,7 +189,7 @@ export function PlayersWorkspace() {
                 }
               />
             )}
-          </div>
+          </>
         )}
 
         {!loading && !loadError && players.length === 0 && (
@@ -173,6 +203,7 @@ export function PlayersWorkspace() {
             }
           />
         )}
+        <RegArchive type="player" basePath="/players" affects={[{ kind: "player" }]} />
       </ListPage>
 
       {creating && (
@@ -198,7 +229,8 @@ export function PlayersWorkspace() {
       )}
 
       {groupMembersModal && (
-        <PlayerGroupMembersModal
+        <GroupMembersModal
+          kind="player"
           groupId={groupMembersModal.groupId}
           groupName={groupMembersModal.groupName}
           onClose={() => setGroupMembersModal(null)}

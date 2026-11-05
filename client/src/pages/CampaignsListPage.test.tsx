@@ -78,4 +78,19 @@ describe("список кампаний в Д", () => {
       expect(opened).not.toHaveBeenCalled();
     } finally { window.removeEventListener(ENTITY_MENU_EVENT, opened); }
   });
+  it("«Список» — таблица с колонками, разделы по статусу; выбор вида помнится", () => {
+    localStorage.removeItem("soyman.listView.campaigns");
+    show();
+    expect(screen.getAllByRole("table")).toHaveLength(2); // на паузе и завершённые — строками и в «Плитках» (Q10)
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Список" }));
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
+    expect(screen.getAllByRole("table").map((t) => t.getAttribute("aria-label"))).toEqual(["Активные", "На паузе", "Завершённые"]);
+    expect(screen.getAllByRole("columnheader", { name: "Сыграно" })).toHaveLength(3);
+    expect(localStorage.getItem("soyman.listView.campaigns")).toBe("rows");
+    cleanup();
+    show();
+    expect(screen.getByRole("button", { name: "Список" }).getAttribute("aria-pressed")).toBe("true");
+    localStorage.removeItem("soyman.listView.campaigns");
+  });
 });

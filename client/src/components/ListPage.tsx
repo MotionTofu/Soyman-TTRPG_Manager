@@ -40,6 +40,7 @@ import { ContextMenu } from "./ContextMenu";
 import { PageHead } from "./PageFrame";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import type { NavIconName } from "./NavIcons";
+import type { ListView } from "./ListRegistry";
 
 export interface ListPageGroup {
   /** Ключ вкладки. У групп владельца — числовой id строкой. */
@@ -100,12 +101,16 @@ export interface ListPageProps {
   hideToolbar?: boolean;
   /** Содержимое: сетка плиток, строки, рабочий экран — что угодно (Q50). */
   children: ReactNode;
-  /** Вид «Д» (макет Camp-List): кислотная кнопка, лист в рамке тушью, группы
-   *  сегментом с «+ Группа», поиском и счётчиком справа.
-   *  Пока только у «Кампаний»: остальные списки переводят свои блоки. */
+  /** Вид «Д», шаблон «Реестр» (доски Reg-*, гриллинг 2026-11-05): кислотная
+   *  кнопка, лист в рамке тушью; внутри строка групп сегментом с «+ Группа»,
+   *  под ней поиск · «Сбросить» · «N / M» · «Плитки | Список», ниже — строка
+   *  фильтров страницы. Кампании, Сеттинги, Игроки, Системы. */
   ds?: boolean;
-  /** Полоса групп над рамкой, поиск и вид внутри (принятые макеты игроков). */
-  groupsAbove?: boolean;
+  /** Переключатель «Плитки | Список» (Q6). Нет — переключателя нет. */
+  view?: ListView;
+  onViewChange?: (view: ListView) => void;
+  /** Строка фильтров под поиском (Q17): жанры Сеттингов. */
+  filters?: ReactNode;
 }
 
 type GroupMenu =
@@ -142,7 +147,9 @@ export function ListPage({
   hideToolbar,
   children,
   ds = false,
-  groupsAbove = false,
+  view,
+  onViewChange,
+  filters,
 }: ListPageProps) {
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -217,9 +224,8 @@ export function ListPage({
   const tabs: ListPageGroup[] = [
     ...(allLabel != null ? [{ id: "all", label: allLabel, count: ds ? totalCount : undefined }] : []),
     ...(extraTabs ?? []).map((t) => ({ id: t.id, label: t.label, count: t.count })),
-    ...(groupsAbove && showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
     ...groups,
-    ...(!groupsAbove && showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
+    ...(showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
   ];
   const current = activeGroup ?? "all";
 
@@ -234,11 +240,12 @@ export function ListPage({
 
   const resetVisible = showReset ?? search.trim() !== "";
 
-  function dBar(part: "all" | "groups" | "toolbar" = "all") {
+  function dGroups() {
+    if (tabs.length === 0 && !groupsEndpoint) return null;
     return (
       <div className="list-page__dbar">
-        {part !== "toolbar" && tabs.length > 0 && (
-          <div className={groupsAbove ? "tabs d-tabs" : "d-seg d-seg--scroll"} role="tablist" aria-label={typeof title === "string" ? title : undefined}>
+        {tabs.length > 0 && (
+          <div className="d-seg d-seg--scroll" role="tablist" aria-label={typeof title === "string" ? title : undefined}>
             {tabs.map((t) => (
               <button
                 key={t.id}
@@ -273,7 +280,7 @@ export function ListPage({
             ))}
           </div>
         )}
-        {part !== "toolbar" && groupsEndpoint &&
+        {groupsEndpoint &&
           (creatingGroup ? (
             <div className="list-page__group-new">
               <input
@@ -300,16 +307,29 @@ export function ListPage({
               + Группа
             </button>
           ))}
-        {part !== "groups" && !hideToolbar && <>
+      </div>
+    );
+  }
+
+  function dTools() {
+    return (
+      <div className="list-page__dbar list-page__tools">
+        {!hideToolbar && <>
           <input type="search" className="d-input list-page__search"
             placeholder={searchPlaceholder ?? "Поиск…"} aria-label={searchLabel ?? "Поиск"}
             value={search} onChange={(event) => onSearch(event.target.value)} />
           {toolbarExtra}
           {resetVisible && <button type="button" className="d-btn d-btn--sm d-btn--quiet" onClick={onResetSearch} title={resetTitle ?? "Сбросить поиск"}>Сбросить</button>}
         </>}
-        {part !== "groups" && <span className="d-mono list-page__count" aria-live="polite">
+        <span className="d-mono list-page__count" aria-live="polite">
           {filteredCount} / {totalCount}
-        </span>}
+        </span>
+        {view && onViewChange && (
+          <div className="d-seg list-page__view" role="group" aria-label="Вид списка">
+            <button type="button" className={view === "tiles" ? "active" : ""} aria-pressed={view === "tiles"} onClick={() => onViewChange("tiles")}>Плитки</button>
+            <button type="button" className={view === "rows" ? "active" : ""} aria-pressed={view === "rows"} onClick={() => onViewChange("rows")}>Список</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -333,8 +353,16 @@ export function ListPage({
         }
       />
 
-      {ds && groupsAbove && dBar("groups")}
-      {ds && <div className="list-page__sheet">{dBar(groupsAbove ? "toolbar" : "all")}<div className="list-page__content">{children}</div></div>}
+      {ds && (
+        <div className="list-page__sheet">
+          <div className="list-page__bars">
+            {dGroups()}
+            {dTools()}
+            {filters && <div className="list-page__filters">{filters}</div>}
+          </div>
+          <div className="list-page__content">{children}</div>
+        </div>
+      )}
 
       {!ds && tabs.length > 0 && (
         <div className="tabs" role="tablist" aria-label={typeof title === "string" ? title : undefined}>

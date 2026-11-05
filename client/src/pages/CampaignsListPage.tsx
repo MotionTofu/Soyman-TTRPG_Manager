@@ -5,21 +5,16 @@ import { invalidateAffects } from "../data/entities";
 import { campaignGroupAffects, campaignFieldsAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
-import { EntityMenuButton } from "../components/PageContextMenu";
-import { entityMark, openEntityMenu } from "../pageMenu";
 import type { ContextMenuItem } from "../components/ContextMenu";
 import { usePrompt } from "../hooks/useConfirm";
-import { Link } from "react-router-dom";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
-import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
+import { GroupMembersModal, removeFromGroupItem } from "../components/GroupMembersModal";
 import { SectionBackground } from "../components/SectionBackground";
-import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
-import { useAuthenticatedFileUrl } from "../utils/fileUrl";
+import { RegAddRow, RegAddTile, RegArchive, RegMeta, RegRow, RegSection, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
 import { formatNearestDate } from "../nearestDate";
 import { parseDateKey } from "../utils/date";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
-import "./campaigns-list.css";
 
 // Две вкладки, которых нет у других списков: не группы, а взгляд на список по
 // `campaigns.role` — «эту веду» против «в этой играю». Ключи совпадают с теми,
@@ -39,12 +34,15 @@ export function CampaignsListPage() {
   const client = useQueryClient();
   const run = useAction();
   const [promptDialog, prompt] = usePrompt();
+  const [view, setView] = useListView("campaigns");
   function menuFor(campaign: Campaign): ContextMenuItem[] {
-    return campaign.folder_missing ? [] : [{ label: "Переименовать", onClick: async () => {
+    const items: ContextMenuItem[] = campaign.folder_missing ? [] : [{ label: "Переименовать", onClick: async () => {
       const name = (await prompt({ title: "Переименовать кампанию", message: "Название", defaultValue: campaign.name, confirmLabel: "Сохранить" }))?.trim();
       if (!name || name === campaign.name) return;
       await run(() => write.put(campaignPaths.detail(campaign.id), { name }), { affects: campaignFieldsAffects(campaign.id), retry: false });
     } }];
+    if (currentGroup) items.push(removeFromGroupItem("campaign", currentGroup, campaign.id, run));
+    return items;
   }
   const campaignsState = useResource<Campaign[]>(campaignPaths.list());
   const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
@@ -101,12 +99,17 @@ export function CampaignsListPage() {
         (c.setting_name ?? "").toLowerCase().includes(qq)
     );
   }, [campaigns, activeTab, groupMemberIds, memberQueries, allMembersKnown, q]);
-  const active = filtered.filter((c) => c.status !== "paused" && c.status !== "completed");
-  const paused = filtered.filter((c) => c.status === "paused");
-  // Завершённые — свежие сверху, по последней игре.
-  const completed = filtered
-    .filter((c) => c.status === "completed")
-    .sort((a, b) => (b.last_played_date ?? "").localeCompare(a.last_played_date ?? ""));
+  // Порядок (Q16): активные — по ближайшей игре (без даты — в конце, по
+  // имени), на паузе и завершённые — свежие сверху по последней игре.
+  const byName = (a: Campaign, b: Campaign) => a.name.localeCompare(b.name, "ru");
+  const byLast = (a: Campaign, b: Campaign) => (b.last_played_date ?? "").localeCompare(a.last_played_date ?? "") || byName(a, b);
+  const active = filtered
+    .filter((c) => c.status !== "paused" && c.status !== "completed")
+    .sort((a, b) => (a.next_planned_date ?? "\uffff").localeCompare(b.next_planned_date ?? "\uffff") || byName(a, b));
+  const paused = filtered.filter((c) => c.status === "paused").sort(byLast);
+  const completed = filtered.filter((c) => c.status === "completed").sort(byLast);
+  const currentGroup = activeTab !== null && /^\d+$/.test(activeTab) ? groups.find((g) => g.id === Number(activeTab)) : undefined;
+  const addToGroup = currentGroup ? () => setGroupMembersModal({ groupId: currentGroup.id, groupName: currentGroup.name }) : undefined;
 
 
   return (
@@ -128,11 +131,13 @@ export function CampaignsListPage() {
         onGroupChange={setActiveTab}
         search={q}
         onSearch={setQ}
-        searchPlaceholder="Поиск по имени, системе, сеттингу…"
+        searchPlaceholder="Поиск по названию, системе, сеттингу…"
         searchLabel="Поиск по кампаниям"
         filteredCount={filtered.length}
         totalCount={campaigns.length}
         onResetSearch={() => setQ("")}
+        view={view}
+        onViewChange={setView}
       >
         {loadError && (
           <LoadErrorCard
@@ -143,41 +148,32 @@ export function CampaignsListPage() {
 
         {loading ? (
           <ListSkeleton variant="tiles" label="Загрузка кампаний" />
+        ) : view === "tiles" ? (
+          <>
+            {/* Q10: в «Плитках» активные — плитками, на паузе и завершённые —
+                строками. Пустой раздел не рисуется (кроме открытой группы:
+                в ней последняя плитка — «+ Кампанию в группу»). */}
+            {(active.length > 0 || addToGroup) && (
+              <RegSection title="Активные" count={active.length}>
+                <RegTiles>
+                  {active.map((c) => <CampaignTile key={c.id} campaign={c} menu={menuFor(c)} />)}
+                  {addToGroup && <RegAddTile label="+ Кампанию в группу" onClick={addToGroup} />}
+                </RegTiles>
+              </RegSection>
+            )}
+            {paused.length > 0 && <CampaignTable title="На паузе" list={paused} menuFor={menuFor} />}
+            {completed.length > 0 && <CampaignTable title="Завершённые" list={completed} menuFor={menuFor} />}
+          </>
         ) : (
           <>
-            {/* Макет Camp-List: активные — плитками с обложкой, на паузе и
-                завершённые — строками. Пустой раздел не рисуется. */}
-            {active.length > 0 && (
-              <section>
-                <div className="d-gh">
-                  <h3 className="d-plate">Активные</h3>
-                  <span className="d-note">{active.length}</span>
-                </div>
-                <div className="campaign-dtiles">
-                  {active.map((c) => (
-                    <CampaignDTile key={c.id} campaign={c} menuFor={menuFor} />
-                  ))}
-                </div>
-              </section>
-            )}
-            {paused.length > 0 && <CampaignRows title="На паузе" list={paused} menuFor={menuFor} />}
-            {completed.length > 0 && <CampaignRows title="Завершённые" list={completed} menuFor={menuFor} />}
-            {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
-              <button
-                type="button"
-                className="d-btn d-btn--sm campaign-dtiles__add"
-                onClick={() => {
-                  const g = groups.find((gr) => gr.id === Number(activeTab));
-                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-                }}
-              >
-                + Кампанию в группу
-              </button>
-            )}
+            {active.length > 0 && <CampaignTable title="Активные" list={active} menuFor={menuFor} />}
+            {paused.length > 0 && <CampaignTable title="На паузе" list={paused} menuFor={menuFor} />}
+            {completed.length > 0 && <CampaignTable title="Завершённые" list={completed} menuFor={menuFor} />}
+            {addToGroup && <RegAddRow label="+ Кампанию в группу" onClick={addToGroup} />}
           </>
         )}
 
-      {!loading && !loadError && filtered.length === 0 && campaigns.length > 0 && (
+      {!loading && !loadError && filtered.length === 0 && campaigns.length > 0 && !addToGroup && (
         <EmptyState kind="search"
           title="Ничего не найдено"
           hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет кампаний в этой группе."}
@@ -202,6 +198,7 @@ export function CampaignsListPage() {
         />
       )}
 
+      <RegArchive type="campaign" basePath="/campaigns" affects={[{ kind: "campaign" }]} />
       </ListPage>
 
       {creating && (
@@ -213,7 +210,8 @@ export function CampaignsListPage() {
       )}
 
       {groupMembersModal && (
-        <CampaignGroupMembersModal
+        <GroupMembersModal
+          kind="campaign"
           groupId={groupMembersModal.groupId}
           groupName={groupMembersModal.groupName}
           onClose={() => setGroupMembersModal(null)}
@@ -225,52 +223,65 @@ export function CampaignsListPage() {
 }
 
 const monthYear = new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" });
+const monthOf = (key: string) => monthYear.format(parseDateKey(key)).replace(" г.", "");
 
-// Плитка «Д»: обложка с плашкой системы, имя Oswald, ближайшая игра
-// машинописью. Обложка — как у CampaignCoverTile (тот остаётся на Главной).
-function CampaignDTile({ campaign: c, menuFor }: { campaign: Campaign; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
-  const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
-  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
-  const authBlob = useAuthenticatedFileUrl(imageUrl);
-  const bg = imageUrl?.startsWith("/files/") ? (authBlob ? `url("${authBlob}")` : undefined) : safeBackgroundImage(imageUrl);
-  const next = c.next_planned_date
-    ? `${formatNearestDate(c.next_planned_date)} · сессия №${(c.held_sessions_count ?? 0) + 1}`
-    : "нет запланированных";
+// Плитка: обложка с плашкой системы, ближайшая игра машинописью.
+function CampaignTile({ campaign: c, menu }: { campaign: Campaign; menu: ContextMenuItem[] }) {
   return (
-    <article className="campaign-dtile" {...entityMark("campaign", c.id, c.name)} onContextMenu={(event) => { if (event.shiftKey) return; event.preventDefault(); openEntityMenu({ type: "campaign", id: c.id, name: c.name }, event.clientX, event.clientY, menuFor(c)); }}>
-    <Link to={`/campaigns/${c.id}`} className="campaign-dtile__link" title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}>
-      {/* инлайн-стиль намеренно — обложка кампании: адрес картинки приходит из данных */}
-      <span className={`campaign-dtile__cover${bg ? "" : " is-empty"}`} style={bg ? { backgroundImage: bg } : undefined}>
-        {c.system_name && <span className="d-plate">{c.system_name}</span>}
-      </span>
-      <span className="campaign-dtile__body">
-        <b>{c.name}</b>
-        <span className="d-mono">{next}</span>
-      </span>
-    </Link>
-    <EntityMenuButton entity={{ type: "campaign", id: c.id, name: c.name }} local={menuFor(c)} />
-    </article>
+    <RegTile
+      entity={{ type: "campaign", id: c.id, name: c.name }}
+      to={`/campaigns/${c.id}`}
+      image={c.thumbnail_image_url ?? c.background_image_url}
+      plate={c.system_name}
+      menu={menu}
+      title={c.folder_missing ? "Папки кампании нет в хранилище" : undefined}
+    >
+      <RegMeta none={!c.next_planned_date}>
+        {c.next_planned_date ? `${formatNearestDate(c.next_planned_date)} · сессия №${(c.held_sessions_count ?? 0) + 1}` : "нет запланированных"}
+      </RegMeta>
+    </RegTile>
   );
 }
 
-function CampaignRows({ title, list, menuFor }: { title: string; list: Campaign[]; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
+// «Список» (Q8): Название · Система · Сеттинг · Сыграно · Ближайшая/последняя.
+// На телефоне — название, дата и ⋯ (Q15).
+const CAMPAIGN_COLUMNS: RegColumn[] = [
+  { label: "Название", width: "minmax(0, 1.6fr)" },
+  { label: "Система", width: "minmax(0, 0.9fr)" },
+  { label: "Сеттинг", width: "minmax(0, 1fr)" },
+  { label: "Сыграно", width: "80px" },
+  { label: "Ближайшая · последняя", width: "minmax(130px, 0.9fr)", phone: true },
+];
+
+function whenCell(c: Campaign) {
+  if (c.status !== "paused" && c.status !== "completed") {
+    return c.next_planned_date
+      ? <span className="d-mono">{formatNearestDate(c.next_planned_date)} · №{(c.held_sessions_count ?? 0) + 1}</span>
+      : <span className="d-mono is-none">не запланирована</span>;
+  }
+  return c.last_played_date ? <span className="d-mono">{monthOf(c.last_played_date)}</span> : <span className="d-mono is-none">—</span>;
+}
+
+function CampaignTable({ title, list, menuFor }: { title: string; list: Campaign[]; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
   return (
-    <section>
-      <div className="d-gh">
-        <h3 className="d-plate">{title}</h3>
-        <span className="d-note">{list.length}</span>
-      </div>
-      <ul className="campaign-drows">
+    <RegSection title={title} count={list.length}>
+      <RegTable columns={CAMPAIGN_COLUMNS} label={title}>
         {list.map((c) => (
-          <li key={c.id} {...entityMark("campaign", c.id, c.name)} onContextMenu={(event) => { if (event.shiftKey) return; event.preventDefault(); openEntityMenu({ type: "campaign", id: c.id, name: c.name }, event.clientX, event.clientY, menuFor(c)); }}>
-            <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
-            <span className="d-mono">{c.system_name ?? "—"}</span>
-            <span className="d-mono">{c.type === "oneshot" ? "ваншот" : `сыграно ${c.held_sessions_count ?? 0}`}</span>
-            <span className="d-mono">{c.last_played_date ? monthYear.format(parseDateKey(c.last_played_date)).replace(" г.", "") : ""}</span>
-            <EntityMenuButton entity={{ type: "campaign", id: c.id, name: c.name }} local={menuFor(c)} />
-          </li>
+          <RegRow
+            key={c.id}
+            entity={{ type: "campaign", id: c.id, name: c.name }}
+            to={`/campaigns/${c.id}`}
+            columns={CAMPAIGN_COLUMNS}
+            menu={menuFor(c)}
+            cells={[
+              <span className="d-mono">{c.system_name ?? "—"}</span>,
+              c.setting_name ?? "—",
+              <span className="d-mono">{c.type === "oneshot" ? "ваншот" : c.held_sessions_count ?? 0}</span>,
+              whenCell(c),
+            ]}
+          />
         ))}
-      </ul>
-    </section>
+      </RegTable>
+    </RegSection>
   );
 }

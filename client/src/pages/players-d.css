@@ -1,24 +1,4 @@
-/* Игроки «Д»: принятые Players-List / Profile / Dossier, 2026-11-03. */
-.players-list-d { position: relative; }
-.players-list-d .list-page { gap: 0; }
-.players-list-d .page-head { margin-bottom: var(--sp-7); }
-.players-list-d .list-page > .list-page__dbar { margin-bottom: var(--sp-3); }
-.players-list-d .list-page__sheet { outline: none; padding: var(--sp-6); gap: var(--sp-5); }
-.players-list-d .list-page__search { flex: 1; max-width: none; }
-.players-list-d .list-page__count { white-space: nowrap; }
-.players-list-d .players-workspace { display: flex; flex-direction: column; gap: var(--sp-6); }
-.players-d-items { min-width: 0; }
-.players-d-items--tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5); }
-.player-d-card { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); }
-.player-d-card__body { flex: 1; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5); }
-.player-d-card h2 { margin: 0; font: 600 var(--fs-h2)/1.2 var(--font-display); overflow-wrap: anywhere; }
-.player-d-card h2 a { color: var(--ink); text-decoration: none; }
-.player-d-card h2 a::after { content: ""; position: absolute; inset: 0; }
-.player-d-card:focus-within { outline: var(--edge-width) solid var(--ink); }
-.player-d-card__note { font-size: var(--fs-data); line-height: 1.5; overflow-wrap: anywhere; }
-.player-d-card__note a { position: relative; z-index: 2; }
-.player-d-card__date { margin-top: auto; padding-top: var(--sp-4); font: var(--fs-micro)/1.5 var(--font-mono); color: var(--muted); }
-.player-d-card > .entity-dots { position: absolute; z-index: 3; right: var(--sp-3); top: var(--sp-3); }
+/* Игроки «Д»: Profile / Dossier (2026-11-03). Список — шаблон «Реестр» (ListRegistry). */
 .player-d-portrait { display: block; position: relative; overflow: hidden; width: 100%; height: 160px; background: var(--ph); color: var(--muted); }
 .player-d-portrait img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .player-d-placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
@@ -27,14 +7,6 @@
 .player-d-portrait--character .player-d-placeholder::before { mask-image: var(--skin-glyph-character); }
 .player-d-placeholder > span { position: absolute; left: var(--sp-5); bottom: var(--sp-3); font-family: var(--font-mono); }
 [data-theme-mode="dark"] .player-d-placeholder::after { display: none; }
-.players-d-items--rows { display: flex; flex-direction: column; }
-.players-d-items--rows .player-d-card { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--sp-5); align-items: start; border: 0; border-top: 1px solid var(--line); padding: var(--sp-5) 0; }
-.players-d-items--rows .player-d-card__body { padding: 0; }
-.players-d-items--rows .player-d-portrait { width: 56px; height: 56px; border: 1px solid var(--line); }
-.players-d-items--rows .player-d-placeholder::before { width: 32px; height: 32px; }
-.players-d-items--rows .player-d-placeholder > span { display: none; }
-.players-d-items--rows .player-d-card > .entity-dots { position: relative; right: auto; top: auto; }
-.players-list-d__members { align-self: flex-start; }
 
 /* Паспорт без дополнительной рамки. Единственный внутренний фокус — персонажи. */
 .entity-page--paper:has(.player-profile) > .paper-sheet { padding: var(--sp-6); outline: none; }
@@ -96,24 +68,12 @@ body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) .sb-
 body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) .sb-prop-label { font-family: var(--font-ui); font-size: var(--fs-label); text-transform: uppercase; }
 
 @media (min-width: 701px) {
-  .player-d-card > .entity-dots, .player-char-card > .entity-dots { opacity: 0; }
   :is(.player-d-card, .player-char-card):is(:hover, :focus-within) > .entity-dots { opacity: 1; }
 }
 @media (max-width: 1100px) {
-  .players-d-items--tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .player-profile.dossier { grid-template-columns: 180px minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
-  .players-list-d .list-page__sheet { padding: var(--sp-5); }
-  .players-list-d .list-page__dbar { gap: var(--sp-4); }
-  .players-list-d .list-page > .list-page__dbar { flex-wrap: nowrap; }
-  .players-list-d .list-page > .list-page__dbar .tabs { min-width: 0; flex: 1; scrollbar-width: none; }
-  .players-list-d .list-page__search { flex-basis: 100%; }
-  .players-d-items--tiles { gap: var(--sp-4); }
-  .players-d-items--tiles .player-d-portrait { height: 120px; }
-  .player-d-card h2 { font-size: var(--fs-h2); }
-  .player-d-card__body { padding: var(--sp-4); }
-  .player-d-card__date { font-size: var(--fs-micro); }
   .entity-page--paper:has(.player-profile) > .paper-sheet { padding: var(--sp-5); }
   .player-profile.dossier { grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
   .player-profile .dossier__aside { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: var(--sp-4); border: 0; border-bottom: 1px solid var(--line); padding: 0 0 var(--sp-5); }
@@ -147,8 +107,6 @@ body.sheet-fullscreen .dnd-personality-grid:has(~ .character-dossier-extra) .sb-
 .player-profile__interest > .card:not(:has(textarea)) > h3 { grid-column: 1; grid-row: 1; align-self: center; }
 .player-profile__interest > .card:not(:has(textarea)) > .reading-text { grid-column: 1 / -1; grid-row: 2; }
 .player-profile__interest > .card:not(:has(textarea)) > .row { grid-column: 2; grid-row: 1; }
-.players-list-d .list-page > .list-page__dbar .tabs { margin: 0; flex-wrap: nowrap; min-width: 0; }
-.players-list-d .list-page > .list-page__dbar .tabs button { white-space: nowrap; }
 
 /* Вкладка досье занимает спокойный лист; остальные карты сохраняют сплит. */
 body.sheet-fullscreen .dnd-card-frame:has(.dnd-app-dossier-sheet) { padding: var(--sp-7) var(--sp-8); }

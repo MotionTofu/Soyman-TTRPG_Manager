@@ -1,19 +1,37 @@
 import { useEffect, useState } from "react";
 import { useAfterWrite, useResource, write } from "../data/hooks";
-import type { Setting } from "../types";
 import { useAlert } from "../hooks/useConfirm";
+import { Modal } from "./Modal";
+import type { ContextMenuItem } from "./ContextMenu";
+import type { Affect } from "../data/entities";
+import "./list-registry.css";
 
-interface GroupMembersModalProps {
+// Одно окно состава группы на все четыре реестра (Q12 гриллинга 2026-11-05;
+// раньше — четыре копии, различавшиеся адресом и словом). Адреса устроены
+// одинаково: список `/<kind>s`, группы `/<kind>-groups`, состав —
+// `/<kind>-groups/:id/members` с полем `<kind>Ids`.
+export type GroupKind = "campaign" | "setting" | "player" | "system";
+
+const WORDS: Record<GroupKind, { many: string; none: string }> = {
+  campaign: { many: "кампании", none: "Нет кампаний" },
+  setting: { many: "сеттинги", none: "Нет сеттингов" },
+  player: { many: "игроков", none: "Нет игроков" },
+  system: { many: "системы", none: "Нет систем" },
+};
+
+interface Props {
+  kind: GroupKind;
   groupId: number;
   groupName: string;
   onClose: () => void;
-  onUpdated: () => void;
+  onUpdated?: () => void;
 }
 
-export function GroupMembersModal({ groupId, groupName, onClose, onUpdated }: GroupMembersModalProps) {
-  const all = useResource<Setting[]>("/settings");
-  const members = useResource<Setting[]>(`/setting-groups/${groupId}/members`);
-  const allSettings = all.data ?? [];
+export function GroupMembersModal({ kind, groupId, groupName, onClose, onUpdated }: Props) {
+  const groupsPath = `/${kind}-groups`;
+  const all = useResource<{ id: number; name: string }[]>(`/${kind}s`);
+  const members = useResource<{ id: number }[]>(`${groupsPath}/${groupId}/members`);
+  const items = all.data ?? [];
   const loading = all.loading || members.loading;
   // Отметки держатся здесь, чтобы галочка менялась сразу, а не после ответа.
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
@@ -22,34 +40,25 @@ export function GroupMembersModal({ groupId, groupName, onClose, onUpdated }: Gr
   }, [members.data]);
   const [saving, setSaving] = useState(false);
   const afterWrite = useAfterWrite();
-
   const [alertDialog, showAlert] = useAlert();
 
-  async function toggle(settingId: number) {
+  async function toggle(id: number) {
+    const wasIn = memberIds.has(id);
     const next = new Set(memberIds);
-    const wasIn = next.has(settingId);
-    if (wasIn) {
-      next.delete(settingId);
-    } else {
-      next.add(settingId);
-    }
+    if (wasIn) next.delete(id);
+    else next.add(id);
     setMemberIds(next);
-
     setSaving(true);
     try {
-      if (wasIn) {
-        await write.del(`/setting-groups/${groupId}/members?settingIds=${settingId}`);
-      } else {
-        await write.post(`/setting-groups/${groupId}/members`, { settingIds: [settingId] });
-      }
-      afterWrite([{ path: "/setting-groups" }]);
-      onUpdated();
+      if (wasIn) await write.del(`${groupsPath}/${groupId}/members?${kind}Ids=${id}`);
+      else await write.post(`${groupsPath}/${groupId}/members`, { [`${kind}Ids`]: [id] });
+      afterWrite([{ path: groupsPath }]);
+      onUpdated?.();
     } catch (e) {
-      // revert on error
       setMemberIds((prev) => {
         const revert = new Set(prev);
-        if (wasIn) revert.add(settingId);
-        else revert.delete(settingId);
+        if (wasIn) revert.add(id);
+        else revert.delete(id);
         return revert;
       });
       showAlert(String(e instanceof Error ? e.message : e));
@@ -58,50 +67,42 @@ export function GroupMembersModal({ groupId, groupName, onClose, onUpdated }: Gr
     }
   }
 
+  const words = WORDS[kind];
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: "100%" }}>
-        <h3 style={{ marginBottom: 12 }}>{groupName}</h3>
-        <p style={{ color: "var(--muted)", fontSize: "var(--fs-meta)", marginBottom: 12 }}>
-          Отметьте сеттинги, которые входят в группу:
-        </p>
-
-        {loading ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>Загрузка…</div>
-        ) : allSettings.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>Нет сеттингов</div>
-        ) : (
-          <div className="group-members-list" style={{ maxHeight: 400, overflowY: "auto" }}>
-            {allSettings.map((s) => (
-              <label
-                key={s.id}
-                className="group-members-item"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 0",
-                  cursor: "pointer",
-                  opacity: saving ? 0.6 : 1,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={memberIds.has(s.id)}
-                  onChange={() => toggle(s.id)}
-                  disabled={saving}
-                />
-                <span>{s.name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-
-        <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-start" }}>
-          <button onClick={onClose}>Готово</button>
+    <Modal onClose={onClose} ariaLabel={`Состав группы «${groupName}»`} className="group-members-modal">
+      <h2>{groupName}</h2>
+      <p className="muted">Отметьте {words.many}, которые входят в группу:</p>
+      {loading ? (
+        <p className="muted">Загрузка…</p>
+      ) : items.length === 0 ? (
+        <p className="muted">{words.none}</p>
+      ) : (
+        <div className="group-members-list">
+          {items.map((item) => (
+            <label key={item.id} className="group-members-item">
+              <input type="checkbox" className="d-check" checked={memberIds.has(item.id)} onChange={() => void toggle(item.id)} disabled={saving} />
+              <span>{item.name}</span>
+            </label>
+          ))}
         </div>
+      )}
+      <div className="modal-footer row">
+        <button type="button" className="d-btn" onClick={onClose}>Готово</button>
       </div>
       {alertDialog}
-    </div>
+    </Modal>
   );
+}
+
+/** Пункт ⋯ записи в открытой группе (Q12): убрать из неё, не открывая окна состава. */
+export function removeFromGroupItem(
+  kind: GroupKind,
+  group: { id: number; name: string },
+  id: number,
+  run: <R>(action: () => Promise<R>, options: { affects: Affect[] }) => Promise<R | undefined>,
+): ContextMenuItem {
+  return {
+    label: `Убрать из группы «${group.name}»`,
+    onClick: () => void run(() => write.del(`/${kind}-groups/${group.id}/members?${kind}Ids=${id}`).then(() => true), { affects: [{ path: `/${kind}-groups` }] }),
+  };
 }

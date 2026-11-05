@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PageContextMenu } from "../PageContextMenu";
-import { PlayerListCard } from "./PlayerListCard";
+import { RegTile } from "../ListRegistry";
 import { PlayerCharacterCards } from "./PlayerCharacterCards";
 import type { Player, PlayerCharacter } from "../../types";
 
@@ -23,7 +23,7 @@ function setup(children: React.ReactNode) {
 
 describe("карточки игроков подключены к общему меню объекта", () => {
   it("ПКМ по карточке и её ⋯ открывают одно меню игрока, а не страницы", () => {
-    setup(<PlayerListCard player={player} />);
+    setup(<RegTile entity={{ type: "player", id: player.id, name: player.name }} to="/players/7"><div className="reg-tile__text">{player.notes}</div></RegTile>);
     fireEvent.contextMenu(screen.getByText("Расследования"));
     expect(document.querySelector(".context-menu-title")?.textContent).toBe("Белый");
     const fromRightClick = labels();
@@ -46,8 +46,8 @@ describe("карточки игроков подключены к общему �
   });
 
   it("Shift+F10 с имени игрока открывает меню того же игрока", () => {
-    setup(<PlayerListCard player={player} />);
-    screen.getByRole("link", { name: "Игрок Белый" }).focus();
+    setup(<RegTile entity={{ type: "player", id: player.id, name: player.name }} to="/players/7"><div className="reg-tile__text">{player.notes}</div></RegTile>);
+    screen.getByRole("link", { name: "Белый" }).focus();
     fireEvent.keyDown(document, { key: "F10", shiftKey: true });
     expect(document.querySelector(".context-menu-title")?.textContent).toBe("Белый");
   });

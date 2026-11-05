@@ -8,51 +8,36 @@ import { systemGroupAffects, systemPaths } from "../data/systems";
 import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
-import { MentionText } from "../components/mentions/MentionText";
-import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
-import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { ListPage } from "../components/ListPage";
-import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
-import { NavIcon } from "../components/NavIcons";
+import { GroupMembersModal, removeFromGroupItem } from "../components/GroupMembersModal";
 import { SectionBackground } from "../components/SectionBackground";
+import { RegAddRow, RegAddTile, RegArchive, RegMeta, RegRow, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
+import type { ContextMenuItem } from "../components/ContextMenu";
+import { plural } from "../sceneKinds";
 
 import type { System, SystemGroup } from "../types";
 
-function SystemCoverTile({ system: s }: { system: System }) {
-  const rawUrl = s.thumbnail_image_url ?? null;
-  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
-  const authBlob = useAuthenticatedFileUrl(imageUrl);
-  const bg = imageUrl?.startsWith("/files/")
-    ? (authBlob ? `url("${authBlob}")` : undefined)
-    : safeBackgroundImage(imageUrl);
+// Список систем — шаблон «Реестр» (доска Sys-List, гриллинг 2026-11-05, Q13):
+// обложка, плашка кода (у своей — «своя»), «N кампаний · M статей».
 
-  return (
-    <Link to={`/systems/${s.id}`} className="card campaign-tile">
-      <div className="campaign-tile-cover cover-halftone">
-        {bg ? (
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{s.name}</h3>
-      </div>
-      <div className="campaign-tile-meta">
-        <div className="campaign-tile-system">
-          {s.description ? <MentionText text={s.description} /> : "без описания"}
-        </div>
-        {s.imported_at && (
-          <div className="campaign-tile-next">
-            <span className="campaign-tile-next-mark" aria-hidden="true" />
-            <span>импортировано</span>
-          </div>
-        )}
-      </div>
-    </Link>
-  );
-}
+const campaignsOf = (s: System) => {
+  const n = s.campaigns_count ?? 0;
+  return n ? `${n} ${plural(n, "кампания", "кампании", "кампаний")}` : "нет кампаний";
+};
+const entriesOf = (s: System) => {
+  const n = s.entries_count ?? 0;
+  return `${n.toLocaleString("ru")} ${plural(n, "статья", "статьи", "статей")}`;
+};
+/** Первая фраза описания — для строки «Списка». */
+const firstSentence = (text: string) => text.split(/(?<=[.!?…])\s/)[0] ?? "";
+
+// «Список» (Q8): Название · Описание · Кампаний · Своя/импорт; на телефоне — кампании (Q15).
+const SYSTEM_COLUMNS: RegColumn[] = [
+  { label: "Название", width: "minmax(0, 1.1fr)" },
+  { label: "Описание", width: "minmax(0, 2fr)" },
+  { label: "Кампаний", width: "minmax(110px, 0.7fr)", phone: true },
+  { label: "Источник", width: "110px" },
+];
 
 export function SystemsListPage() {
   const client = useQueryClient();
@@ -92,6 +77,7 @@ export function SystemsListPage() {
   }, [groupMembers, systems]);
   const [groupModalGroupId, setGroupModalGroupId] = useState<number | null>(null);
   const [q, setQ] = useState("");
+  const [view, setView] = useListView("systems");
 
   // Группы правит каркас списка (ListPage) мимо слоя — после его правки
   // перечитываются группы и их составы.
@@ -114,6 +100,7 @@ export function SystemsListPage() {
       if (!memberIds) return systems.filter(() => false);
       return systems.filter(s => memberIds.has(s.id));
     })();
+    // Порядок А–Я (Q16) — сервер уже сортирует по имени.
     if (!qq) return byTab;
     return byTab.filter(
       (s) =>
@@ -122,6 +109,9 @@ export function SystemsListPage() {
         (s.description ?? "").toLowerCase().includes(qq)
     );
   }, [systems, activeTab, groupMembers, ungroupedIds, q]);
+  const currentGroup = activeTab !== null && activeTab !== "ungrouped" ? groups.find((g) => g.id === Number(activeTab)) : undefined;
+  const addToGroup = currentGroup ? () => setGroupModalGroupId(currentGroup.id) : undefined;
+  const menuFor = (s: System): ContextMenuItem[] => (currentGroup ? [removeFromGroupItem("system", currentGroup, s.id, run)] : []);
 
   async function create() {
     if (!name.trim()) return;
@@ -141,9 +131,11 @@ export function SystemsListPage() {
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
       <ListPage
+        ds
         headingSection="systems"
         title="Системы"
-        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
+        actions={<Link to="/import-system" className="d-btn">Импорт системы</Link>}
+        groups={groups.map((g, i) => ({ id: String(g.id), label: g.name, count: memberQueries[i]?.data?.length }))}
         groupsEndpoint="/system-groups"
         groupsDeleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
         onGroupsChanged={refreshGroups}
@@ -158,6 +150,8 @@ export function SystemsListPage() {
         filteredCount={filteredSystems.length}
         totalCount={systems.length}
         onResetSearch={() => setQ("")}
+        view={view}
+        onViewChange={setView}
       >
         {loadError && (
           <LoadErrorCard
@@ -168,34 +162,40 @@ export function SystemsListPage() {
 
         {loading ? (
           <ListSkeleton variant="tiles" label="Загрузка систем" />
+        ) : view === "tiles" ? (
+          (filteredSystems.length > 0 || addToGroup) && (
+            <RegTiles>
+              {filteredSystems.map((s) => (
+                <RegTile key={s.id} entity={{ type: "system", id: s.id, name: s.name }} to={`/systems/${s.id}`}
+                  image={s.thumbnail_image_url} plate={s.code || (s.imported_at ? null : "своя")} menu={menuFor(s)}>
+                  <RegMeta none={!s.campaigns_count}>
+                    <span className="reg-nowrap">{campaignsOf(s)}</span> · <span className="reg-nowrap">{entriesOf(s)}</span>
+                  </RegMeta>
+                </RegTile>
+              ))}
+              {addToGroup && <RegAddTile label="+ Систему в группу" onClick={addToGroup} />}
+            </RegTiles>
+          )
         ) : (
-          <div className="grid-cards">
-            {filteredSystems.map((s) => (
-              <SystemCoverTile key={s.id} system={s} />
-            ))}
-            {activeTab !== null && activeTab !== "ungrouped" && (
-              <button
-                className="card campaign-tile setting-group-empty-add"
-                onClick={() => {
-                  const g = groups.find((gr) => gr.id === Number(activeTab));
-                  if (g) setGroupModalGroupId(g.id);
-                }}
-              >
-                <div className="campaign-tile-cover cover-halftone">
-                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                  <div className="campaign-tile-scrim" />
-                  <span className="group-add-icon"><NavIcon name="gears" /></span>
-                  <h3 className="campaign-tile-name">+</h3>
-                </div>
-                <div className="campaign-tile-meta">
-                  <div className="campaign-tile-system muted">нажми, чтобы добавить систему в группу</div>
-                </div>
-              </button>
+          <>
+            {filteredSystems.length > 0 && (
+              <RegTable columns={SYSTEM_COLUMNS} label="Системы">
+                {filteredSystems.map((s) => (
+                  <RegRow key={s.id} entity={{ type: "system", id: s.id, name: s.name }} to={`/systems/${s.id}`}
+                    columns={SYSTEM_COLUMNS} menu={menuFor(s)}
+                    cells={[
+                      firstSentence(s.description ?? "") || <span className="is-none">без описания</span>,
+                      <span className={`d-mono${s.campaigns_count ? "" : " is-none"}`}>{campaignsOf(s)}</span>,
+                      <span className="d-mono">{s.imported_at ? "импорт" : "своя"}</span>,
+                    ]} />
+                ))}
+              </RegTable>
             )}
-          </div>
+            {addToGroup && <RegAddRow label="+ Систему в группу" onClick={addToGroup} />}
+          </>
         )}
 
-        {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && (
+        {!loading && !loadError && filteredSystems.length === 0 && systems.length > 0 && !addToGroup && (
           <EmptyState kind="search"
             title="Ничего не найдено"
             hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет систем в этой группе."}
@@ -213,12 +213,13 @@ export function SystemsListPage() {
             title="Правил ещё нет"
             hint="Ни одной системы не заведено — добавьте первую."
             action={
-              <button className="primary" onClick={() => setCreating(true)}>
+              <button className="d-btn" onClick={() => setCreating(true)}>
                 + Новая система
               </button>
             }
           />
         )}
+        <RegArchive type="system" basePath="/systems" affects={[{ path: systemPaths.list() }]} />
       </ListPage>
 
       {creating && (
@@ -244,11 +245,11 @@ export function SystemsListPage() {
       )}
 
       {groupModalGroupId !== null && (
-        <SystemGroupMembersModal
+        <GroupMembersModal
+          kind="system"
           groupId={groupModalGroupId}
           groupName={groups.find(g => g.id === groupModalGroupId)?.name ?? ""}
           onClose={() => setGroupModalGroupId(null)}
-          onUpdated={() => undefined}
         />
       )}
     </div>

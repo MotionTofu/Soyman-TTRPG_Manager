@@ -10,12 +10,20 @@
   container-type: inline-size;
 }
 .list-page--d .list-page__content { display: flex; flex-direction: column; gap: var(--sp-7); }
+.list-page--d .list-page__bars { display: flex; flex-direction: column; gap: var(--sp-5); }
 .list-page__dbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
+.list-page__filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
 .list-page__dbar .d-seg button { height: 40px; }
 .list-page__search { flex: 1 1 220px; min-width: 0; max-width: 320px; }
 .list-page__group-new { display: flex; gap: var(--sp-3); }
 .list-page__count { margin-left: auto; font-size: var(--fs-meta); }
 
+/* Телефон (Q15): поиск во всю ширину, счётчик и вид — строкой под ним. */
+@container (max-width: 560px) {
+  .list-page__tools .list-page__search { flex-basis: 100%; max-width: none; }
+  .list-page__tools .list-page__count { margin-left: 0; }
+  .list-page__tools .list-page__view { margin-left: auto; }
+}
 @media (max-width: 700px) {
   .list-page--d .list-page__sheet { padding: var(--sp-6) var(--sp-5); outline-offset: -6px; }
 }

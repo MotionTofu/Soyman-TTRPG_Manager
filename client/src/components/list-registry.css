@@ -1,0 +1,71 @@
+/* Шаблон списка «Реестр» (доски Reg-*, гриллинг 2026-11-05). Плитка одного
+   размера во всех четырёх списках и на любом экране: сетка «сколько влезет»
+   от 180 px — на 1440 с правой панелью это 4 в ряд, на 1920 — 6 (Q5). */
+.reg-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: var(--sp-5); }
+
+.reg-tile { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); }
+.reg-tile:hover, .reg-tile:focus-within { border-color: var(--edge); }
+.reg-tile__cover { position: relative; display: block; aspect-ratio: 16 / 10; border-bottom: 1px solid var(--line); background: var(--ph) center / cover no-repeat; }
+/* Без обложки — полутоновый угол (§6.8, только светлая) и буква или знак. */
+.reg-tile__cover.is-empty { display: flex; align-items: center; justify-content: center; background: var(--ph) var(--skin-halftone-corner) left bottom / auto 100% no-repeat; color: var(--muted); }
+[data-theme-mode="dark"] .reg-tile__cover.is-empty { background-image: none; }
+/* Знак игрока на пустом портрете — тот же растровый знак, что в профиле. */
+.players-d-glyph { width: 44px; height: 44px; background: currentColor; mask: var(--skin-glyph-player) center / contain no-repeat; }
+.reg-tile__letter { font-family: var(--font-title); font-size: var(--fs-h1); opacity: 0.5; }
+.reg-tile__cover > .d-plate { position: absolute; top: var(--sp-4); left: var(--sp-4); max-width: calc(100% - var(--sp-10)); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg-tile__body { display: flex; flex: 1; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5); }
+.reg-tile__name { margin: 0; font: 500 var(--fs-h3)/1.15 var(--font-display); overflow-wrap: anywhere; }
+.reg-tile__name a { color: var(--ink); text-decoration: none; }
+/* Вся плитка — ссылка, но ссылки внутри заметки остаются своими. */
+.reg-tile__name a::after { content: ""; position: absolute; inset: 0; }
+.reg-tile__body a:not(.reg-tile__name a) { position: relative; z-index: 2; }
+.reg-tile > .entity-dots { position: absolute; z-index: 3; top: var(--sp-3); right: var(--sp-3); background: var(--sheet); }
+.reg-tile__text { font-size: var(--fs-data); line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere; }
+.reg-nowrap { white-space: nowrap; }
+.reg-tile__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.reg-meta { margin-top: auto; padding-top: var(--sp-2); color: var(--ink-2); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; }
+.reg-meta.is-none { color: var(--muted); }
+
+.reg-tile--add { align-items: center; justify-content: center; min-height: 200px; border-style: dashed; color: var(--muted); font-family: var(--font-ui); font-size: var(--fs-label); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+.reg-tile--add:hover { color: var(--ink); }
+
+.reg-section + .reg-section { margin-top: var(--sp-3); }
+
+/* «Список» — таблица с заголовками (Q8); колонки задаёт страница. */
+.reg-table { display: flex; flex-direction: column; }
+.reg-table__head, .reg-row { display: grid; grid-template-columns: var(--reg-cols); gap: var(--sp-5); align-items: center; padding: 0 var(--sp-3); }
+.reg-table__head { min-height: 30px; border-bottom: var(--edge-width) solid var(--edge); color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; }
+.reg-row { min-height: 46px; border-bottom: 1px solid var(--line); }
+.reg-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg-row__name a { color: var(--ink); font: 500 var(--fs-lead)/1.2 var(--font-display); text-decoration: none; }
+.reg-row__name a:hover { text-decoration: underline; }
+.reg-row__cell { color: var(--ink-2); font-size: var(--fs-data); }
+.reg-row__cell.is-mono, .reg-row__cell .d-mono { font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; }
+.reg-row__cell .is-none { color: var(--muted); }
+.reg-add-row { width: 100%; min-height: 46px; border: 1px dashed var(--line); border-radius: 0; background: transparent; color: var(--muted); font-family: var(--font-ui); font-size: var(--fs-label); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+.reg-add-row:hover { color: var(--ink); border-color: var(--edge); }
+
+/* Архив — свёрнутой строкой внизу листа (Q11). */
+.reg-arch { border-top: var(--edge-width) solid var(--edge); }
+.reg-arch__head { display: flex; align-items: center; gap: var(--sp-5); width: 100%; height: 44px; padding: 0 var(--sp-4); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+.reg-arch__head > b { font-family: var(--font-ui); font-size: var(--fs-lead); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+.reg-arch__head > .d-mono { margin-left: auto; font-size: var(--fs-micro); }
+.reg-arch__rows { margin: 0; padding: 0; list-style: none; }
+.reg-arch__rows li { display: flex; align-items: center; gap: var(--sp-5); min-height: 44px; padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--line); }
+.reg-arch__rows li > span:first-child { flex: 1; min-width: 0; font-size: var(--fs-data); }
+
+/* Телефон (Q15): плитки в две колонки, в «Списке» — название, главная
+   колонка и ⋯. Лист списка — контейнер (`list-page__sheet`). */
+@container (max-width: 560px) {
+  .reg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+  .reg-table__head, .reg-row { grid-template-columns: var(--reg-cols-phone); }
+  .reg-wide { display: none; }
+}
+@media (max-width: 700px) {
+  .reg-tile > .entity-dots, .reg-row .entity-dots { opacity: 1; width: 40px; height: 40px; }
+}
+
+/* Окно состава группы — общее на четыре реестра. */
+.group-members-list { display: flex; flex-direction: column; max-height: 400px; overflow-y: auto; }
+.group-members-item { display: flex; align-items: center; gap: var(--sp-4); min-height: 40px; cursor: pointer; }

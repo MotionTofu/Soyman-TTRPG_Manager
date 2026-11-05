@@ -14,6 +14,9 @@ export interface System {
   created_at: string;
   archived_at: string | null;
   imported_at: string | null;
+  /** Только в списке (`GET /systems`): кампании вне архива и статьи справочника. */
+  campaigns_count?: number;
+  entries_count?: number;
 }
 
 export interface SystemSection {

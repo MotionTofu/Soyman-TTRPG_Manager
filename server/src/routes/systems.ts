@@ -764,7 +764,12 @@ systemsRouter.put("/:id/entries/reorder", (req, res) => {
 
 systemsRouter.get("/", (_req, res) => {
   const rows = db
-    .prepare("SELECT * FROM systems WHERE archived_at IS NULL ORDER BY name")
+    // Счётчики плитки списка (шаблон «Реестр», Q13): кампании вне архива и
+    // объём справочника — пустая система отличается от наполненной сразу.
+    .prepare(`SELECT s.*,
+        (SELECT COUNT(*) FROM campaigns c WHERE c.system_id = s.id AND c.archived_at IS NULL) AS campaigns_count,
+        (SELECT COUNT(*) FROM compendium_entries e WHERE e.system_id = s.id) AS entries_count
+      FROM systems s WHERE s.archived_at IS NULL ORDER BY s.name`)
     .all() as { thumbnail_image_path: string | null }[];
   res.json(rows.map(withThumbUrl));
 });
