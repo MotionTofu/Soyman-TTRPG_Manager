@@ -145,7 +145,7 @@ export function SystemsListPage() {
         onGroupChange={setActiveTab}
         search={q}
         onSearch={setQ}
-        searchPlaceholder="Поиск по имени, коду, описанию…"
+        searchPlaceholder="Поиск по названию, коду, описанию…"
         searchLabel="Поиск по системам"
         filteredCount={filteredSystems.length}
         totalCount={systems.length}
@@ -169,7 +169,7 @@ export function SystemsListPage() {
                 <RegTile key={s.id} entity={{ type: "system", id: s.id, name: s.name }} to={`/systems/${s.id}`}
                   image={s.thumbnail_image_url} plate={s.code || (s.imported_at ? null : "своя")} menu={menuFor(s)}>
                   <RegMeta none={!s.campaigns_count}>
-                    <span className="reg-nowrap">{campaignsOf(s)}</span> · <span className="reg-nowrap">{entriesOf(s)}</span>
+                    <span className="reg-nowrap">{campaignsOf(s)}</span> <span className="reg-nowrap">· {entriesOf(s)}</span>
                   </RegMeta>
                 </RegTile>
               ))}

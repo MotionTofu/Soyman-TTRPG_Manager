@@ -22,7 +22,8 @@
 .reg-tile > .entity-dots { position: absolute; z-index: 3; top: var(--sp-3); right: var(--sp-3); background: var(--sheet); }
 .reg-tile__text { font-size: var(--fs-data); line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere; }
 .reg-nowrap { white-space: nowrap; }
-.reg-tile__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.reg-tile__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
+.reg-tile__chips > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
 .reg-meta { margin-top: auto; padding-top: var(--sp-2); color: var(--ink-2); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; }
 .reg-meta.is-none { color: var(--muted); }
@@ -35,6 +36,7 @@
 /* «Список» — таблица с заголовками (Q8); колонки задаёт страница. */
 .reg-table { display: flex; flex-direction: column; }
 .reg-table__head, .reg-row { display: grid; grid-template-columns: var(--reg-cols); gap: var(--sp-5); align-items: center; padding: 0 var(--sp-3); }
+.reg-table__head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reg-table__head { min-height: 30px; border-bottom: var(--edge-width) solid var(--edge); color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; }
 .reg-row { min-height: 46px; border-bottom: 1px solid var(--line); }
 .reg-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

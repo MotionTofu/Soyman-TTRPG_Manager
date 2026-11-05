@@ -243,14 +243,14 @@ function CampaignTile({ campaign: c, menu }: { campaign: Campaign; menu: Context
   );
 }
 
-// «Список» (Q8): Название · Система · Сеттинг · Сыграно · Ближайшая/последняя.
-// На телефоне — название, дата и ⋯ (Q15).
-const CAMPAIGN_COLUMNS: RegColumn[] = [
-  { label: "Название", width: "minmax(0, 1.6fr)" },
-  { label: "Система", width: "minmax(0, 0.9fr)" },
+// «Список» (Q8): Название · Система · Сеттинг · Сыграно · игра — ближайшая у
+// активных, последняя у паузы и завершённых. На телефоне — название, дата и ⋯ (Q15).
+const campaignColumns = (when: string): RegColumn[] => [
+  { label: "Название", width: "minmax(0, 1.4fr)" },
+  { label: "Система", width: "minmax(0, 1fr)" },
   { label: "Сеттинг", width: "minmax(0, 1fr)" },
-  { label: "Сыграно", width: "80px" },
-  { label: "Ближайшая · последняя", width: "minmax(130px, 0.9fr)", phone: true },
+  { label: "Сыграно", width: "72px" },
+  { label: when, width: "minmax(140px, 1fr)", phone: true },
 ];
 
 function whenCell(c: Campaign) {
@@ -263,15 +263,16 @@ function whenCell(c: Campaign) {
 }
 
 function CampaignTable({ title, list, menuFor }: { title: string; list: Campaign[]; menuFor: (campaign: Campaign) => ContextMenuItem[] }) {
+  const columns = campaignColumns(title === "Активные" ? "Ближайшая игра" : "Последняя игра");
   return (
     <RegSection title={title} count={list.length}>
-      <RegTable columns={CAMPAIGN_COLUMNS} label={title}>
+      <RegTable columns={columns} label={title}>
         {list.map((c) => (
           <RegRow
             key={c.id}
             entity={{ type: "campaign", id: c.id, name: c.name }}
             to={`/campaigns/${c.id}`}
-            columns={CAMPAIGN_COLUMNS}
+            columns={columns}
             menu={menuFor(c)}
             cells={[
               <span className="d-mono">{c.system_name ?? "—"}</span>,
