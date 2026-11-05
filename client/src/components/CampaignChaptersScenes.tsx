@@ -736,7 +736,7 @@ const SceneRow = memo(function SceneRow({
           }}
         />)}
         <span className="campaign-scene__name">
-          {s.name}
+          {s.name || <span className="muted">Без названия</span>}
           {kind && <span className="campaign-scene__kind"> · {kind}</span>}
           {s.is_override && <span className="campaign-scene__note">правка</span>}
           {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}

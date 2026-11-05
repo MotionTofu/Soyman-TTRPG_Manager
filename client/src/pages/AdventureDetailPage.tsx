@@ -67,7 +67,8 @@ export function AdventureDetailPage() {
   const arcState = useResource<StoryArcDetail>(`/story/arcs/${arcId}${campaignId ? `?campaign_id=${campaignId}` : ""}`);
   const arc = arcState.data ?? null;
   const setting = useResource<Setting>(arc ? `/settings/${arc.setting_id}` : null).data ?? null;
-  const arcCampaigns = useResource<{ id: number; name: string }[]>(`/story/arcs/${arcId}/campaigns`).data ?? [];
+  // Имя — из самой кампании: приключение может быть в её дереве, не числясь в /story/arcs/:id/campaigns.
+  const campaignName = useResource<{ name: string }>(campaignId ? `/campaigns/${campaignId}` : null).data?.name;
   const run = useAction();
   const [tab, selectTab] = useTabState(TABS, "Досье", {
     Обзор: "Досье",
@@ -148,7 +149,7 @@ export function AdventureDetailPage() {
   return <EntityPage
       crumbs={campaignId ? [
         { label: "Кампании", to: "/campaigns" },
-        { label: arcCampaigns.find((c) => c.id === campaignId)?.name ?? "Кампания", to: `/campaigns/${campaignId}` },
+        { label: campaignName ?? "Кампания", to: `/campaigns/${campaignId}` },
         { label: "Главы и сцены", to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}` },
         { label: arc.name },
       ] : [

@@ -4,7 +4,7 @@ import { useAction, useResource, write } from "../../data/hooks";
 import { clueAffects } from "../../data/canvas";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { clueNeed } from "../../sceneKinds";
-import type { ArcClues, ScenePresentation, StoryClue, StorySceneDetail } from "../../types";
+import type { ArcClues, ScenePresentation, StoryArc, StoryClue, StorySceneDetail } from "../../types";
 import { MentionText } from "../mentions/MentionText";
 import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
@@ -109,11 +109,36 @@ export function SceneLinks({ scene, campaignId, clues, clueError }: { scene: Sto
   </div>;
 }
 
+type ClueTargetScene = { id: number; name: string; arc_id: number | null };
+
+/** Цели улики: сначала сцены своего приключения, потом остальные — группой на приключение (порядок сеттинга). */
+export function groupClueTargets(rows: ClueTargetScene[], arcs: Pick<StoryArc, "id" | "name" | "parent_id">[], scene: { id: number; arc_id: number | null }) {
+  const byId = new Map(arcs.map((a) => [a.id, a]));
+  const root = (arcId: number | null) => {
+    let a = arcId == null ? undefined : byId.get(arcId);
+    while (a?.parent_id != null && byId.has(a.parent_id)) a = byId.get(a.parent_id);
+    return a;
+  };
+  const own = root(scene.arc_id)?.id;
+  const groups = new Map<number | null, { label: string; scenes: ClueTargetScene[] }>();
+  for (const s of rows) {
+    if (s.id === scene.id) continue;
+    const r = root(s.arc_id);
+    const key = r?.id ?? null;
+    if (!groups.has(key)) groups.set(key, { label: r ? (r.id === own ? `${r.name} · это приключение` : r.name) : "Вне приключений", scenes: [] });
+    groups.get(key)!.scenes.push(s);
+  }
+  const order = (k: number | null) => (k === own && k != null ? -1 : k == null ? Number.MAX_SAFE_INTEGER : arcs.findIndex((a) => a.id === k));
+  return [...groups.entries()].sort(([a], [b]) => order(a) - order(b)).map(([, g]) => g);
+}
+
 function ClueForm({ scene, campaignId, onClose }: { scene: StorySceneDetail; campaignId: number | null; onClose: () => void }) {
   const [text, setText] = useState("");
   const [how, setHow] = useState("");
   const [target, setTarget] = useState("");
-  const rows = useResource<{ id: number; name: string }[]>(`/story/scenes?setting_id=${scene.setting_id}${campaignId ? `&campaign_id=${campaignId}` : ""}`).data ?? [];
+  const rows = useResource<ClueTargetScene[]>(`/story/scenes?setting_id=${scene.setting_id}${campaignId ? `&campaign_id=${campaignId}` : ""}`).data ?? [];
+  const arcs = useResource<StoryArc[]>(`/story/arcs?setting_id=${scene.setting_id}`).data ?? [];
+  const groups = groupClueTargets(rows, arcs, scene);
   const run = useAction();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -124,5 +149,5 @@ function ClueForm({ scene, campaignId, onClose }: { scene: StorySceneDetail; cam
     setBusy(false);
     if (done) { onClose(); if (done.scene_id !== scene.id) navigate(`/scenes/${done.scene_id}?campaign=${campaignId}&tab=${encodeURIComponent("Связи")}`, { replace: true }); }
   }
-  return <Modal ariaLabel="Улика сцены" onClose={onClose}><div className="stack"><h2>Улика</h2><label className="stack">Что находят<textarea value={text} onChange={(e) => setText(e.target.value)} /></label><label className="stack">Как находят<input value={how} onChange={(e) => setHow(e.target.value)} /></label><label className="stack">Ведёт к сцене<select value={target} onChange={(e) => setTarget(e.target.value)}><option value="">Цель пока не задана</option>{rows.filter((s) => s.id !== scene.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><button className="d-btn" disabled={!text.trim() || busy} onClick={save}>Добавить улику</button></div></Modal>;
+  return <Modal ariaLabel="Улика сцены" onClose={onClose}><div className="stack"><h2>Улика</h2><label className="stack">Что находят<textarea value={text} onChange={(e) => setText(e.target.value)} /></label><label className="stack">Как находят<input value={how} onChange={(e) => setHow(e.target.value)} /></label><label className="stack">Ведёт к сцене<select value={target} onChange={(e) => setTarget(e.target.value)}><option value="">Цель пока не задана</option>{groups.map((g) => <optgroup key={g.label} label={g.label}>{g.scenes.map((s) => <option key={s.id} value={s.id}>{s.name || "Без названия"}</option>)}</optgroup>)}</select></label><button className="d-btn" disabled={!text.trim() || busy} onClick={save}>Добавить улику</button></div></Modal>;
 }

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { useTabState } from "../../hooks/useTabState";
 import { TYPE_COLORS } from "../../graphTypes";
 import type { SceneSession, StorySceneDetail } from "../../types";
-import { SCENE_TABS, SCENE_TAB_ALIASES, SceneLinks } from "./SceneProfile";
+import { SCENE_TABS, SCENE_TAB_ALIASES, SceneLinks, groupClueTargets } from "./SceneProfile";
 import { originalSceneHref, sceneSession } from "./sceneProgress";
 import { profileColor } from "./ProfileParts";
 
@@ -43,5 +43,11 @@ describe("сцена «Д»", () => {
     expect(css).toContain(`--type-adventure: ${TYPE_COLORS.adventure}`);
     expect(css).toMatch(/\[data-theme-mode="dark"\] \.entity-page--profile\s*\{ --type-adventure: #8B7FE0/);
     expect(TYPE_COLORS.adventure).toBe("#332288");
+  });
+  it("цели улики: своё приключение первым, главы сводятся к приключению, сама сцена не в списке", () => {
+    const arcs = [{ id: 1, name: "Первое", parent_id: null }, { id: 2, name: "Своё", parent_id: null }, { id: 3, name: "Глава", parent_id: 2 }];
+    const rows = [{ id: 10, name: "а", arc_id: 1 }, { id: 11, name: "я", arc_id: 3 }, { id: 12, name: "б", arc_id: 2 }, { id: 13, name: "в", arc_id: null }];
+    const groups = groupClueTargets(rows, arcs, { id: 11, arc_id: 3 });
+    expect(groups.map((g) => [g.label, g.scenes.map((s) => s.id)])).toEqual([["Своё · это приключение", [12]], ["Первое", [10]], ["Вне приключений", [13]]]);
   });
 });
