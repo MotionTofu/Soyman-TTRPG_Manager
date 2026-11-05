@@ -1,3 +1,10 @@
+import { CampaignChronicle } from "../components/campaign/CampaignProfileParts";
+import { MentionText } from "../components/mentions/MentionText";
+import { ProfileHero, ProfileBlock, ProfileText, ProfileEntityLink, ProfileChapterRead } from "../components/profiles/ProfileParts";
+import { ProfileLinks } from "../components/profiles/ProfileLinks";
+import { ProfileChronicle } from "../components/profiles/ProfileChronicle";
+import { ProfilePlaceScenes, PLACE_REASON_LABELS } from "../components/profiles/ProfilePlaceScenes";
+import { useProfileChronicleCount, useProfileNeighbours } from "../components/profiles/useProfileNeighbours";
 import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -13,11 +20,9 @@ import { LocationMap } from "../components/LocationMap";
 import { GalleryTab } from "../components/GalleryTab";
 import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
-import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityPage } from "../components/EntityPage";
 import { PdfEntitySources } from "../components/PdfEntitySources";
 import { LoadErrorCard } from "../components/Loadable";
-import { RelationsTab } from "../components/RelationsTab";
 import { LocationInfoTab } from "../components/LocationInfoTab";
 import { toAliasesList } from "../utils/aliasesList";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
@@ -35,18 +40,14 @@ import { LocationImportantDatesTab } from "../components/LocationImportantDatesT
 import { LocationContent } from "../components/LocationContent";
 import { RECORD_ASPECTS } from "../entityRecords";
 import {
-  BaseFold,
-  CampaignChronicle,
   CampaignRecords,
   ContextSwitch,
-  EngagedCampaigns,
-} from "../components/campaign/CampaignProfileParts";
+  EngagedCampaigns } from "../components/campaign/CampaignProfileParts";
 import { campaignCrumbs, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
-import { PlaceCard } from "../components/PlaceCard";
-import { EditableTextCard } from "../components/EditableTextCard";
+import { PlaceCard, type PlaceHistory } from "../components/PlaceCard";
 import { ChapterList } from "../components/ChapterList";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import type {
   SearchResult,
@@ -54,8 +55,7 @@ import type {
   SettingLocation,
   SettingLocationDetail,
   LocationContentItem,
-  LocationInhabitantBeing,
-} from "../types";
+  LocationInhabitantBeing } from "../types";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Every location reachable from `id` by walking down parent_id links — used
@@ -100,10 +100,15 @@ export function LocationDetailPage() {
   const locationState = useResource<SettingLocationDetail>(locationPaths.detail(locationId));
   const location = locationState.data ?? null;
   const settingId = location?.setting_id ?? null;
+  const neighbours = useProfileNeighbours("location", locationId, settingId);
+  const [linksRequest,setLinksRequest] = useState(0);
+  const portraitInput = useRef<HTMLInputElement>(null);
   const settingCrumbs = useSettingCrumbs(settingId);
   // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
   const ctx = useCampaignContext(location?.campaigns);
   const inCampaign = ctx.campaign;
+  const chronicleCount = useProfileChronicleCount("location", locationId, location?.important_dates, inCampaign?.id);
+  const history = useResource<PlaceHistory>(`/setting-locations/${locationId}/history?all=1${inCampaign ? `&campaign_id=${inCampaign.id}` : ""}`).data;
   const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "location", locationId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "location", locationId);
   const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
@@ -179,6 +184,7 @@ export function LocationDetailPage() {
       setSpotFlash(s);
       // Глубокая ссылка на точку — раскрываем «План точками» в «Связях».
       setPlanOpen(true);
+      setLinksRequest((n) => n + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз на локацию
   }, [locationId]);
@@ -778,7 +784,6 @@ export function LocationDetailPage() {
     location.inhabitant_communities.length > 0 ||
     (location.nested_inhabitant_communities ?? []).length > 0;
 
-  const mapUrl = location.map_image_url && isSafeImageUrl(location.map_image_url) ? location.map_image_url : null;
   const imageUrl = [location.thumbnail_image_url, location.avatar_image_url].find((u) => u && isSafeImageUrl(u)) ?? null;
   const aliases = toAliasesList(location.aliases).filter((a) => a.trim());
   const chapters = location.chapters ?? [];
@@ -793,7 +798,7 @@ export function LocationDetailPage() {
 
   return (
     <EntityPage
-      paper
+      profile={neighbours}
       crumbs={inCampaign ? campaignCrumbs(inCampaign, location.name) : [
         ...settingCrumbs,
         { label: "География", to: geographyTo },
@@ -814,11 +819,13 @@ export function LocationDetailPage() {
         </span>
       }
       actions={[
+        ...(!inCampaign ? [{ label: "Сменить картинку", onClick: () => portraitInput.current?.click() }] : []),
         {
           label: "Вложенное место…",
           onClick: () => {
             selectTab("Связи");
             setAddingNested(true);
+            setLinksRequest((n) => n + 1);
           },
         },
         { label: "Архивировать", danger: true, onClick: archiveLocation },
@@ -829,7 +836,7 @@ export function LocationDetailPage() {
         { id: "Связи", label: linkCount ? `Связи · ${linkCount}` : "Связи" },
         {
           id: "Хроника",
-          label: location.important_dates.length ? `Хроника · ${location.important_dates.length}` : "Хроника",
+          label: (chronicleCount + (history?.visits.length ?? 0)) ? `Хроника · ${chronicleCount + (history?.visits.length ?? 0)}` : "Хроника",
         },
         "Галерея",
         "Упоминания",
@@ -842,142 +849,26 @@ export function LocationDetailPage() {
           {campaignState.menu}
           {confirmDialog}
           {thumbnailCrop.modal}
+          {!inCampaign && <input ref={portraitInput} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)} />}
         </>
       }
     >
       <ContextSwitch engaged={location.campaigns} campaign={inCampaign} onSelect={ctx.select} />
-      {tab === "Досье" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            {mapUrl ? (
-              <button
-                type="button"
-                className="dossier__portrait dossier__map"
-                onClick={() => selectTab("Карта")}
-                title="Открыть карту"
-              >
-                <img src={mapUrl} alt={`Карта: ${location.name}`} />
-                <span className="dossier__portrait-hint">Открыть карту</span>
-              </button>
-            ) : inCampaign ? (
-              <div className="dossier__portrait dossier__map">
-                {imageUrl ? <img src={imageUrl} alt={location.name} /> : <span className="dossier__portrait-empty">Картинка места</span>}
-              </div>
-            ) : (
-              <label className="dossier__portrait dossier__map" title={IMAGE_HINT}>
-                {imageUrl ? (
-                  <img src={imageUrl} alt={location.name} />
-                ) : (
-                  <span className="dossier__portrait-empty">Картинка места</span>
-                )}
-                <span className="dossier__portrait-hint">{uploadingThumbnail ? "Загрузка…" : "Сменить картинку"}</span>
-                <input
-                  type="file"
-                  accept={IMAGE_ACCEPT}
-                  hidden
-                  onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
-                />
-              </label>
-            )}
-            <dl className="paper-facts">
-              {location.ancestors.length > 0 && (
-                <div>
-                  <dt className="paper-label">Где</dt>
-                  <dd>
-                    {location.ancestors.map((a) => (
-                      <Link key={a.id} className="mention-link mention--loc" to={`/locations/${a.id}`}>
-                        {a.name}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {aliases.length > 0 && (
-                <div>
-                  <dt className="paper-label">По-другому</dt>
-                  <dd>{aliases.join(" · ")}</dd>
-                </div>
-              )}
-              {location.inhabitant_communities.length > 0 && (
-                <div>
-                  <dt className="paper-label">Сообщества здесь</dt>
-                  <dd>
-                    {location.inhabitant_communities.map((c) => (
-                      <Link key={c.id} className="mention-link mention--com" to={`/communities/${c.id}`}>
-                        {c.name}
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
-              <PlayerVisibilityFact targetType="setting_location" targetId={locationId} />
-            </dl>
-            <div className="dossier__search">
-              <Link className="paper-more" to={geographyTo}>
-                В Географии ›
-              </Link>
-              <GraphNeighbourhoodLink type="location" id={location.id} />
-            </div>
-          </aside>
-
-          {inCampaign ? (
-            <div className="dossier__main">
-              {/* Записи кампании по графам словаря места; основа — свёрткой. */}
-              <CampaignRecords
-                campaignId={inCampaign.id}
-                settingId={location.setting_id}
-                ownerType="location"
-                ownerId={locationId}
-                chains={records}
-                title="Сейчас в кампании"
-                aspects={RECORD_ASPECTS.location.map((a) => a.key)}
-                emptyKeys={RECORD_ASPECTS.location.map((a) => a.key).filter((k) => k !== "note")}
-              />
-              <BaseFold
-                description={location.description ?? ""}
-                chapters={[{ title: "Статьи", items: chapters }]}
-              />
-            </div>
-          ) : (
-          <div className="dossier__main">
-            {/* Шапка — та же карточка места, что справа в Географии (Q5). */}
-            <PlaceCard locationId={locationId} variant="page" />
-
-            <EngagedCampaigns campaigns={location.campaigns} onOpen={ctx.select} title="Задействовано в кампаниях" />
-
-            <EditableTextCard
-              title="Описание"
-              value={location.description ?? ""}
-              onSave={saveDescription}
-              rows={4}
-              entityType="location"
-              entityId={locationId}
-              defaultSettingId={location.setting_id}
-              collapsible
-              defaultOpen
-            />
-
-            <details className="paper-fold" open={chapters.length > 0}>
-              <summary>
-                Статьи <span className="paper-fold__count">· {chapters.length}</span>
-              </summary>
-              <div className="paper-fold__body">
-                <ChapterList
-                  ownerId={locationId}
-                  ownerType="location"
-                  apiBase="/setting-locations"
-                  chapters={chapters}
-                  defaultSettingId={location.setting_id}
-                  visibilityToggle
-                />
-              </div>
-            </details>
-
-            {/* Справка: правится редко, за столом не нужна — свёрнута. */}
-            <details className="paper-fold">
-              <summary>Основное, изображения, источники</summary>
-              <div className="paper-fold__body">
+      {tab === "Досье" && <div className="profile-dossier">
+        <ProfileHero type="location" name={location.name} createdAt={location.created_at} subtype={location.kind || LOCATION_ROLE_LABELS[locationRoleOf(location)]}
+          image={imageUrl} onGallery={() => selectTab("Галерея")} labels={<>
+            {location.ancestors.map((a) => <ProfileEntityLink key={a.id} type="location" id={a.id} name={a.name} />)}
+            {location.inhabitant_communities.map((c) => <ProfileEntityLink key={c.id} type="community" id={c.id} name={c.name} />)}
+            {aliases.length > 0 && <span className="d-note">{aliases.join(" · ")}</span>}
+          </>}>
+          <PlaceCard locationId={locationId} variant="page" hideHistory readOnly={!!inCampaign} />
+        </ProfileHero>
+        <PlayerVisibilityFact line targetType="setting_location" targetId={locationId} />
+        {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={location.description || "Описание пока не записано."} /></div></ProfileBlock> : <ProfileText title="Описание" value={location.description ?? ""} onSave={saveDescription} defaultSettingId={location.setting_id} />}
+        <ProfilePlaceScenes history={history} settingId={location.setting_id} />
+        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»</summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={location.setting_id} ownerType="location" ownerId={locationId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.location.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.location.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={location.campaigns} onOpen={ctx.select} />}
+        <ProfileBlock title="Статьи" count={chapters.length}>{inCampaign ? <ProfileChapterRead chapters={chapters} /> : <ChapterList profile ownerId={locationId} ownerType="location" apiBase="/setting-locations" chapters={chapters} defaultSettingId={location.setting_id} visibilityToggle />}</ProfileBlock>
+        {!inCampaign && <details className="paper-fold"><summary>Справка</summary><div className="paper-fold__body">
                 <LocationInfoTab
                   key={location.id}
                   location={location}
@@ -1014,12 +905,9 @@ export function LocationDetailPage() {
                   }
                 />
                 <PdfEntitySources kind="location" id={location.id} />
-              </div>
-            </details>
-          </div>
-          )}
-        </div>
-      )}
+
+        </div></details>}
+      </div>}
 
       {tab === "Карта" && (
         <LocationMap
@@ -1036,11 +924,16 @@ export function LocationDetailPage() {
         />
       )}
 
-      {tab === "Галерея" && <GalleryTab ownerType="location" ownerId={locationId} />}
+      {tab === "Галерея" && <GalleryTab profile ownerType="location" ownerId={locationId}
+        avatarUpload={{ previewUrl: location.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: avatarCrop.modal }}
+        thumbnailUpload={{ previewUrl: location.thumbnail_image_url, uploading: uploadingThumbnail, onSelect: thumbnailCrop.onSelect, modal: null }} />}
 
       {tab === "Упоминания" && <MentionsTab entityType="location" entityId={locationId} />}
 
-      {tab === "Связи" && (
+      {tab === "Связи" && <ProfileLinks editRequest={linksRequest} type="location" id={locationId} name={location.name} settingId={location.setting_id} groups={[
+        { title: "Внутри", rows: directKids.map((l) => ({ key:`inside:${l.id}`,type:"location",id:l.id,name:l.name,note:l.kind })) },
+        { title: "Кто здесь", rows: [...allInhabitants.map((b) => ({ key:`being:${b.id}`,type:"being",id:b.id,name:b.name })),...location.inhabitant_communities.map((c) => ({ key:`community:${c.id}`,type:"community",id:c.id,name:c.name }))] },
+      ]} onEntityDrop={(entity) => { if (entity.type === "being" || entity.type === "community") { void addInhabitant(entity); return true; } return false; }} tools={
         <div className="paper-groups">
           <details className="paper-fold" open>
             <summary>
@@ -1470,35 +1363,11 @@ export function LocationDetailPage() {
             </div>
           </details>
 
-          <details className="paper-fold" open>
-            <summary>С кем · что</summary>
-            <p className="muted">Отношения с существами, фракциями, другими местами и предметами.</p>
-            <RelationsTab
-              entityType="location"
-              entityId={location.id}
-              entityName={location.name}
-              defaultSettingId={location.setting_id}
-            />
-          </details>
         </div>
-      )}
+      } />}
 
-      {tab === "Хроника" && inCampaign && (
-        <CampaignChronicle campaign={inCampaign} settingId={location.setting_id} chains={records} />
-      )}
-
-      {tab === "Хроника" && !inCampaign && (
-        <LocationImportantDatesTab
-              locationId={locationId}
-              locationName={location.name}
-              settingId={location.setting_id}
-              dates={location.important_dates}
-              calendarMonths={calendar?.months}
-              calendarWeekdays={calendar?.weekdays}
-              onShowOnMap={() => selectTab("Карта")}
-          groupFilter="all"
-        />
-      )}
+      {tab === "Хроника" && <ProfileChronicle type="location" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={location.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={locationId} settingId={location.setting_id} campaignId={inCampaign?.id} dates={location.important_dates}
+        gameEvents={(history?.visits ?? []).map((v) => ({ ...v,id:v.session_id,reasons:v.reasons.map((r) => PLACE_REASON_LABELS[r]) }))} dateEditor={<LocationImportantDatesTab locationId={locationId} locationName={location.name} settingId={location.setting_id} dates={location.important_dates} calendarMonths={calendar?.months} calendarWeekdays={calendar?.weekdays} onShowOnMap={() => selectTab("Карта")} groupFilter="all" />} />}
     </EntityPage>
   );
 }

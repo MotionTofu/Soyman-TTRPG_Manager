@@ -26,6 +26,10 @@ export function ProfileTypeLabel({ type }: { type: string }) {
   return <span className="profile-type-label">{LABELS[type] ?? type}</span>;
 }
 
+export function ProfileTypeGlyph({ type }: { type:string }) {
+  return <TypeGlyph type={type === "campaign_event" ? "setting_event" : type} />;
+}
+
 export function ProfileHero({ type, name, subtype, createdAt, labels, image, onGallery, children }: {
   type: string; name: string; subtype?: ReactNode; createdAt?: string; labels?: ReactNode;
   image?: string | null; onGallery?: () => void; children?: ReactNode;
@@ -33,15 +37,15 @@ export function ProfileHero({ type, name, subtype, createdAt, labels, image, onG
   const date = createdAt?.slice(0, 10).split("-").reverse().join(".");
   return <section className={`profile-hero profile-hero--${type}`}>
     <div className="profile-hero__main">
-      <div className="profile-passport"><TypeGlyph type={type} /><ProfileTypeLabel type={type} />{subtype && <span>{subtype}</span>}{date && <span>С {date}</span>}</div>
+      <div className="profile-passport"><ProfileTypeGlyph type={type} /><ProfileTypeLabel type={type} />{subtype && <span>{subtype}</span>}{date && <span>С {date}</span>}</div>
       <h1 className="profile-title">{name}</h1>
       {labels && <div className="profile-labels">{labels}</div>}
       {children}
     </div>
-    <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label="Открыть галерею" disabled={!onGallery}>
-      {image ? <img src={image} alt={name} /> : <TypeGlyph type={type} />}
-      <span className="profile-cover__from">Из галереи</span>
-      <span className="profile-cover__caption">{type === "being" ? "Портрет" : "Картинка"} · открыть галерею</span>
+    <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label={onGallery ? "Открыть галерею" : "Картинка не задана"} disabled={!onGallery}>
+      {image ? <img src={image} alt={name} /> : <ProfileTypeGlyph type={type} />}
+      {onGallery && <span className="profile-cover__from">Из галереи</span>}
+      <span className="profile-cover__caption">{type === "being" ? "Портрет" : "Картинка"}{onGallery ? " · открыть галерею" : " · не задана"}</span>
     </button>
   </section>;
 }
@@ -54,7 +58,7 @@ export function ProfileBlock({ title, count, actions, children, focal = false }:
 }
 
 /** Только профили Мастера: общий EditableTextCard и вид игрока остаются прежними. */
-export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, defaultSettingId, children, fields, onSaveFields }: ComponentProps<typeof EditableTextCard>) {
+export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, defaultSettingId, children, fields, onSaveFields, focal = false }: ComponentProps<typeof EditableTextCard> & { focal?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [values, setValues] = useState(() => toFieldValues(fields ?? []));
@@ -67,7 +71,7 @@ export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, 
     catch (e) { setError(e instanceof Error ? e.message : "Не сохранилось"); }
     finally { setSaving(false); }
   }
-  return <ProfileBlock title={title} actions={!editing && !!value && <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={start}>Править</button>}>
+  return <ProfileBlock title={title} focal={focal} actions={!editing && !!value && <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={start}>Править</button>}>
     {editing ? <div className="stack">
       {help && <span className="muted">{help}</span>}
       {!!fields?.length && <EntityFieldInputs fields={fields} values={values} onChange={(key, v) => setValues((prev) => ({ ...prev, [key]: v }))} />}
@@ -81,4 +85,9 @@ export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, 
 
 export function ProfileEntityLink({ type, id, name, to }: { type: string; id: number; name: string; to?: string }) {
   return <Link className="profile-entity-link" style={profileStyle(type)} to={to ?? `${DETAIL_ROUTES[type] ?? `/${type}`}/${id}`}><span>{name}</span></Link>;
+}
+
+/** Основа профиля в контексте кампании читается без редакторов. */
+export function ProfileChapterRead({ chapters }: { chapters:{id:number;title:string;content:string}[] }) {
+  return chapters.length ? <div className="stack">{chapters.map((c) => <article key={c.id}>{c.title && <h3>{c.title}</h3>}<MentionText text={c.content} /></article>)}</div> : <p className="muted">Статей пока нет.</p>;
 }

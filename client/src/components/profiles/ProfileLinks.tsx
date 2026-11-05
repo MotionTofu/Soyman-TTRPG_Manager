@@ -1,14 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useResource } from "../../data/hooks";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import type { EntityRelation, EntityRelationsResponse, RelationEntityType, SearchResult } from "../../types";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
-import { TypeGlyph } from "../TypeGlyph";
 import { EntityMenuButton } from "../PageContextMenu";
 import { RelationsTab } from "../RelationsTab";
 import { GraphNeighbourhoodLink } from "../GraphNeighbourhoodLink";
 import { Modal } from "../Modal";
-import { ProfileEntityLink } from "./ProfileParts";
+import { ProfileEntityLink, ProfileTypeGlyph } from "./ProfileParts";
 import { RELATION_TONE_LABELS } from "../../relations";
 
 export interface ProfileLinkRow { key: string; type: string; id: number; name: string; note?: ReactNode; tone?: string; to?: string; actions?: { label: string; danger?: boolean; onClick: () => void }[] }
@@ -26,11 +25,12 @@ export function profileRelationGroups(type: string, relations: EntityRelation[],
   return [...map].map(([title,rows]) => ({ title,rows })).filter((g) => g.rows.length > 0);
 }
 
-export function ProfileLinks({ type, id, name, settingId, groups = [], tools, children, onEntityDrop }: {
-  type: RelationEntityType; id: number; name: string; settingId: number; groups?: ProfileLinkGroup[]; tools?: ReactNode; children?: ReactNode; onEntityDrop?: (entity: SearchResult) => boolean;
+export function ProfileLinks({ type, id, name, settingId, groups = [], tools, children, onEntityDrop, editRequest = 0 }: {
+  type: RelationEntityType; id: number; name: string; settingId: number; groups?: ProfileLinkGroup[]; tools?: ReactNode; children?: ReactNode; onEntityDrop?: (entity: SearchResult) => boolean; editRequest?: number;
 }) {
   const data = useResource<EntityRelationsResponse>(`/entity-relations?entity_type=${type}&entity_id=${id}`).data;
   const [editing, setEditing] = useState(false);
+  useEffect(() => { if (editRequest) setEditing(true); },[editRequest]);
   const [dropped,setDropped] = useState<SearchResult | undefined>();
   const adventures = useResource<{ adventures: { id: number; name: string; goal: string; scenes: {id:number;name:string;role:string;tactic:string}[] }[] }>(type === "being" || type === "community" ? `/participations/entity/${type}/${id}` : null).data?.adventures ?? [];
   const mobile = useIsMobile();
@@ -50,7 +50,7 @@ export function ProfileLinks({ type, id, name, settingId, groups = [], tools, ch
   }}>
     <div className="profile-links__head"><h2 className="d-plate">Связи</h2><GraphNeighbourhoodLink type={type} id={id} /><button type="button" className="d-btn d-btn--sm" onClick={() => setEditing(true)}>+ Связь</button></div>
     {visible.map((g,index) => <details key={`${g.title}:${mobile}`} className="profile-link-group" open={!mobile || index === 0}><summary><span className="d-plate">{g.title}</span><span className="d-note">{g.rows.length}</span></summary>
-      {g.rows.map((r) => <div key={r.key} className="profile-link-row"><TypeGlyph type={r.type} /><ProfileEntityLink type={r.type} id={r.id} name={r.name} to={r.to} /><span className="profile-link-row__note">{r.note}</span>{r.tone ? <span className="profile-link-row__tone">{r.tone}</span> : <span aria-hidden="true" />}<EntityMenuButton entity={{ type:r.type,id:r.id,name:r.name }} local={r.actions ?? (r.key.startsWith("relation:") ? [{ label:"Править связь", onClick:() => setEditing(true) }] : undefined)} /></div>)}
+      {g.rows.map((r) => <div key={r.key} className="profile-link-row"><ProfileTypeGlyph type={r.type} /><ProfileEntityLink type={r.type} id={r.id} name={r.name} to={r.to} /><span className="profile-link-row__note">{r.note}</span>{r.tone ? <span className="profile-link-row__tone">{r.tone}</span> : <span aria-hidden="true" />}<EntityMenuButton entity={{ type:r.type,id:r.id,name:r.name }} local={r.actions ?? (r.key.startsWith("relation:") ? [{ label:"Править связь", onClick:() => setEditing(true) }] : undefined)} /></div>)}
     </details>)}
     {!visible.length && <p className="muted">Добавьте связь или перетащите сущность в окно выбора.</p>}
     {children}

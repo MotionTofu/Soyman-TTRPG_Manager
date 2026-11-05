@@ -1,3 +1,4 @@
+import { CampaignChronicle } from "../components/campaign/CampaignProfileParts";
 import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
@@ -460,7 +461,7 @@ export function BeingDetailPage() {
           {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
-          <input ref={avatarInput} type="file" hidden accept={IMAGE_ACCEPT} onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
+          {!inCampaign && <input ref={avatarInput} type="file" hidden accept={IMAGE_ACCEPT} onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />}
         </>
       }
     >
@@ -645,7 +646,7 @@ export function BeingDetailPage() {
         <h3>Где обитает</h3><div className="row"><LocationCascadePicker locations={settingLocations} value={addLocationId} onChange={setAddLocationId} /><button type="button" onClick={addLocationViaCascade} disabled={!addLocationId}>+ Место</button></div>
       </div>} />}
 
-      {tab === "Хроника" && <ProfileChronicle type="being" id={beingId} settingId={being.setting_id} campaignId={inCampaign?.id} dates={being.important_dates} gameEvents={being.events} />}
+      {tab === "Хроника" && <ProfileChronicle type="being" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={being.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={beingId} settingId={being.setting_id} campaignId={inCampaign?.id} dates={being.important_dates} gameEvents={being.events} />}
 
       {tab === "Галерея" && (
         <GalleryTab profile ownerType="being" ownerId={beingId} avatarUpload={!inCampaign ? { previewUrl:being.avatar_image_url,uploading:uploadingAvatar,onSelect:avatarCrop.onSelect,modal:null } : undefined} />

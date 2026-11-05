@@ -1,3 +1,8 @@
+import { CampaignChronicle } from "../components/campaign/CampaignProfileParts";
+import { ProfileHero, ProfileBlock, ProfileText, ProfileEntityLink } from "../components/profiles/ProfileParts";
+import { ProfileLinks } from "../components/profiles/ProfileLinks";
+import { ProfileChronicle } from "../components/profiles/ProfileChronicle";
+import { useProfileChronicleCount, useProfileNeighbours } from "../components/profiles/useProfileNeighbours";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -6,7 +11,6 @@ import { showSaveError } from "../data/notices";
 import { settingPaths } from "../data/settingEntities";
 import type { Affect } from "../data/entities";
 import { AliasesCard } from "../components/AliasesCard";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
 import { PdfEntitySources } from "../components/PdfEntitySources";
@@ -19,34 +23,27 @@ import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
 import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { CompendiumEntryPicker } from "../components/MonsterTemplatePicker";
-import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
-import { RelationsTab } from "../components/RelationsTab";
-import { formatImportantDate } from "../inworldCalendar";
 import type {
   Artifact,
   Campaign,
   CompendiumLink,
-  DateRecurrence,
   EntityRelationsResponse,
   SearchResult,
   SettingBeing,
   SettingCommunity,
-  SettingLocation,
-} from "../types";
-import { NavIcon } from "../components/NavIcons";
+  SettingLocation } from "../types";
 import { TagChips } from "../components/TagChips";
 import { SecretSeal } from "../components/CreatureCard";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
-import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { toAliasesList } from "../utils/aliasesList";
 import { DETAIL_ROUTES } from "../entityTypes";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
-import { BaseFold, CampaignChronicle, CampaignRecords, ContextSwitch, EngagedCampaigns } from "../components/campaign/CampaignProfileParts";
+import { CampaignRecords, ContextSwitch, EngagedCampaigns } from "../components/campaign/CampaignProfileParts";
 import { campaignCrumbs, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { RECORD_ASPECTS } from "../entityRecords";
@@ -70,8 +67,11 @@ export function ArtifactDetailPage() {
   const artifactState = useEntity<Artifact>("artifact", artifactId);
   const artifact = artifactState.data ?? null;
   const settingId = artifact?.setting_id ?? null;
+  const neighbours = useProfileNeighbours("artifact", artifactId, settingId);
+  const portraitInput = useRef<HTMLInputElement>(null);
   const ctx = useCampaignContext(artifact?.campaigns);
   const inCampaign = ctx.campaign;
+  const chronicleCount = useProfileChronicleCount("artifact", artifactId, artifact?.important_dates, inCampaign?.id);
   const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "artifact", artifactId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "artifact", artifactId);
   const settingCrumbs = useSettingCrumbs(settingId);
@@ -84,18 +84,10 @@ export function ArtifactDetailPage() {
   const campaigns = useMemo(() => (allCampaigns ?? []).filter((c) => c.setting_id === settingId), [allCampaigns, settingId]);
   const beings = useResource<SettingBeing[]>(settingId ? settingPaths.inSetting("being", settingId) : null).data ?? [];
   const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
-  const [dateTitle, setDateTitle] = useState("");
-  const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
-  const [dateYear, setDateYear] = useState("");
-  const [dateMonth, setDateMonth] = useState("");
-  const [dateDay, setDateDay] = useState("");
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   const locations = useResource<SettingLocation[]>(settingId ? settingPaths.inSetting("location", settingId) : null).data ?? [];
   const relations = useResource<EntityRelationsResponse>(settingPaths.relations("artifact", artifactId)).data;
   const relationCount = relations ? relations.outgoing.length + relations.incoming.length : 0;
-  const calendar = useSettingCalendar(settingId ?? undefined);
-  const months = calendar?.months ?? [];
-  const weekdays = calendar?.weekdays ?? [];
   const referenceRef = useRef<HTMLDetailsElement>(null);
 
   async function handleAvatarChange(file: File | null) {
@@ -141,36 +133,6 @@ export function ArtifactDetailPage() {
     void run(() => write.put(`/artifacts/${artifactId}`, { location_id }), { affects: [...mine, { kind: "location" }] });
   }
 
-  // Важные даты попадают в календарь сеттинга и кампаний.
-  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
-
-  async function addImportantDate() {
-    if (!dateTitle.trim() || !dateDay) return;
-    const body = {
-      title: dateTitle,
-      recurrence: dateRecurrence,
-      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
-      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
-      day: Number(dateDay),
-    };
-    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
-    const done = await run(
-      () => write.post(`/artifacts/${artifactId}/important-dates`, body).then(() => true),
-      { affects: dateAffects, retry: false }
-    );
-    if (!done) return;
-    setDateTitle("");
-    setDateYear("");
-    setDateMonth("");
-    setDateDay("");
-  }
-
-  async function removeImportantDate(dateId: number) {
-    const ok = await confirm({ message: "Удалить важную дату?", confirmLabel: "Удалить", danger: true });
-    if (!ok) return;
-    await run(() => write.del(`/artifacts/important-dates/${dateId}`), { affects: dateAffects });
-  }
-
   const typeOptions = useMemo(() => {
     const list = itemTypeOptions(artifact?.item_class ?? "");
     const currentType = artifact?.item_type ?? "";
@@ -209,7 +171,7 @@ export function ArtifactDetailPage() {
 
   const importantDates = artifact.important_dates ?? [];
   const classLabel = ITEM_CLASSES.find((c) => c.value === artifact.item_class)?.label;
-  const identTags = [classLabel, artifact.item_type, artifact.rarity, artifact.requires_attunement ? "требует настройки" : null].filter(
+  const identTags = [classLabel, artifact.item_type, artifact.rarity, artifact.item_class === "equipment" ? null : artifact.requires_attunement ? "требует настройки" : "без настройки"].filter(
     (t): t is string => !!t && !!t.trim(),
   );
   const aliases = toAliasesList(artifact.aliases).filter((a) => a.trim());
@@ -226,7 +188,7 @@ export function ArtifactDetailPage() {
   }
 
   const textCard = (field: "description" | "history" | "notes", title: string, rows: number, emptyLabel: string) => (
-    <EditableTextCard
+    <ProfileText
       key={`${field}-${artifact.id}`}
       title={title}
       value={artifact[field]}
@@ -241,7 +203,7 @@ export function ArtifactDetailPage() {
 
   return (
     <EntityPage
-      paper
+      profile={neighbours}
       crumbs={inCampaign ? campaignCrumbs(inCampaign, artifact.name) : [...settingCrumbs, { label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
       entityType="artifact"
       onIdentContextMenu={campaignState.onContextMenu}
@@ -264,13 +226,13 @@ export function ArtifactDetailPage() {
           {aliases.length > 0 && <span>{aliases.join(" · ")}</span>}
         </span>
       }
-      actions={[{ label: "Архивировать", danger: true, onClick: archiveArtifact }]}
+      actions={[...(!inCampaign ? [{ label: "Сменить картинку", onClick: () => portraitInput.current?.click() }] : []), { label: "Архивировать", danger: true, onClick: archiveArtifact }]}
       tabs={[
         "Досье",
         { id: "Связи", label: relationCount + (ownerName ? 1 : 0) + (artifact.location ? 1 : 0) ? `Связи · ${relationCount + (ownerName ? 1 : 0) + (artifact.location ? 1 : 0)}` : "Связи" },
         {
           id: "Хроника",
-          label: importantDates.length ? `Хроника · ${importantDates.length}` : "Хроника",
+          label: chronicleCount ? `Хроника · ${chronicleCount}` : "Хроника",
         },
         "Галерея",
         "Упоминания",
@@ -282,112 +244,26 @@ export function ArtifactDetailPage() {
           {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
+          {!inCampaign && <input ref={portraitInput} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />}
         </>
       }
     >
       <ContextSwitch engaged={artifact.campaigns} campaign={inCampaign} onSelect={ctx.select} />
-      {tab === "Досье" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            {inCampaign ? (
-              <div className="dossier__portrait">
-                {artifact.avatar_image_url ? <img src={artifact.avatar_image_url} alt={artifact.name} /> : <span className="dossier__portrait-empty">Картинка предмета</span>}
-              </div>
-            ) : (
-            <label className="dossier__portrait" title={IMAGE_HINT}>
-              {artifact.avatar_image_url ? (
-                <img src={artifact.avatar_image_url} alt={artifact.name} />
-              ) : (
-                <span className="dossier__portrait-empty">Картинка предмета</span>
-              )}
-              <span className="dossier__portrait-hint">{uploadingAvatar ? "Загрузка…" : "Сменить картинку"}</span>
-              <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
-            </label>
-            )}
-            <dl className="paper-facts">
-              {ownerName && (
-                <div>
-                  <dt className="paper-label">У кого</dt>
-                  <dd>
-                    {ownerTo && artifact.owner_entity ? (
-                      <Link
-                        className={`mention-link mention--${mentionTone(artifact.owner_entity.type, artifact.owner_entity.id)}`}
-                        to={ownerTo}
-                      >
-                        {ownerName}
-                      </Link>
-                    ) : (
-                      ownerName
-                    )}
-                  </dd>
-                </div>
-              )}
-              {artifact.location && (
-                <div>
-                  <dt className="paper-label">Где</dt>
-                  <dd>
-                    <Link className="mention-link mention--loc" to={`/locations/${artifact.location.id}`}>
-                      {artifact.location.name}
-                    </Link>
-                  </dd>
-                </div>
-              )}
-              {links.length > 0 && (
-                <div>
-                  <dt className="paper-label">Правила</dt>
-                  <dd>
-                    {links.map((l) => (
-                      <Link key={l.id} className="paper-more" to={`/compendium/${l.id}`}>
-                        {l.name}
-                        {l.system_name ? ` · ${l.system_name}` : ""} ›
-                      </Link>
-                    ))}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt className="paper-label">Теги</dt>
-                <dd>
-                  <TagChips tags={artifact.tags ?? []} onChange={inCampaign ? undefined : saveTags} />
-                </dd>
-              </div>
-              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
-              <PlayerVisibilityFact targetType="setting_artifact" targetId={artifactId} />
-            </dl>
-            <div className="dossier__search">
-              <Link className="paper-more" to={treasuryTo}>
-                В Сокровищнице ›
-              </Link>
-              <GraphNeighbourhoodLink type="artifact" id={artifact.id} />
-            </div>
-          </aside>
-
-          {inCampaign ? (
-            <div className="dossier__main">
-              <CampaignRecords
-                campaignId={inCampaign.id}
-                settingId={artifact.setting_id}
-                ownerType="artifact"
-                ownerId={artifactId}
-                chains={records}
-                title="Сейчас в кампании"
-                aspects={RECORD_ASPECTS.artifact.map((a) => a.key)}
-                emptyKeys={RECORD_ASPECTS.artifact.map((a) => a.key).filter((k) => k !== "note")}
-              />
-              <BaseFold description={artifact.description ?? ""} chapters={[
-                ...([["Свойства", artifact.power], ["История", artifact.history], ["Заметки", artifact.notes], ["Секрет", artifact.secret]] as const).map(([title, content]) => ({ title, items: content.trim() ? [{ id: artifactId, title: "", content }] : [] })),
-                { title: "Статьи", items: artifact.chapters },
-              ]} />
-            </div>
-          ) : (
-          <div className="dossier__main">
-            <ArtifactHead
+      {tab === "Досье" && <div className="profile-dossier">
+        <ProfileHero type="artifact" name={artifact.name} createdAt={artifact.created_at} image={artifact.avatar_image_url} onGallery={() => selectTab("Галерея")} labels={<>
+          {!artifact.item_class && !inCampaign && <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={openReference}>+ род предмета</button>}
+          {identTags.map((t) => <span key={t} className="gch">{t}</span>)}
+          <TagChips tags={artifact.tags ?? []} onChange={inCampaign ? undefined : saveTags} />
+        </>}>
+<ArtifactHead
               power={artifact.power}
               secret={artifact.secret}
               ownerName={ownerName}
               ownerTo={ownerTo}
               location={artifact.location ?? null}
               settingId={artifact.setting_id}
+              ownerType={artifact.owner_entity?.type}
+              readOnly={!!inCampaign}
               onSave={async (patch) => {
                 const ok = await save(patch);
                 if (ok) {
@@ -397,35 +273,13 @@ export function ArtifactDetailPage() {
                 return ok;
               }}
             />
-
-            <EngagedCampaigns campaigns={artifact.campaigns} onOpen={ctx.select} />
-
-            {textCard("description", "Описание", 3, "описание")}
-            {textCard("history", "История", 4, "история предмета")}
-            {textCard("notes", "Заметки", 3, "заметка")}
-
-            <details className="paper-fold" open={artifact.chapters.length > 0}>
-              <summary>
-                Статьи <span className="paper-fold__count">· {artifact.chapters.length}</span>
-              </summary>
-              <div className="paper-fold__body">
-                <ChapterList
-                  ownerId={artifactId}
-                  ownerType="artifact"
-                  apiBase="/artifacts"
-                  chapters={artifact.chapters}
-                  titlePrefix="Статья"
-                  addLabel="статью"
-                  defaultSettingId={artifact.setting_id}
-                  campaigns={campaigns}
-                />
-              </div>
-            </details>
-
-            {/* Справка: правится редко, за столом не нужна — свёрнута. */}
-            <details className="paper-fold" ref={referenceRef}>
-              <summary>Основное, компендиум, источники</summary>
-              <div className="paper-fold__body">
+        </ProfileHero>
+        <PlayerVisibilityFact line targetType="setting_artifact" targetId={artifactId} />
+        {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={artifact.description} /></div></ProfileBlock> : textCard("description","Описание",3,"Опишите предмет так, как его увидят игроки.")}
+        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»</summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={artifact.setting_id} ownerType="artifact" ownerId={artifactId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.artifact.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.artifact.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={artifact.campaigns} onOpen={ctx.select} />}
+        <div className="profile-columns">{inCampaign ? <><ProfileBlock title="История"><MentionText text={artifact.history} /></ProfileBlock><ProfileBlock title="Заметки"><MentionText text={artifact.notes} /></ProfileBlock></> : <>{textCard("history","История",4,"Как предмет оказался здесь?")}{textCard("notes","Заметки",3,"Добавьте заметку о предмете.")}</>}</div>
+        <ProfileBlock title="Правила" count={links.length}><CompendiumLinksCard artifactId={artifactId} links={links} readOnly={!!inCampaign} /></ProfileBlock>
+        {!inCampaign && <details className="paper-fold" ref={referenceRef}><summary>Справка</summary><div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${artifact.id}`}
                   fields={[
@@ -485,17 +339,16 @@ export function ArtifactDetailPage() {
                   nameOriginal={artifact.name_original ?? ""}
                   onSave={(next, name_original) => saveOrThrow({ aliases: next, name_original })}
                 />
-                <CompendiumLinksCard artifactId={artifactId} links={links} />
-                <PdfEntitySources kind="artifact" id={artifact.id} />
-              </div>
-            </details>
-          </div>
-          )}
-        </div>
-      )}
 
-      {tab === "Связи" && (
-        <div className="paper-groups">
+                <PdfEntitySources kind="artifact" id={artifact.id} />
+
+          <ProfileBlock title="Статьи" count={artifact.chapters.length}><ChapterList profile ownerId={artifactId} ownerType="artifact" apiBase="/artifacts" chapters={artifact.chapters} defaultSettingId={artifact.setting_id} campaigns={campaigns} /></ProfileBlock>
+        </div></details>}
+      </div>}
+
+      {tab === "Связи" && <ProfileLinks type="artifact" id={artifactId} name={artifact.name} settingId={artifact.setting_id} groups={[
+        { title: "У кого · где", rows: [...(artifact.owner_entity ? [{key:"owner",type:artifact.owner_entity.type,id:artifact.owner_entity.id,name:ownerName,note:"владелец"}] : []),...(artifact.location ? [{key:"location",type:"location",id:artifact.location.id,name:artifact.location.name,note:"находится"}] : [])] },
+      ]} onEntityDrop={(e) => { if(e.type === "being" || e.type === "community") { setOwner(e.type,e.id);return true; } if(e.type === "location") { setLocation(e.id);return true; } return false; }} tools={
           <details className="paper-fold" open>
             <summary>У кого · где</summary>
             <div className="paper-fold__body">
@@ -557,90 +410,12 @@ export function ArtifactDetailPage() {
             </div>
           </details>
 
-          <details className="paper-fold" open>
-            <summary>
-              С кем · что <span className="paper-fold__count">{relationCount}</span>
-            </summary>
-            <RelationsTab
-              entityType="artifact"
-              entityId={artifact.id}
-              entityName={artifact.name}
-              defaultSettingId={artifact.setting_id}
-            />
-          </details>
-        </div>
-      )}
 
-      {tab === "Хроника" && inCampaign && <CampaignChronicle campaign={inCampaign} settingId={artifact.setting_id} chains={records} />}
+      } />}
 
-      {tab === "Хроника" && !inCampaign && (
-        <section>
-          <h2 className="paper-group__head">
-            В мире <span className="paper-group__count">{importantDates.length}</span>
-          </h2>
-          <p className="muted">Важные даты — отмечаются на календаре сеттинга и его кампаний.</p>
-          <ul className="paper-rows">
-            {importantDates.map((d) => (
-              <li key={d.id}>
-                <span className="paper-rows__main">
-                  <strong>{d.title}</strong>
-                </span>
-                <span className="paper-rows__sub">{formatImportantDate(d, months, weekdays)}</span>
-                <button className="comp-mini" aria-label={`Удалить «${d.title}»`} onClick={() => removeImportantDate(d.id)}>
-                  <NavIcon name="delete" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="chronicle__add">
-            <div className="row chronicle__line">
-              <input
-                placeholder="Дата (напр. День находки)"
-                value={dateTitle}
-                onChange={(e) => setDateTitle(e.target.value)}
-              />
-              <button className="primary" aria-label="Добавить дату" title="Добавить дату" onClick={addImportantDate}>
-                +
-              </button>
-            </div>
-            <div className="row chronicle__line">
-              <select value={dateRecurrence} onChange={(e) => setDateRecurrence(e.target.value as DateRecurrence)}>
-                <option value="once">Разовое</option>
-                <option value="annual">Ежегодное</option>
-                <option value="monthly">Ежемесячное</option>
-              </select>
-              {dateRecurrence === "once" && (
-                <input
-                  type="number"
-                  placeholder="Год"
-                  className="chronicle__num"
-                  value={dateYear}
-                  onChange={(e) => setDateYear(e.target.value)}
-                />
-              )}
-              {dateRecurrence !== "monthly" && (
-                <select value={dateMonth} onChange={(e) => setDateMonth(e.target.value)}>
-                  <option value="">Месяц…</option>
-                  {months.map((m) => (
-                    <option key={m.id} value={m.position}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="number"
-                placeholder="День"
-                className="chronicle__num"
-                value={dateDay}
-                onChange={(e) => setDateDay(e.target.value)}
-              />
-            </div>
-          </div>
-        </section>
-      )}
+      {tab === "Хроника" && <ProfileChronicle type="artifact" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={artifact.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={artifactId} settingId={artifact.setting_id} campaignId={inCampaign?.id} dates={importantDates} />}
 
-      {tab === "Галерея" && <GalleryTab ownerType="artifact" ownerId={artifactId} />}
+      {tab === "Галерея" && <GalleryTab profile ownerType="artifact" ownerId={artifactId} avatarUpload={{ previewUrl: artifact.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: null }} />}
 
       {tab === "Упоминания" && <MentionsTab entityType="artifact" entityId={artifactId} />}
     </EntityPage>
@@ -655,6 +430,8 @@ function ArtifactHead({
   secret,
   ownerName,
   ownerTo,
+  ownerType,
+  readOnly = false,
   location,
   settingId,
   onSave,
@@ -663,6 +440,8 @@ function ArtifactHead({
   secret: string;
   ownerName: string;
   ownerTo: string | null;
+  ownerType?: string;
+  readOnly?: boolean;
   location: { id: number; name: string } | null;
   settingId: number;
   onSave: (patch: { power: string; secret: string }) => Promise<boolean>;
@@ -709,50 +488,26 @@ function ArtifactHead({
   }
 
   return (
-    <article className="creature-card paper-scope creature-card--page is-embedded">
+    <article className="creature-card paper-scope creature-card--page is-embedded creature-card--d d-focal">
       <div className="creature-card__head">
         <span className="creature-card__head-label">За столом</span>
-        <button type="button" className="creature-card__edit" onClick={startEdit}>
-          Править
-        </button>
+        {!readOnly && <button type="button" className="creature-card__edit" onClick={startEdit}>Править</button>}
       </div>
       {power.trim() ? (
-        <div className="artifact-head__power">
+        <div className="artifact-head__power"><span className="d-note">Сила и свойства</span>
           <MentionText text={power} />
         </div>
       ) : (
         <div className="creature-card__empty">
           Что предмет делает — пока не записано.{" "}
-          <button type="button" className="creature-card__more" onClick={startEdit}>
-            Заполнить
-          </button>
+          {!readOnly && <button type="button" className="creature-card__more" onClick={startEdit}>Заполнить</button>}
         </div>
       )}
-      {(ownerName || location) && (
-        <div className="faction-card__faces">
-          {ownerName && (
-            <>
-              <span className="creature-card__head-label">У кого</span>{" "}
-              {ownerTo ? (
-                <Link className="mention-link" to={ownerTo}>
-                  {ownerName}
-                </Link>
-              ) : (
-                ownerName
-              )}{" "}
-            </>
-          )}
-          {location && (
-            <>
-              <span className="creature-card__head-label">Где</span>{" "}
-              <Link className="mention-link mention--loc" to={`/locations/${location.id}`}>
-                {location.name}
-              </Link>
-            </>
-          )}
-        </div>
-      )}
-      {secret.trim() && <SecretSeal text={secret} />}
+      {(ownerName || location) && <div className="artifact-head__where"><span className="d-note">У кого · где</span><div>
+        {ownerName && (ownerTo ? <ProfileEntityLink type={ownerType ?? "being"} id={Number(ownerTo.split("/").pop())} name={ownerName} to={ownerTo} /> : ownerName)}
+        {ownerName && location && " · "}{location && <ProfileEntityLink type="location" id={location.id} name={location.name} />}
+      </div></div>}
+      {secret.trim() ? <SecretSeal text={secret} /> : <div className="profile-secret-empty"><span>Секрет · пусто</span>{!readOnly && <button type="button" className="creature-card__more" onClick={startEdit}>+ добавить</button>}</div>}
     </article>
   );
 }
@@ -761,7 +516,8 @@ function ArtifactHead({
 // Предмет приключения и запись справочника — одна вещь с двух сторон: в книге
 // у «Кольца защиты разума» своя история и владелец, в компендиуме — правила.
 // Связей может быть несколько: сеттинг водится сразу под две системы.
-function CompendiumLinksCard({ artifactId, links }: { artifactId: number; links: CompendiumLink[] }) {
+function CompendiumLinksCard({ artifactId, links, readOnly = false }: { artifactId: number; links: CompendiumLink[]; readOnly?: boolean }) {
+  const [adding, setAdding] = useState(false);
   const run = useAction();
   const affects: Affect[] = [{ kind: "artifact", id: artifactId }];
 
@@ -775,22 +531,15 @@ function CompendiumLinksCard({ artifactId, links }: { artifactId: number; links:
   }
 
   return (
-    <details className="card">
-      <summary className="sb-section" style={{ margin: 0 }}>
-        Записи компендиумов {links.length > 0 && `(${links.length})`}
-      </summary>
-      <div className="stack" style={{ marginTop: 8 }}>
-        <span className="muted">
-          Маг. предметы из компендиумов систем, соответствующие этому предмету. Правила живут
-          там, история и владелец — здесь.
-        </span>
-        <CompendiumEntryPicker
+    <div className="stack">
+        {!readOnly && !adding && <button type="button" className="d-btn d-btn--sm" onClick={() => setAdding(true)}>+ Из компендиума</button>}
+        {adding && <CompendiumEntryPicker
           value={null}
           onChange={add}
           kind="magic_item"
           placeholder="Найти в компендиуме…"
           selectedLabel="Выбрано"
-        />
+        />}
         <div className="stack">
           {links.map((l) => (
             <div key={l.id} className="row" style={{ justifyContent: "space-between" }}>
@@ -798,14 +547,11 @@ function CompendiumLinksCard({ artifactId, links }: { artifactId: number; links:
                 <Link to={`/compendium/${l.id}`}>{l.name}</Link>
                 {l.system_name && <span className="muted"> · {l.system_name}</span>}
               </span>
-              <button className="danger" onClick={() => remove(l.id)}>
-                ✕
-              </button>
+              {!readOnly && <button className="d-btn d-btn--sm d-btn--ghost" aria-label={`Убрать ${l.name}`} onClick={() => remove(l.id)}>Убрать</button>}
             </div>
           ))}
           {links.length === 0 && <p className="muted">Связанных записей компендиума нет.</p>}
         </div>
-      </div>
-    </details>
+    </div>
   );
 }

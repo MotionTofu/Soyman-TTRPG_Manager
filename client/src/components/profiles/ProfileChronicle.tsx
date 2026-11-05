@@ -22,15 +22,18 @@ export function mergeProfileWorld(dates: ImportantDate[], events: ProfileWorldEv
   const result = events.map((ev) => ({ key: `${ev.source}:${ev.id}`, ev, date: null as ImportantDate | null }));
   for (const d of dates) {
     if (d.source_event_id != null && shown.has(d.source_event_id)) continue;
-    result.push({ key: `date:${d.id}`, date: d, ev: { id: d.id, title: d.title, description: d.description ?? "", status: "happened", important: 0,
-      inworld_year: d.year ?? now?.year ?? 0, inworld_month: d.month ?? now?.month ?? 1, inworld_day: d.day,
+    const year = d.recurrence === "once" ? d.year ?? now?.year ?? 0 : now?.year ?? d.year ?? 0;
+    const month = d.recurrence === "monthly" ? now?.month ?? d.month ?? 1 : d.month ?? now?.month ?? 1;
+    const future = now && dateKey(year,month,now.day == null ? 0 : d.day) > dateKey(now.year,now.month,now.day ?? 0);
+    result.push({ key: `date:${d.id}`, date: d, ev: { id: d.id, title: d.title, description: d.description ?? "", status: future ? "upcoming" : "happened", important: 0,
+      inworld_year: year, inworld_month: month, inworld_day: d.day,
       inworld_year_end: null, inworld_month_end: null, inworld_day_end: null, source: "setting" } });
   }
   return result.sort((a,b) => dateKey(a.ev.inworld_year,a.ev.inworld_month,a.ev.inworld_day) - dateKey(b.ev.inworld_year,b.ev.inworld_month,b.ev.inworld_day) || a.key.localeCompare(b.key));
 }
 
-export function ProfileChronicle({ type, id, settingId, campaignId, dates, gameEvents = [], dateEditor }: {
-  type: string; id: number; settingId: number; campaignId?: number; dates: ImportantDate[]; gameEvents?: ProfileGameEvent[]; dateEditor?: ReactNode;
+export function ProfileChronicle({ type, id, settingId, campaignId, dates, gameEvents = [], dateEditor, gameContent, recordCount = 0 }: {
+  type: string; id: number; settingId: number; campaignId?: number; dates: ImportantDate[]; gameEvents?: ProfileGameEvent[]; dateEditor?: ReactNode; gameContent?: ReactNode; recordCount?: number;
 }) {
   const state = useResource<{ events: ProfileWorldEvent[]; now: ChronicleNow | null; source: string }>(`/links/profile-chronicle?type=${type}&id=${id}${campaignId ? `&campaign_id=${campaignId}` : ""}`);
   const data = state.data;
@@ -71,8 +74,9 @@ export function ProfileChronicle({ type, id, settingId, campaignId, dates, gameE
       {!nowPlaced && nowLine}
       {!rows.length && <p className="muted">Даты и события с участием этой сущности появятся здесь.</p>}
     </ProfileBlock>
-    <ProfileBlock title="В игре" count={games.length}>
-      {games.length ? games.map((e) => <div className="profile-game-row" key={e.id}><span className="profile-game-row__date">{e.session_number ? `№${e.session_number}` : ""}<small>{e.session_date ?? e.date}</small></span><div><strong>{e.title || "Сессия"}</strong>{e.description && <small>{e.description}</small>}{e.campaign_name && <small>{e.campaign_name}</small>}</div><span>{e.reasons?.join(" · ")}{e.session_id && <Link to={`/sessions/${e.session_id}`}>К сессии ›</Link>}</span></div>) : <p className="muted">Появится, когда сущность отметят в сессии.</p>}
+    <ProfileBlock title="В игре" count={games.length + recordCount}>
+      {games.length ? games.map((e) => <div className="profile-game-row" key={e.id}><span className="profile-game-row__date">{e.session_number ? `№${e.session_number}` : ""}<small>{e.session_date ?? e.date}</small></span><div><strong>{e.title || "Сессия"}</strong>{e.description && <small>{e.description}</small>}{e.campaign_name && <small>{e.campaign_name}</small>}</div><span>{e.reasons?.join(" · ")}{e.session_id && <Link to={`/sessions/${e.session_id}`}>К сессии ›</Link>}</span></div>) : !gameContent && <p className="muted">Появится, когда сущность отметят в сессии.</p>}
+      {gameContent}
     </ProfileBlock>
     {adding && <Modal onClose={() => setAdding(false)} ariaLabel="Добавить дату"><h2>Добавить дату</h2>{dateEditor ?? <div className="stack">
       <label>Название<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>

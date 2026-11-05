@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type DragEvent } from "react";
 import { useAction, useResource, write } from "../data/hooks";
 import { relationAffects, settingPaths } from "../data/settingEntities";
 import { useUnloadTarget } from "../unloadTargets";
@@ -6,6 +6,9 @@ import { resolveEntityLabel } from "../api/resolveEntity";
 import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import type { SearchResult } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+
+// Профильный редактор загружается только по запросу; MIME-константа нужна лёгкому MentionTextarea.
+const ProfileParticipants = lazy(() => import("./profiles/ProfileParticipants"));
 
 interface UnifiedRelation {
   id: number;
@@ -29,15 +32,18 @@ interface Props {
   title?: string;
   /** Namespace for grouping — stored as `section` in entity_relations. */
   section?: string;
+  profile?: boolean;
+  settingId?: number;
 }
 
 export const SEARCH_DRAG_MIME = "application/x-rpg-search-result";
 
-export function LinkDropZone({ entityType, entityId, title = "Связанное", section }: Props) {
+export function LinkDropZone({ entityType, entityId, title = "Связанное", section, profile = false, settingId }: Props) {
   const [items, setItems] = useState<LinkedItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const run = useAction();
+  const affects = [...relationAffects(), ...(profile ? [{ path:"/links/profile-chronicle" }] : [])];
   const sectionParam = section ? `&section=${encodeURIComponent(section)}` : "";
   const relations = useResource<{ outgoing: UnifiedRelation[]; incoming: UnifiedRelation[] }>(
     `${settingPaths.relations(entityType, entityId)}${sectionParam}`
@@ -80,7 +86,7 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
       origin: "planned",
     };
     // Без «Повторить»: повтор после потерянного ответа завёл бы связь дважды.
-    await run(() => write.post("/entity-relations", body), { affects: relationAffects(), retry: false });
+    await run(() => write.post("/entity-relations", body), { affects, retry: false });
   }
 
   useUnloadTarget({ label: title, accepts: () => true, drop: link });
@@ -96,8 +102,10 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
   async function removeLink(relationId: number) {
     const ok = await confirm({ message: "Удалить связь?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await run(() => write.del(`/entity-relations/${relationId}`), { affects: relationAffects() });
+    await run(() => write.del(`/entity-relations/${relationId}`), { affects });
   }
+
+  if (profile) return <Suspense fallback={<p className="muted">Загрузка участников…</p>}><ProfileParticipants title={title} items={items} settingId={settingId} link={link} removeLink={removeLink} dragOver={dragOver} setDragOver={setDragOver} handleDrop={handleDrop} confirmDialog={confirmDialog} /></Suspense>;
 
   return (
     <div className="stack" id={`section-${entityType}-${entityId}-${(title ?? "").replace(/\s+/g, "-")}`}>
