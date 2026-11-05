@@ -1,7 +1,14 @@
-/* Шаблон списка «Реестр» (доски Reg-*, гриллинг 2026-11-05). Плитка одного
-   размера во всех четырёх списках и на любом экране: сетка «сколько влезет»
-   от 180 px — на 1440 с правой панелью это 4 в ряд, на 1920 — 6 (Q5). */
-.reg-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: var(--sp-5); }
+/* Шаблон списка «Реестр» (доски Reg-*, гриллинг 2026-11-05). Сетка «сколько
+   влезет» от 180 px, но не больше пяти в ряд: на 1440 с правой панелью —
+   4, на 1920 — 5, а не 6 (решение 2026-11-05 после первого взгляда на 1920:
+   шесть узких плиток с чипами читались хуже). Узкий экран — меньше колонок,
+   телефон — две (ниже). */
+.reg-tiles {
+  --reg-cols-max: 5;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 180px), calc((100% - (var(--reg-cols-max) - 1) * var(--sp-5)) / var(--reg-cols-max))), 1fr));
+  gap: var(--sp-5);
+}
 
 .reg-tile { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); }
 .reg-tile:hover, .reg-tile:focus-within { border-color: var(--edge); }
