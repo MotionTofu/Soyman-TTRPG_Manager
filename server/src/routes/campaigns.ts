@@ -1,3 +1,4 @@
+import { withAvatarUrl } from "./settingBeings";
 import { Router } from "express";
 import multer from "multer";
 import fs from "fs";
@@ -680,9 +681,9 @@ campaignsRouter.get("/calendar-events/:eventId", (req, res) => {
   const event = db.prepare(`SELECT e.*, c.name AS campaign_name, c.setting_id, st.name AS setting_name
     FROM campaign_calendar_events e JOIN campaigns c ON c.id = e.campaign_id
     LEFT JOIN settings st ON st.id = c.setting_id WHERE e.id = ?`)
-    .get(req.params.eventId) as { id: number; campaign_id: number } | undefined;
+    .get(req.params.eventId) as { id: number; campaign_id: number; avatar_image_path?: string | null; thumbnail_image_path?: string | null } | undefined;
   if (!event) return res.status(404).json({ error: "not found" });
-  res.json({ ...event, sessions: eventSessions("campaign_event", event.id, event.campaign_id) });
+  res.json({ ...withAvatarUrl(event), sessions: eventSessions("campaign_event", event.id, event.campaign_id) });
 });
 
 function campaignEventProfileError(body: Record<string, unknown>): string | null {

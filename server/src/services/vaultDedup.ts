@@ -136,6 +136,11 @@ export async function storeDedupedFile(sourcePath: string, targetPath: string, a
     if (reusable) {
       try { fs.linkSync(existingAbs!, staged); linked = true; } catch { /* copy below */ }
     }
+    // The source may predate the hash index (e.g. an imported gallery image).
+    // It is already a validated vault file, so it can itself supply the link.
+    if (!linked) {
+      try { fs.linkSync(sourcePath, staged); linked = true; } catch { /* cross-volume fallback below */ }
+    }
     if (!linked) await fs.promises.copyFile(sourcePath, staged);
     assertContext();
     fs.renameSync(staged, absTarget);

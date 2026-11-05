@@ -1,3 +1,4 @@
+import { TagChips } from "../components/TagChips";
 import { CampaignChronicle } from "../components/campaign/CampaignProfileParts";
 import { MentionText } from "../components/mentions/MentionText";
 import { ProfileHero, ProfileBlock, ProfileText, ProfileEntityLink, ProfileChapterRead } from "../components/profiles/ProfileParts";
@@ -857,18 +858,20 @@ export function LocationDetailPage() {
       {tab === "Досье" && <div className="profile-dossier">
         <ProfileHero type="location" name={location.name} createdAt={location.created_at} subtype={location.kind || LOCATION_ROLE_LABELS[locationRoleOf(location)]}
           image={imageUrl} onGallery={() => selectTab("Галерея")} labels={<>
-            {location.ancestors.map((a) => <ProfileEntityLink key={a.id} type="location" id={a.id} name={a.name} />)}
-            {location.inhabitant_communities.map((c) => <ProfileEntityLink key={c.id} type="community" id={c.id} name={c.name} />)}
+            <span className="gch">{location.kind || LOCATION_ROLE_LABELS[locationRoleOf(location)]}</span>
+              {location.ancestors.slice(-1).map((a) => <span key={a.id}>в <ProfileEntityLink type="location" id={a.id} name={a.name} /></span>)}
+              <button type="button" className="profile-text-link" onClick={() => selectTab("Связи")}>{directKids.length} мест внутри</button>
             {aliases.length > 0 && <span className="d-note">{aliases.join(" · ")}</span>}
+              {!inCampaign && <TagChips profile tags={location.tags ?? []} onChange={(tags) => void run(() => write.put(`/setting-locations/${locationId}`, {tags}), {affects:mine})} />}
           </>}>
           <PlaceCard locationId={locationId} variant="page" hideHistory readOnly={!!inCampaign} />
         </ProfileHero>
         <PlayerVisibilityFact line targetType="setting_location" targetId={locationId} />
         {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={location.description || "Описание пока не записано."} /></div></ProfileBlock> : <ProfileText title="Описание" value={location.description ?? ""} onSave={saveDescription} defaultSettingId={location.setting_id} />}
         <ProfilePlaceScenes history={history} settingId={location.setting_id} />
-        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»</summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={location.setting_id} ownerType="location" ownerId={locationId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.location.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.location.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={location.campaigns} onOpen={ctx.select} />}
+        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»<small className="profile-fold-note">записи: состояние · изменения · заметки</small><small className="profile-fold-state">свёрнуто ▸</small></summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={location.setting_id} ownerType="location" ownerId={locationId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.location.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.location.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={location.campaigns} onOpen={ctx.select} />}
         <ProfileBlock title="Статьи" count={chapters.length}>{inCampaign ? <ProfileChapterRead chapters={chapters} /> : <ChapterList profile ownerId={locationId} ownerType="location" apiBase="/setting-locations" chapters={chapters} defaultSettingId={location.setting_id} visibilityToggle />}</ProfileBlock>
-        {!inCampaign && <details className="paper-fold"><summary>Справка</summary><div className="paper-fold__body">
+        {!inCampaign && <details className="paper-fold"><summary>Справка<small className="profile-fold-note">основное · короткое имя для карты · источники ▸</small></summary><div className="paper-fold__body">
                 <LocationInfoTab
                   key={location.id}
                   location={location}
@@ -924,7 +927,7 @@ export function LocationDetailPage() {
         />
       )}
 
-      {tab === "Галерея" && <GalleryTab profile ownerType="location" ownerId={locationId}
+      {tab === "Галерея" && <GalleryTab profile campaignId={inCampaign?.id} ownerType="location" ownerId={locationId}
         avatarUpload={{ previewUrl: location.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: avatarCrop.modal }}
         thumbnailUpload={{ previewUrl: location.thumbnail_image_url, uploading: uploadingThumbnail, onSelect: thumbnailCrop.onSelect, modal: null }} />}
 

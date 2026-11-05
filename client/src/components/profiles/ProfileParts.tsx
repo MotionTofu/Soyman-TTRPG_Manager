@@ -42,10 +42,10 @@ export function ProfileHero({ type, name, subtype, createdAt, labels, image, onG
       {labels && <div className="profile-labels">{labels}</div>}
       {children}
     </div>
-    <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label={onGallery ? "Открыть галерею" : "Картинка не задана"} disabled={!onGallery}>
+    <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label={onGallery ? (type.endsWith("_event") ? "Сменить картинку события" : "Открыть галерею") : "Картинка не задана"} disabled={!onGallery}>
       {image ? <img src={image} alt={name} /> : <ProfileTypeGlyph type={type} />}
-      {onGallery && <span className="profile-cover__from">Из галереи</span>}
-      <span className="profile-cover__caption">{type === "being" ? "Портрет" : "Картинка"}{onGallery ? " · открыть галерею" : " · не задана"}</span>
+      {onGallery && !type.endsWith("_event") && <span className="profile-cover__from">Из галереи</span>}
+      <span className="profile-cover__caption">{type.endsWith("_event") ? "Картинка события · щелчок — сменить" : <>{type === "being" ? "Портрет" : "Картинка"}{onGallery ? " · открыть галерею" : " · не задана"}</>}</span>
     </button>
   </section>;
 }

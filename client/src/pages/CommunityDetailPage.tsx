@@ -288,16 +288,16 @@ export function CommunityDetailPage() {
       <ContextSwitch engaged={community.campaigns} campaign={inCampaign} onSelect={ctx.select} />
       {tab === "Досье" && <div className="profile-dossier">
         <ProfileHero type="community" name={community.name} createdAt={community.created_at} image={community.avatar_image_url} onGallery={() => selectTab("Галерея")}
-          labels={<>{community.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{aliases.length > 0 && <span className="d-note">{aliases.join(" · ")}</span>}<TagChips tags={community.tags ?? []} onChange={inCampaign ? undefined : saveTags} /></>}>
+          labels={<>{community.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{aliases.length > 0 && <span className="d-note">{aliases.join(" · ")}</span>}<TagChips profile tags={community.tags ?? []} onChange={inCampaign ? undefined : saveTags} /></>}>
           <FactionCard force={community.force ?? {}} secret={community.secret ?? ""} members={community.members} settingId={community.setting_id} onAllMembers={() => selectTab("Связи")} onSave={inCampaign ? undefined : (patch) => save(patch)} forceExtras={inCampaign ? forceExtras(records,community.setting_id) : undefined} />
         </ProfileHero>
         <PlayerVisibilityFact line targetType="setting_community" targetId={communityId} />
         {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={community.description ?? ""} /></div></ProfileBlock> : <ProfileText title="Описание" value={community.description ?? ""} onSave={saveDescription} defaultSettingId={community.setting_id} />}
-        {(community.campaigns ?? []).map((c) => <details key={c.id} className="paper-fold" open={live?.campaign_id === c.id}><summary>В кампании «{c.name}»</summary><div className="paper-fold__body"><button type="button" className="d-btn d-btn--sm" onClick={() => ctx.select(c.id)}>Контекст кампании ›</button>{inCampaign?.id === c.id && <CampaignRecords campaignId={c.id} settingId={community.setting_id} ownerType="community" ownerId={communityId} chains={records} title="Что изменилось" aspects={SIDE_PROFILE_ASPECTS} emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)} />}</div></details>)}
+        {(community.campaigns ?? []).map((c) => <details key={c.id} className="paper-fold" open={live?.campaign_id === c.id}><summary>В кампании «{c.name}»<small className="profile-fold-note">участие: цель · план · без вмешательства · если помочь</small>{live?.campaign_id !== c.id && <small className="profile-fold-state">свёрнуто — нет идущей сессии ▸</small>}</summary><div className="paper-fold__body"><button type="button" className="d-btn d-btn--sm" onClick={() => ctx.select(c.id)}>Контекст кампании ›</button>{inCampaign?.id === c.id && <CampaignRecords campaignId={c.id} settingId={community.setting_id} ownerType="community" ownerId={communityId} chains={records} title="Что изменилось" aspects={SIDE_PROFILE_ASPECTS} emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)} />}</div></details>)}
         <div className="profile-columns profile-columns--three">
           {CHAPTER_SECTIONS.filter(([section]) => section !== "current_situation").map(([section,title]) => <ProfileBlock key={section} title={title} count={chaptersOf(section).length}>{inCampaign ? <ProfileChapterRead chapters={chaptersOf(section)} /> : <ChapterList profile ownerId={communityId} ownerType="community" apiBase="/setting-communities" section={section} chapters={chaptersOf(section)} defaultSettingId={community.setting_id} />}</ProfileBlock>)}
         </div>
-        {!inCampaign && <details className="paper-fold"><summary>Справка</summary><div className="paper-fold__body">
+        {!inCampaign && <details className="paper-fold"><summary>Справка<small className="profile-fold-note">основное · статьи · источники ▸</small></summary><div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${community.id}`}
                   fields={[{ key: "name", label: "Имя", value: community.name, required: true }]}
@@ -426,7 +426,7 @@ export function CommunityDetailPage() {
       {tab === "Хроника" && <ProfileChronicle type="community" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={community.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={communityId} settingId={community.setting_id} campaignId={inCampaign?.id} dates={community.important_dates} />}
 
       {tab === "Галерея" && (
-        <GalleryTab profile
+        <GalleryTab profile campaignId={inCampaign?.id}
           avatarUpload={{ previewUrl: community.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: null }}
           ownerType="community"
           ownerId={communityId}

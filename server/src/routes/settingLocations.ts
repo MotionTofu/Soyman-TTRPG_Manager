@@ -1,3 +1,4 @@
+import { parseTags } from "./settingBeings";
 import { Router } from "express";
 import multer from "multer";
 import path from "path";
@@ -48,10 +49,11 @@ function withMapUrl<T extends { map_image_path?: string | null }>(row: T) {
 }
 
 function withImageUrls<
-  T extends { avatar_image_path?: string | null; thumbnail_image_path?: string | null }
+  T extends { avatar_image_path?: string | null; thumbnail_image_path?: string | null; tags?: string | string[] }
 >(row: T) {
   return {
     ...row,
+    tags: parseTags(row.tags),
     avatar_image_url: row.avatar_image_path && isSafeStoredPath(row.avatar_image_path) ? toFileUrl(row.avatar_image_path) : null,
     thumbnail_image_url:
       row.thumbnail_image_path && isSafeStoredPath(row.thumbnail_image_path) ? toFileUrl(row.thumbnail_image_path) : null,
@@ -1283,7 +1285,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
     | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
 
-  const { name, kind, role, description, player_text, short_name, aliases, name_original } = req.body as {
+  const { name, kind, role, description, player_text, short_name, aliases, name_original, tags } = req.body as {
     name?: string;
     kind?: string;
     role?: string;
@@ -1292,7 +1294,9 @@ settingLocationsRouter.put("/:id", (req, res) => {
     short_name?: string;
     aliases?: string[];
     name_original?: string;
+    tags?: string[];
   };
+  if (tags !== undefined && (!Array.isArray(tags) || tags.length > 100 || tags.some((t) => typeof t !== "string" || t.length > 100))) return res.status(400).json({ error: "invalid tags" });
   const err = validateLocationPayload({ name, kind, role, description, short_name, aliases, name_original });
   if (player_text !== undefined && player_text !== null && String(player_text).length > MAX_DESC) {
     return res.status(400).json({ error: `player_text must be ≤${MAX_DESC} chars` });
@@ -1335,6 +1339,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
        description = COALESCE(?, description),
        player_text = COALESCE(?, player_text),
        short_name = CASE WHEN ? THEN ? ELSE short_name END,
+       tags = COALESCE(?, tags),
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
        folder_path = ?
@@ -1347,6 +1352,7 @@ settingLocationsRouter.put("/:id", (req, res) => {
     player_text ?? null,
     short_name !== undefined ? 1 : 0,
     short_name ?? null,
+    tags ? JSON.stringify(tags) : null,
     aliases ? JSON.stringify(aliases) : null,
     name_original ?? null,
     folderPath,

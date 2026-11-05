@@ -487,13 +487,13 @@ export function BeingDetailPage() {
 
       {tab === "Досье" && <div className="profile-dossier">
         <ProfileHero type="being" name={being.name} subtype={isBestiary ? "Бестиарий" : "Личность"} createdAt={being.created_at} image={being.avatar_image_url} onGallery={() => selectTab("Галерея")}
-          labels={<><span className="gch">{BEING_CATEGORY_LABELS[being.category]}</span>{campaignState.badge}{being.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{being.communities.map((c) => <ProfileEntityLink key={c.id} type="community" id={c.id} name={c.name} />)}{!inCampaign && <TagChips tags={being.tags} onChange={saveTags} />}</>}>
+          labels={<><span className="gch">{BEING_CATEGORY_LABELS[being.category]}</span>{campaignState.badge}{being.locations.map((l) => <ProfileEntityLink key={l.id} type="location" id={l.id} name={l.name} />)}{being.communities.map((c) => <ProfileEntityLink key={c.id} type="community" id={c.id} name={c.name} />)}{!inCampaign && <TagChips profile tags={being.tags} onChange={saveTags} />}</>}>
           {editingCard && !inCampaign ? <CreatureCardEditor type="being" id={beingId} inline forceInitiallyOpen={isBestiary} settingId={being.setting_id} onDone={() => setEditingCard(false)} /> : <CreatureCardLoader type="being" id={beingId} variant="page" embedded hideProfileButton forceExtras={inCampaign ? forceExtras(records,being.setting_id) : undefined} onEdit={!inCampaign ? () => setEditingCard(true) : undefined} />}
         </ProfileHero>
         <PlayerVisibilityFact line targetType="setting_being" targetId={beingId} />
         {isBestiary && <ProfileStatblock id={beingId} name={being.name} settingId={being.setting_id} compendiumId={being.base_monster_id ?? being.compendium_links[0]?.id} />}
         {(being.campaigns ?? []).map((c) => <details key={c.id} className="paper-fold" open={live?.campaign_id === c.id}>
-          <summary>В кампании «{c.name}»</summary>
+          <summary>В кампании «{c.name}»<small className="profile-fold-note">участие: цель · план · без вмешательства · если помочь</small>{live?.campaign_id !== c.id && <small className="profile-fold-state">свёрнуто — нет идущей сессии ▸</small>}</summary>
           <button type="button" className="d-btn d-btn--sm" onClick={() => ctx.select(c.id)}>Контекст кампании ›</button>
           {inCampaign?.id === c.id && <><CampaignMove being={being} campaignId={c.id} live={live?.campaign_id === c.id} affects={mine} /><CampaignRecords campaignId={c.id} settingId={being.setting_id} ownerType="being" ownerId={beingId} chains={records} title="Что изменилось" aspects={SIDE_PROFILE_ASPECTS} /></>}
           <ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section="current_situation" chapters={being.chapters.filter((ch) => ch.section === "current_situation" && ch.campaign_id === c.id)} defaultSettingId={being.setting_id} campaigns={campaigns} visibilityToggle />
@@ -507,7 +507,7 @@ export function BeingDetailPage() {
         {being.chapters.some((c) => c.section === "current_situation" && !c.campaign_id) && <details className="paper-fold"><summary>Текущая ситуация</summary><ChapterList profile ownerId={beingId} ownerType="being" apiBase="/setting-beings" section="current_situation" chapters={being.chapters.filter((c) => c.section === "current_situation" && !c.campaign_id)} defaultSettingId={being.setting_id} campaigns={campaigns} visibilityToggle /></details>}
             {/* Справка: правится редко, за столом не нужна — свёрнута. */}
             <details className="paper-fold">
-              <summary>Справка</summary>
+              <summary>Справка<small className="profile-fold-note">основное · статблоки · источники ▸</small></summary>
               <div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${being.id}`}
@@ -649,7 +649,7 @@ export function BeingDetailPage() {
       {tab === "Хроника" && <ProfileChronicle type="being" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={being.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={beingId} settingId={being.setting_id} campaignId={inCampaign?.id} dates={being.important_dates} gameEvents={being.events} />}
 
       {tab === "Галерея" && (
-        <GalleryTab profile ownerType="being" ownerId={beingId} avatarUpload={!inCampaign ? { previewUrl:being.avatar_image_url,uploading:uploadingAvatar,onSelect:avatarCrop.onSelect,modal:null } : undefined} />
+        <GalleryTab profile campaignId={inCampaign?.id} ownerType="being" ownerId={beingId} avatarUpload={!inCampaign ? { previewUrl:being.avatar_image_url,uploading:uploadingAvatar,onSelect:avatarCrop.onSelect,modal:null } : undefined} />
       )}
 
       {tab === "Упоминания" && (

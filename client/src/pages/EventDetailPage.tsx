@@ -1,3 +1,6 @@
+import { useImageCrop } from "../hooks/useImageCrop";
+import { EntityImageSlot } from "../components/EntityImageSlot";
+import { ImageLibraryModal } from "../components/ImageLibraryModal";
 import { useState } from "react";
 import { ProfileHero, ProfileText } from "../components/profiles/ProfileParts";
 import { ProfileEventSessions } from "../components/profiles/ProfileEventSessions";
@@ -13,7 +16,7 @@ import type { Affect } from "../data/entities";
 import { EntityPage } from "../components/EntityPage";
 import { LinkDropZone } from "../components/LinkDropZone";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
-import { formatByPrecision } from "../inworldCalendar";
+import { formatProfileEventDate as formatByPrecision } from "../components/profiles/eventDate";
 import type { SettingCalendarEvent } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
@@ -40,6 +43,17 @@ export function EventDetailPage() {
   const event = eventState.data ?? null;
   const [editing,setEditing] = useState(false);
   const [players,setPlayers] = useState(false);
+  const [portraitOpen, setPortraitOpen] = useState(false);
+  const [portraitLibrary, setPortraitLibrary] = useState(false);
+  const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const portraitCrop = useImageCrop("square", async (file) => {
+    setUploadingPortrait(true);
+    try {
+      const form = new FormData(); form.append("file", file);
+      const done = await run(() => write.post(`/gallery/portrait/${kind}/${eventId}/avatar`, form).then(() => true), {affects:[{kind,id:eventId}]});
+      if (done) setPortraitOpen(false);
+    } finally { setUploadingPortrait(false); }
+  });
   const clockOwner = useResource<{ pinned_calendar_year: number | null; pinned_calendar_month: number | null }>(event ? campaign ? `/campaigns/${event.campaign_id}` : `/settings/${event.setting_id}` : null).data;
   const sessions = useResource<SessionSummary[]>(campaign && event?.campaign_id ? sessionPaths.campaignSessions(event.campaign_id) : null).data ?? [];
   const now = clockOwner ? campaignClock(clockOwner,campaign ? sessions : []).now : null;
@@ -114,6 +128,9 @@ export function EventDetailPage() {
     actions={[{label:"В хронике",onClick:() => navigate(chronicleUrl)},{label:"Удалить",danger:true,onClick:deleteEvent}]}
     loading={!event} error={eventState.error} onRetry={eventState.reload} overlays={<>
       {confirmDialog}
+      {portraitCrop.modal}
+      {portraitOpen && <Modal className="modal-sheet" onClose={() => setPortraitOpen(false)} ariaLabel="Картинка события"><h2>Картинка события</h2><EntityImageSlot title="Обложка" hint="Выберите изображение и обрежьте его." url={event?.avatar_image_url ?? null} uploading={uploadingPortrait} onSelect={portraitCrop.onSelect} /><button type="button" className="d-btn" onClick={() => setPortraitLibrary(true)}>Из библиотеки</button></Modal>}
+      {portraitLibrary && <ImageLibraryModal onClose={() => setPortraitLibrary(false)} onSelect={portraitCrop.onSelect} />}
       {editing && event && <Modal onClose={() => setEditing(false)} ariaLabel="Править событие"><h2>Править событие</h2><EventFields fields={fields} onSave={saveFields} /></Modal>}
       {players && event && <Modal onClose={() => setPlayers(false)} ariaLabel="Что видят игроки"><h2>Что видят игроки</h2>
         <label className="row"><input type="checkbox" checked={!!event.visible_to_players} onChange={() => void saveEntity({visible_to_players:!event.visible_to_players} as unknown as Partial<ProfileEvent>)} />Видно игрокам</label>
@@ -122,13 +139,13 @@ export function EventDetailPage() {
       </Modal>}
     </>}>
     {event && <div className="profile-dossier profile-event">
-      <ProfileHero type={kind} name={event.title} createdAt={event.created_at} subtype={campaign ? "Кампании" : "Сеттинга"} labels={<>
-        <span className={`profile-event-date tone-${tone}`}><i />{dateLabel}{endLabel && ` — ${endLabel}`}</span><span className="d-note">{{past:"случилось",on:"идёт",up:"предстоит",off:"отменено"}[tone]}</span>
+      <ProfileHero type={kind} image={event.avatar_image_url} onGallery={() => setPortraitOpen(true)} name={event.title} createdAt={event.created_at} subtype={campaign ? "Кампании" : "Сеттинга"} labels={<>
+        <span className={`profile-event-date tone-${tone}`}><i />{dateLabel}{endLabel && ` — ${endLabel}`}</span><span className={`profile-event-status tone-${tone}`}>{{past:"случилось",on:"идёт",up:"предстоит",off:"отменено"}[tone]}</span>
         <button type="button" className="d-btn d-btn--sm d-btn--ghost" aria-pressed={!!event.important} onClick={() => void saveEntity({important:!event.important} as unknown as Partial<ProfileEvent>)}>{event.important ? "★ важное" : "+ важное"}</button>
       </>}>
         <ProfileText focal title="Кратко" value={event.description} onSave={(v) => save({description:v})} emptyLabel="Одна строка для хроники мира." defaultSettingId={event.setting_id ?? undefined} rows={3} />
       </ProfileHero>
-      <div className="profile-visibility"><span className="profile-visibility__label">Игрокам</span><span>{event.visible_to_players ? "открыто" : "скрыто"} — {event.player_text ? "отдельный текст" : "краткое описание"}</span><button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => setPlayers(true)}>Что видят игроки ›</button></div>
+      <div className="profile-visibility"><span className="profile-visibility__label">Игрокам</span><span>{event.visible_to_players ? "открыто" : "скрыто"} — {event.player_text ? "отдельный текст" : "краткое описание"}</span><button type="button" className="profile-text-link" onClick={() => setPlayers(true)}>Что видят игроки ›</button></div>
       {campaign && <ProfileEventSessions sessions={event.sessions} />}
       <div className="profile-columns"><ProfileText title="Подробно" value={event.full_description} onSave={(v) => save({full_description:v})} emptyLabel="Добавьте подробности события." defaultSettingId={event.setting_id ?? undefined} rows={8} /><ProfileText title="Последствия" value={event.consequences} onSave={(v) => save({consequences:v})} emptyLabel="Что в мире изменилось после события?" defaultSettingId={event.setting_id ?? undefined} rows={6} /></div>
       <LinkDropZone profile entityType={kind} entityId={eventId} title="Участники" settingId={event.setting_id ?? undefined} />

@@ -253,7 +253,7 @@ export function ArtifactDetailPage() {
         <ProfileHero type="artifact" name={artifact.name} createdAt={artifact.created_at} image={artifact.avatar_image_url} onGallery={() => selectTab("Галерея")} labels={<>
           {!artifact.item_class && !inCampaign && <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={openReference}>+ род предмета</button>}
           {identTags.map((t) => <span key={t} className="gch">{t}</span>)}
-          <TagChips tags={artifact.tags ?? []} onChange={inCampaign ? undefined : saveTags} />
+          <TagChips profile tags={artifact.tags ?? []} onChange={inCampaign ? undefined : saveTags} />
         </>}>
 <ArtifactHead
               power={artifact.power}
@@ -276,10 +276,10 @@ export function ArtifactDetailPage() {
         </ProfileHero>
         <PlayerVisibilityFact line targetType="setting_artifact" targetId={artifactId} />
         {inCampaign ? <ProfileBlock title="Описание"><div className="profile-prose"><MentionText text={artifact.description} /></div></ProfileBlock> : textCard("description","Описание",3,"Опишите предмет так, как его увидят игроки.")}
-        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»</summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={artifact.setting_id} ownerType="artifact" ownerId={artifactId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.artifact.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.artifact.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={artifact.campaigns} onOpen={ctx.select} />}
+        {inCampaign ? <details className="paper-fold"><summary>В кампании «{inCampaign.name}»<small className="profile-fold-note">записи: владелец · свойства · заметки</small><small className="profile-fold-state">свёрнуто ▸</small></summary><div className="paper-fold__body"><CampaignRecords campaignId={inCampaign.id} settingId={artifact.setting_id} ownerType="artifact" ownerId={artifactId} chains={records} title="Сейчас в кампании" aspects={RECORD_ASPECTS.artifact.map((a) => a.key)} emptyKeys={RECORD_ASPECTS.artifact.map((a) => a.key).filter((k) => k !== "note")} /></div></details> : <EngagedCampaigns campaigns={artifact.campaigns} onOpen={ctx.select} />}
         <div className="profile-columns">{inCampaign ? <><ProfileBlock title="История"><MentionText text={artifact.history} /></ProfileBlock><ProfileBlock title="Заметки"><MentionText text={artifact.notes} /></ProfileBlock></> : <>{textCard("history","История",4,"Как предмет оказался здесь?")}{textCard("notes","Заметки",3,"Добавьте заметку о предмете.")}</>}</div>
         <ProfileBlock title="Правила" count={links.length}><CompendiumLinksCard artifactId={artifactId} links={links} readOnly={!!inCampaign} /></ProfileBlock>
-        {!inCampaign && <details className="paper-fold" ref={referenceRef}><summary>Справка</summary><div className="paper-fold__body">
+        {!inCampaign && <details className="paper-fold" ref={referenceRef}><summary>Справка<small className="profile-fold-note">основное · статьи · источники ▸</small></summary><div className="paper-fold__body">
                 <EntityFieldsCard
                   key={`fields-${artifact.id}`}
                   fields={[
@@ -415,7 +415,7 @@ export function ArtifactDetailPage() {
 
       {tab === "Хроника" && <ProfileChronicle type="artifact" gameContent={inCampaign && records.length > 0 ? <CampaignChronicle campaign={inCampaign} settingId={artifact.setting_id} chains={records} /> : undefined} recordCount={inCampaign ? records.length : 0} id={artifactId} settingId={artifact.setting_id} campaignId={inCampaign?.id} dates={importantDates} />}
 
-      {tab === "Галерея" && <GalleryTab profile ownerType="artifact" ownerId={artifactId} avatarUpload={{ previewUrl: artifact.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: null }} />}
+      {tab === "Галерея" && <GalleryTab profile campaignId={inCampaign?.id} ownerType="artifact" ownerId={artifactId} avatarUpload={{ previewUrl: artifact.avatar_image_url, uploading: uploadingAvatar, onSelect: avatarCrop.onSelect, modal: null }} />}
 
       {tab === "Упоминания" && <MentionsTab entityType="artifact" entityId={artifactId} />}
     </EntityPage>

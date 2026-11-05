@@ -46,7 +46,7 @@ export function PlayerVisibilityFact({ targetType, targetId, line = false }: { t
           .join("; ");
   return (
     <div className={line ? "profile-visibility" : undefined}>
-      {line ? <><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><span>{seen.length ? `открыто — ${text}` : "скрыто — видят только имя"}</span><button type="button" className="d-btn d-btn--ghost" onClick={() => setOpen(true)}>Что видят игроки ›</button></> : <><dt className="paper-label">Игрокам</dt>
+      {line ? <><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><span>{seen.length ? `открыто — ${text}` : "скрыто — видят только имя"}</span><button type="button" className="profile-text-link" onClick={() => setOpen(true)}>Что видят игроки ›</button></> : <><dt className="paper-label">Игрокам</dt>
       <dd>
         <button type="button" className="paper-more player-visibility-fact" onClick={() => setOpen(true)}>
           {text} ›

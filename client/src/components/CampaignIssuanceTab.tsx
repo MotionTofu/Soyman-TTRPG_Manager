@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { readResource } from "../data/imperative";
@@ -49,7 +49,8 @@ const DROP_TARGETS: Record<string, VisibilityTargetType> = {
 };
 
 export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
-  const [sel, setSel] = useState<{ section: string; item?: string }>({ section: "summary" });
+  const [params] = useSearchParams();
+  const [sel, setSel] = useState<{ section: string; item?: string }>(() => ({ section: Number(params.get("section")) > 0 ? "gm" : "summary" }));
   const [creatingSection, setCreatingSection] = useState(false);
   const summaryState = useResource<SummaryItem[]>(campaignPaths.grantSummary(campaignId));
   const summary = summaryState.data;

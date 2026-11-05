@@ -102,6 +102,7 @@ describe("профиль артефакта в кампании", () => {
     expect(await screen.findByText("У героев")).toBeDefined();
     expect(screen.getByText(/Не заполнено:/).textContent).toContain("что открылось о свойствах");
     expect(screen.queryByPlaceholderText("+ тег")).toBeNull();
+      expect(screen.queryByRole("button", { name: "+ ТЕГ" })).toBeNull();
     expect(document.querySelector('input[type="file"]')).toBeNull();
     expect(screen.queryByRole("button", { name: "+ род предмета" })).toBeNull();
     expect(screen.queryByRole("heading", { name: /Ход в кампании/ })).toBeNull();
@@ -109,7 +110,8 @@ describe("профиль артефакта в кампании", () => {
     expect(screen.getByText("Свойства основы")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Основа сеттинга" }));
     await screen.findByRole("heading", { name: /Задействована в кампаниях/ });
-    expect(screen.getByPlaceholderText("+ тег")).toBeDefined();
+      fireEvent.click(screen.getByRole("button", { name: "+ ТЕГ" }));
+      expect(screen.getByPlaceholderText("+ тег")).toBeDefined();
     expect(screen.queryByRole("button", { name: /Состояние Камень:/ })).toBeNull();
   });
 

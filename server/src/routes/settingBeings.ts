@@ -39,7 +39,7 @@ export function withAvatarUrl<
   };
 }
 
-function parseTags(raw: string | string[] | undefined): string[] {
+export function parseTags(raw: string | string[] | undefined): string[] {
   if (Array.isArray(raw)) return raw;
   if (!raw) return [];
   try {

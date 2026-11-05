@@ -29,6 +29,11 @@ function mountHandouts() {
   fireEvent.click(screen.getByRole("tab", { name: /^Раздатка/ }));
 }
 describe("колонки выдачи кампании", () => {
+  it("opens a linked handout section and its exact image without switching subsections manually", () => {
+    render(<MemoryRouter initialEntries={["/campaigns/1?tab=Для игроков&section=2&image=21"]}><CampaignIssuanceTab campaignId={1} settingId={1} roster={[]} /></MemoryRouter>);
+    expect(screen.getByRole("tab", { name: /^Раздатка/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("gallery-preview").textContent).toContain("21");
+  });
   it("hides archived handouts and offers no local archive buttons", () => {
     fixtures.articles.push({ id: 12, section_id: 1, title: "Archived article", content: "Archived", position: 1, created_at: "2026-10-02", archived_at: "2026-10-04" } as never);
     fixtures.images.push({ id: 22, caption: "Archived image", image_url: "/files/archive.webp", created_at: "2026-10-03", archived_at: "2026-10-04" } as never);

@@ -351,7 +351,7 @@ export function EntityPage({
         </div>
       )}
 
-      <Breadcrumbs items={crumbs} />
+      <Breadcrumbs items={crumbs} compact={!!profile} />
 
       {(!paper || titleAbove || avatar || primaryAction || (more && !moreInTabs)) && (
         <div className="entity-page__head">

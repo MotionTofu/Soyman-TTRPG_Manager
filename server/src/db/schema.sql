@@ -513,6 +513,7 @@ CREATE TABLE IF NOT EXISTS preproduction (
 );
 
 CREATE TABLE IF NOT EXISTS setting_locations (
+  tags TEXT NOT NULL DEFAULT '',
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   parent_id INTEGER REFERENCES setting_locations(id) ON DELETE CASCADE,
@@ -1246,6 +1247,8 @@ CREATE TABLE IF NOT EXISTS link_notes (
 -- Campaign-specific in-world calendar events, created from the campaign's
 -- custom calendar tab (right-click on a day) or from the "События" list.
 CREATE TABLE IF NOT EXISTS campaign_calendar_events (
+  thumbnail_image_path TEXT,
+  avatar_image_path TEXT,
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -1335,6 +1338,8 @@ CREATE TABLE IF NOT EXISTS important_dates (
 -- this setting, so campaigns can freely edit/delete their own copy without
 -- touching this source row (deliberately not linked back — see settings.ts).
 CREATE TABLE IF NOT EXISTS setting_calendar_events (
+  thumbnail_image_path TEXT,
+  avatar_image_path TEXT,
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -1526,6 +1531,7 @@ CREATE INDEX IF NOT EXISTS idx_compendium_entry_chapters_entry
 -- communities, and campaign player-sections (see gallery_images: no FK since
 -- owner_type is polymorphic, same pattern as statblocks/important_dates).
 CREATE TABLE IF NOT EXISTS gallery_images (
+  source_image_id INTEGER,
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_type TEXT NOT NULL, -- 'character' | 'being' | 'location' | 'community' | 'campaign_player_section'
   owner_id INTEGER NOT NULL,

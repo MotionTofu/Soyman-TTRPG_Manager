@@ -8,6 +8,8 @@ import sharp from "sharp";
 import { db } from "../db/db";
 import { SATELLITE_OWNERS, requireKind } from "../db/entityKinds";
 import { ensureSubfolder, entryImageFolder, toFileUrl } from "../services/filesystem";
+import { galleryIssueOptions, galleryIssues, issueGalleryImage, GalleryIssueError } from "../services/galleryIssue";
+import { writeReplacingOldFile } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { storeDeduped, removeOrArchive } from "../services/vaultDedup";
 import { vaultAbs, vaultRel, VAULT_ROOT } from "../services/filesystem";
@@ -56,6 +58,14 @@ function withUrl<T extends { image_path: string }>(row: T) {
 // ensureCharacterFolder); setting_beings always get one at creation time.
 function resolveOwnerFolder(ownerType: string, ownerId: string | number): string {
   if (ownerType === "character") return ensureCharacterFolder(ownerId);
+  if (ownerType === "setting_event" || ownerType === "campaign_event") {
+    const eventKind = requireKind(ownerType);
+    const scope = ownerType === "setting_event" ? "settings" : "campaigns";
+    const scopeKey = ownerType === "setting_event" ? "setting_id" : "campaign_id";
+    const event = db.prepare(`SELECT p.folder_path FROM ${eventKind.table} e JOIN ${scope} p ON p.id = e.${scopeKey} WHERE e.id = ? AND p.archived_at IS NULL`).get(ownerId) as { folder_path: string | null } | undefined;
+    if (!event?.folder_path) throw new Error("owner not found");
+    return ensureSubfolder(ensureSubfolder(event.folder_path, "Events"), `event-${ownerId}`);
+  }
   // У записи компендиума нет своей папки и архива: галерея — в папке её
   // раздела системы, подпапкой на запись.
   if (ownerType === "compendium_entry") {
@@ -78,13 +88,48 @@ function resolveOwnerFolder(ownerType: string, ownerId: string | number): string
   return row.folder_path;
 }
 
+galleryRouter.get("/issue-options", (req, res) => {
+  res.json(galleryIssueOptions(String(req.query.owner_type), Number(req.query.owner_id)));
+});
+
+galleryRouter.post("/:id/issue", async (req: AuthedRequest, res, next) => {
+  if (req.user?.role !== "gm") return res.status(403).json({ error: "Только Мастер может выдавать изображения" });
+  const { campaign_id, section_id, player_ids } = req.body;
+  const validId = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v > 0;
+  if (!validId(campaign_id) || (section_id !== null && !validId(section_id)) || !Array.isArray(player_ids) || player_ids.length > 200 || player_ids.some((id: unknown) => !validId(id)))
+    return res.status(400).json({ error: "Некорректные параметры выдачи" });
+  try { res.json(await issueGalleryImage(Number(req.params.id), campaign_id, section_id, player_ids)); }
+  catch (e) { if (e instanceof GalleryIssueError) res.status(400).json({ error: e.message }); else next(e); }
+});
+
+// Events use the same crop client and replacement/resize service as being portraits.
+galleryRouter.post("/portrait/:ownerType/:ownerId/:kind", upload.single("file"), async (req: AuthedRequest, res, next) => {
+  try {
+    if (req.user?.role !== "gm") return res.status(403).json({ error: "forbidden" });
+    const { ownerType, ownerId, kind } = req.params;
+    if (!["setting_event", "campaign_event"].includes(ownerType) || !["avatar", "thumbnail"].includes(kind)) return res.status(400).json({ error: "invalid portrait owner" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(ext)) return res.status(400).json({ error: "invalid image extension" });
+    const column = `${kind}_image_path`;
+    const table = requireKind(ownerType).table;
+    const row = db.prepare(`SELECT ${column} AS image FROM ${table} WHERE id = ?`).get(ownerId) as { image: string | null } | undefined;
+    if (!row) return res.status(404).json({ error: "not found" });
+    const target = path.join(resolveOwnerFolder(ownerType, ownerId), `${kind}${ext}`);
+    await writeReplacingOldFile(target, await getFileBuffer(req.file), row.image, kind as "avatar" | "thumbnail");
+    db.prepare(`UPDATE ${table} SET ${column} = ? WHERE id = ?`).run(target, ownerId);
+    res.json({ [`${kind}_image_url`]: toFileUrl(target) });
+  } catch (e) { next(e); } finally { cleanupFile(req.file); }
+});
+
 galleryRouter.get("/", (req, res) => {
   const { owner_type, owner_id, include_archived } = req.query as { owner_type?: string; owner_id?: string; include_archived?: string };
   if (!owner_type || !owner_id) return res.status(400).json({ error: "owner_type and owner_id are required" });
   const rows = db
     .prepare(`SELECT * FROM gallery_images WHERE owner_type = ? AND owner_id = ? ${include_archived === "true" ? "" : "AND archived_at IS NULL"} ORDER BY position, id`)
     .all(owner_type, owner_id) as { image_path: string }[];
-  res.json(rows.map(withUrl));
+  const campaignId = Number(req.query.campaign_id) || undefined;
+  res.json(rows.map((row) => ({ ...withUrl(row), issues: galleryIssues((row as { image_path: string; id: number }).id, campaignId) })));
 });
 
 galleryRouter.post("/", upload.single("file"), async (req: AuthedRequest, res) => {
@@ -94,6 +139,11 @@ galleryRouter.post("/", upload.single("file"), async (req: AuthedRequest, res) =
     caption?: string;
   };
   if (!owner_type || !owner_id) return res.status(400).json({ error: "owner_type and owner_id are required" });
+  // Event folders support portraits only; events do not own gallery_images.
+  if (!OWNER_TABLES[owner_type]) {
+    cleanupFile(req.file);
+    return res.status(400).json({ error: "invalid gallery owner" });
+  }
   // Player tokens pass the /api role gate for this route before multer has
   // parsed the multipart form — the owner fields only exist here, so this is
   // where their ownership check has to live (см. services/playerAccess.ts).

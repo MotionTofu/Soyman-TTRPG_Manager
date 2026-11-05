@@ -7621,6 +7621,25 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "gm_reminders", "due_session_id")) {
     database.exec("ALTER TABLE gm_reminders ADD COLUMN due_session_id INTEGER");
   }
+  // Профили «Д», пачка 3: старые базы получают каждую колонку отдельно.
+  if (!columnExists(database, "setting_locations", "tags")) {
+    database.exec("ALTER TABLE setting_locations ADD COLUMN tags TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnExists(database, "setting_calendar_events", "avatar_image_path")) {
+    database.exec("ALTER TABLE setting_calendar_events ADD COLUMN avatar_image_path TEXT");
+  }
+  if (!columnExists(database, "setting_calendar_events", "thumbnail_image_path")) {
+    database.exec("ALTER TABLE setting_calendar_events ADD COLUMN thumbnail_image_path TEXT");
+  }
+  if (!columnExists(database, "campaign_calendar_events", "avatar_image_path")) {
+    database.exec("ALTER TABLE campaign_calendar_events ADD COLUMN avatar_image_path TEXT");
+  }
+  if (!columnExists(database, "campaign_calendar_events", "thumbnail_image_path")) {
+    database.exec("ALTER TABLE campaign_calendar_events ADD COLUMN thumbnail_image_path TEXT");
+  }
+  if (!columnExists(database, "gallery_images", "source_image_id")) {
+    database.exec("ALTER TABLE gallery_images ADD COLUMN source_image_id INTEGER");
+  }
 }
 
 /**
