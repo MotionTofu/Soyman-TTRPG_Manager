@@ -4,6 +4,7 @@ import { useAfterWrite, useResource, write } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { ModulesTab } from "../components/ModulesTab";
+import { WebCaptureSettings } from "../components/WebCaptureSettings";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { DatabaseSizeCard } from "../components/DatabaseSizeCard";
 import { hasElectronAPI, isPathSafeForExplorer } from "../electronApi";
@@ -498,6 +499,9 @@ export function StoragesSettingsPage() {
         <button role="tab" aria-selected={activeTab === "pult"} className={activeTab === "pult" ? "active" : ""} onClick={() => setActiveTab("pult")}>
           Пульт сессии
         </button>
+        <button role="tab" aria-selected={activeTab === "extension"} className={activeTab === "extension" ? "active" : ""} onClick={() => setActiveTab("extension")}>
+          Расширение
+        </button>
         {hasElectron && (
           <button role="tab" aria-selected={activeTab === "updates"} className={activeTab === "updates" ? "active" : ""} onClick={() => setActiveTab("updates")}>
             Обновления
@@ -878,6 +882,8 @@ export function StoragesSettingsPage() {
           </details>
         </div>
       )}
+
+      {activeTab === "extension" && <WebCaptureSettings />}
 
       {activeTab === "modules" && (
         <div className="stack" style={{ gap: 12 }}>

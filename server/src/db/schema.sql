@@ -311,6 +311,52 @@ CREATE TABLE IF NOT EXISTS pdf_entity_sources (
 CREATE INDEX IF NOT EXISTS idx_pdf_entity_sources_target ON pdf_entity_sources(target_kind, target_id);
 CREATE INDEX IF NOT EXISTS idx_pdf_entity_sources_resource ON pdf_entity_sources(resource_id);
 
+-- Захват с сайтов расширением браузера (гриллинг 2026-11-05, Q1–Q24).
+-- Ключ расширения: хранится только хэш, право — класть во Входящие.
+CREATE TABLE IF NOT EXISTS web_capture_keys (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT,
+  revoked_at TEXT
+);
+-- Одноразовый код привязки из настроек Мастера; живёт 10 минут.
+CREATE TABLE IF NOT EXISTS web_capture_pairings (
+  code_hash TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+-- Входящие Мешка: фрагмент с сайта до разбора. client_id — номер, который
+-- даёт расширение: повторная отправка из очереди не плодит копии.
+CREATE TABLE IF NOT EXISTS web_inbox (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL DEFAULT 'text',
+  url TEXT NOT NULL,
+  page_title TEXT NOT NULL DEFAULT '',
+  heading TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '',
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Источник сущности со страницы сайта — как pdf_entity_sources, но вместо
+-- PDF-ресурса адрес и заголовок страницы. Описание правится свободно, цитата
+-- остаётся такой, какой была взята.
+CREATE TABLE IF NOT EXISTS web_entity_sources (
+  id TEXT PRIMARY KEY,
+  target_kind TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  field_name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  page_title TEXT NOT NULL DEFAULT '',
+  quote TEXT NOT NULL DEFAULT '',
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_web_entity_sources_target ON web_entity_sources(target_kind, target_id);
+
 -- Named, manually-ordered collections of audio resources. A session can
 -- either own playlists directly or attach a setting's playlist via
 -- generic_links (section='attached_playlist') to reuse it without copying.
@@ -2262,6 +2308,18 @@ CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_artifact AFTER DELETE ON artifac
 END;
 CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_entry AFTER DELETE ON compendium_entries BEGIN
   DELETE FROM pdf_entity_sources WHERE target_kind IN ('item', 'magic_item') AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS web_sources_delete_being AFTER DELETE ON setting_beings BEGIN
+  DELETE FROM web_entity_sources WHERE target_kind = 'being' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS web_sources_delete_location AFTER DELETE ON setting_locations BEGIN
+  DELETE FROM web_entity_sources WHERE target_kind = 'location' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS web_sources_delete_community AFTER DELETE ON setting_communities BEGIN
+  DELETE FROM web_entity_sources WHERE target_kind = 'community' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS web_sources_delete_artifact AFTER DELETE ON artifacts BEGIN
+  DELETE FROM web_entity_sources WHERE target_kind = 'artifact' AND target_id = OLD.id;
 END;
 
 

@@ -17,6 +17,10 @@
   ],
   "extraResources": [
     {
+      "from": "extension",
+      "to": "extension"
+    },
+    {
       "from": "server/node_modules",
       "to": "app/server/node_modules"
     },

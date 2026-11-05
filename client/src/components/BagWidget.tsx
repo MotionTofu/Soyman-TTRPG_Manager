@@ -11,6 +11,9 @@ import { attemptWithNotice } from "../data/notices";
 import type { CompendiumEntry, SearchResult } from "../types";
 import { useMapWorkspace } from "../maps/workspace/workspaceContext";
 import { placementSource } from "../maps/workspace/tokenPlacement";
+import { useCurrentUser } from "../api/currentUser";
+import { safeGetItem, safeSetItem } from "../utils/safeStorage";
+import { WebInbox, useWebInbox } from "./WebInbox";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 
@@ -24,6 +27,16 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
   const [unloading, setUnloading] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "info" | "error" } | null>(null);
   const [verstakOpen, setVerstakOpen] = useState(false);
+  // Входящие (захват с сайтов) — вкладка Мешка у Мастера; на карте их нет.
+  const isPlayer = useCurrentUser().user?.role === "player";
+  const showInbox = !isPlayer && !mapPlacement;
+  const inbox = useWebInbox(showInbox).data ?? [];
+  const [tab, setTab] = useState<"bag" | "inbox">(() => (safeGetItem("bagTab") === "inbox" ? "inbox" : "bag"));
+  const onInbox = showInbox && tab === "inbox";
+  function pickTab(next: "bag" | "inbox") {
+    setTab(next);
+    safeSetItem("bagTab", next);
+  }
 
   useEffect(() => {
     const off = onBagToast((payload) => {
@@ -94,7 +107,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
     <div className="bag-widget">
       <div className="search-heading bag-heading">
         {title ?? <strong>Мешок</strong>}
-        <div className="row" style={{ gap: 4 }}>
+        {!onInbox && <div className="row" style={{ gap: 4 }}>
           <button
             type="button"
             className="bag-unload"
@@ -113,14 +126,25 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
           >
             Выгрузить
           </button>
-        </div>
+        </div>}
       </div>
+      {showInbox && (
+        <div className="d-seg bag-tabs" role="tablist" aria-label="Мешок">
+          <button type="button" role="tab" aria-selected={!onInbox} className={onInbox ? "" : "active"} onClick={() => pickTab("bag")}>
+            Мешок<b>{items.length}</b>
+          </button>
+          <button type="button" role="tab" aria-selected={onInbox} className={onInbox ? "active" : ""} onClick={() => pickTab("inbox")}>
+            Входящие<b>{inbox.length}</b>
+          </button>
+        </div>
+      )}
+      {onInbox && <WebInbox items={inbox} />}
       {toast && (
         <div className={`bag-toast bag-toast-${toast.kind}`} role="status" aria-live="polite">
           {toast.message}
         </div>
       )}
-      <div
+      {!onInbox && <div
         className={`bag-grid${dragOver ? " drag-over" : ""}`}
         onDragOver={(e) => {
           if (!e.dataTransfer.types.includes(SEARCH_DRAG_MIME)) return;
@@ -163,7 +187,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
             </button>
           )
         )}
-      </div>
+      </div>}
       {unloading && (
         <UnloadModal
           items={items}

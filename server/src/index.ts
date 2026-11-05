@@ -75,6 +75,7 @@ import { filesRouter } from "./routes/files";
 import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
 import { syncRouter } from "./routes/sync";
+import { webCaptureExtRouter, webCaptureRouter } from "./routes/webCapture";
 import { sharesRouter, sharePublicRouter } from "./routes/shares";
 import { worldExplorationEntriesRouter } from "./routes/worldExplorationEntries";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
@@ -206,6 +207,10 @@ app.use(
         /* malformed Origin — fall through to the allowlist check below */
       }
       if (extraAllowedOrigins.includes(origin)) return cb(null, true);
+      // Расширение браузера для захвата с сайтов (routes/webCapture.ts). Своих
+      // прав у источника нет: без ключа расширения или входа Мастера любой
+      // маршрут отвечает 401, а вход живёт в заголовке, не в cookie.
+      if (/^(chrome|moz)-extension:\/\/[a-z0-9-]+$/i.test(origin)) return cb(null, true);
       cb(new Error("Not allowed by CORS"));
     },
   })
@@ -355,6 +360,20 @@ app.use("/api/sync", authLimiter, syncRouter);
 // token capability with no login, mounted before the gm gate like the other
 // self-authorizing routers. Its own in-route limiter caps enumeration.
 app.use("/api/sync/shares", authLimiter, sharesRouter);
+
+// Захват с сайтов: расширение браузера со своим ключом (не входом Мастера),
+// до общего гейта. Свой лимитер, а не authLimiter: отключённое расширение,
+// повторяющее отправку, не должно съедать попытки входа в приложение.
+const webCaptureLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => res.statusCode !== 401,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "слишком много неудачных попыток, попробуйте позже" },
+});
+app.use("/api/web-capture/ext", webCaptureLimiter, webCaptureExtRouter);
 app.use("/api/public", sharePublicRouter);
 
 // Player-role routes are already scoped to the caller's own player_id inside
@@ -463,6 +482,7 @@ app.use("/api/sessions", sessionNotesRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/resources", pdfNotesRouter);
 app.use("/api/pdf-entity-sources", pdfEntitySourcesRouter);
+app.use("/api/web-capture", webCaptureRouter);
 app.use("/api/resources", resourcesRouter);
 app.use("/api/mastering", masteringRouter);
 app.use("/api/book-library", bookLibraryRouter);

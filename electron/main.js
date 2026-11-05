@@ -57,6 +57,11 @@ process.env.CONFIG_DIR = path.join(userData, "config");
 process.env.DB_DIR = path.join(userData, "data");
 process.env.VAULT_ROOT = path.join(userData, "RPG-Vault");
 process.env.PORT = String(PORT);
+// Папка расширения браузера для захвата с сайтов: настройки показывают её,
+// чтобы загрузить расширение распакованным (routes/webCapture.ts).
+process.env.SOYMAN_EXTENSION_DIR = isPackaged
+  ? path.join(process.resourcesPath, "extension")
+  : path.join(__dirname, "..", "extension");
 
 // Иконка окна и панели задач. В .exe её зашивает electron-builder (win.icon),
 // но окну её всё равно надо отдать явно — иначе в dev-запуске и в taskbar

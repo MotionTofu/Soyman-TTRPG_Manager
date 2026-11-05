@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>SoyMan</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<header class="plate"><span class="logo">S</span><span id="head">SoyMan</span><small id="note"></small></header>
+
+<section id="pair" hidden>
+  <h1>Подключить к SoyMan</h1>
+  <p id="pair-why" class="warn" hidden>Подключение снято в SoyMan. Фрагменты в очереди дождутся нового подключения.</p>
+  <ol class="steps">
+    <li>В SoyMan: Настройки → Расширение браузера → «Подключить расширение».</li>
+    <li>Вставьте код из окна SoyMan.</li>
+  </ol>
+  <form id="pair-form">
+    <label class="lbl" for="code">Код</label>
+    <input id="code" class="code" autocomplete="off" spellcheck="false" maxlength="9" placeholder="K7M-42Q" required>
+    <p class="hint">Код живёт 10 минут и подходит один раз. Пароль от SoyMan расширение не спрашивает.</p>
+    <details>
+      <summary>Адрес SoyMan</summary>
+      <input id="base" class="field" spellcheck="false">
+      <p class="hint">Обычно менять не нужно: SoyMan слушает этот адрес на вашем компьютере.</p>
+    </details>
+    <p id="pair-error" class="error" role="alert" hidden></p>
+    <footer><button class="primary" type="submit">Подключить</button></footer>
+  </form>
+</section>
+
+<section id="status" hidden>
+  <p class="ok" id="state"><i></i><span>Подключено к SoyMan · этот компьютер</span></p>
+  <p class="warn" id="offline" hidden>SoyMan не запущен. Фрагменты ждут в очереди и уйдут во Входящие при запуске.</p>
+  <dl>
+    <dt>Во входящих</dt><dd id="inbox">—</dd>
+    <dt>В очереди</dt><dd id="queued">0</dd>
+    <dt>Горячая клавиша</dt><dd><kbd id="hotkey">не задана</kbd></dd>
+  </dl>
+  <ul id="queue" class="queue"></ul>
+  <a href="#" id="shortcuts" class="lnk">Сменить горячую клавишу →</a>
+  <a href="#" id="disconnect" class="lnk danger">Отключить расширение</a>
+</section>
+<script src="popup.js"></script>
+</body>
+</html>
