@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { useTabState } from "../../hooks/useTabState";
 import { TYPE_COLORS } from "../../graphTypes";
 import type { SceneSession, StorySceneDetail } from "../../types";
-import { SCENE_TABS, SCENE_TAB_ALIASES, SceneLinks, groupClueTargets } from "./SceneProfile";
+import { SCENE_TABS, SCENE_TAB_ALIASES, SceneLinks, groupClueTargets, sceneMaterialCount, sceneLinkCount } from "./SceneProfile";
 import { originalSceneHref, sceneSession } from "./sceneProgress";
 import { profileColor } from "./ProfileParts";
 
@@ -18,6 +18,14 @@ vi.mock("../presentation/AddSceneMaterial", () => ({ AddSceneMap: () => null, Ad
 
 function Tab() { const [tab] = useTabState(SCENE_TABS, "Лист", SCENE_TAB_ALIASES); return <span>{tab}</span>; }
 describe("сцена «Д»", () => {
+  it("счётчик материалов считает заполненные карточки, а не отдельные слои и карты", () => {
+    expect(sceneMaterialCount({ background_url: null, layers: [] }, { maps: [] }, null)).toBe(0);
+    expect(sceneMaterialCount({ background_url: "room.jpg", layers: [{}, {}] }, { maps: [{}, {}] }, { id: 3 })).toBe(3);
+  });
+  it("счётчик связей охватывает входы, исходящие стрелки и состав", () => {
+    expect(sceneLinkCount({ transitions: [{}] }, { incoming: [{}], outgoing: [{}, {}] }, { transitions: [{}], outcomes: [{}] }, [{}])).toBe(7);
+    expect(sceneLinkCount({ transitions: [] }, { incoming: [], outgoing: [] }, { transitions: [], outcomes: [] }, [])).toBe(0);
+  });
   it.each(["Представление", "Карта", "Аудионабор"])("старый URL %s открывает Материалы", (tab) => {
     expect(renderToStaticMarkup(<MemoryRouter initialEntries={[`/scenes/472?tab=${encodeURIComponent(tab)}`]}><Tab /></MemoryRouter>)).toContain("Материалы");
   });

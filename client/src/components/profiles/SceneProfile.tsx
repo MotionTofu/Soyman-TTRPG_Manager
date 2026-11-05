@@ -82,6 +82,28 @@ export interface SceneProfileClues { outgoing: ProfileClue[]; incoming: ProfileC
 interface Incoming { transitions: { id: number; from_scene_id: number; from_scene_name: string; label: string }[]; outcomes: { check_id: number; from_scene_id: number; from_scene_name: string; label: string; check_what: string }[] }
 interface Cast { link_id: number; section: string; to_type: string; to_id: number; name: string; qty: string }
 
+/** Три карточки материалов: показ целиком, карты целиком, аудионабор. */
+export function sceneMaterialCount(presentation: { background_url: string | null; layers: readonly unknown[] }, maps: { maps: readonly unknown[] }, soundSet: { id: number } | null) {
+  return Number(!!(presentation.background_url || presentation.layers.length)) + Number(maps.maps.length > 0) + Number(soundSet != null);
+}
+
+/** Считаем те же строки, что видны в трёх группах вкладки «Связи». */
+export function sceneLinkCount(scene: { transitions: readonly unknown[] }, clues: { incoming: readonly unknown[]; outgoing: readonly unknown[] }, incoming: { transitions: readonly unknown[]; outcomes: readonly unknown[] }, cast: readonly unknown[]) {
+  return incoming.transitions.length + incoming.outcomes.length + clues.incoming.length + clues.outgoing.length + scene.transitions.length + cast.length;
+}
+
+export function useSceneProfileCounts(scene: StorySceneDetail | null, campaignId: number | null, presentation: ScenePresentation | undefined, clues: SceneProfileClues | undefined) {
+  const path = scene ? `/story/scenes/${scene.id}` : null;
+  const maps = useResource<{ maps: { id: number }[] }>(path ? `${path}/maps${campaignId ? `?campaign_id=${campaignId}` : ""}` : null).data;
+  const soundSet = useResource<{ id: number } | null>(path ? `${path}/sound-set` : null).data;
+  const incoming = useResource<Incoming>(path ? `${path}/incoming` : null).data;
+  const cast = useResource<Cast[]>(path ? `${path}/cast` : null).data;
+  return {
+    materials: presentation && maps && soundSet !== undefined ? sceneMaterialCount(presentation, maps, soundSet) : undefined,
+    links: scene && clues && incoming && cast ? sceneLinkCount(scene, clues, incoming, cast) : undefined,
+  };
+}
+
 export function SceneLinks({ scene, campaignId, clues, clueError }: { scene: StorySceneDetail; campaignId: number | null; clues?: SceneProfileClues; clueError?: string | null }) {
   const incoming = useResource<Incoming>(`/story/scenes/${scene.id}/incoming`);
   const cast = useResource<Cast[]>(`/story/scenes/${scene.id}/cast`);
@@ -89,9 +111,10 @@ export function SceneLinks({ scene, campaignId, clues, clueError }: { scene: Sto
   const [adding, setAdding] = useState(false);
   const href = (id: number) => `/scenes/${id}${campaignId ? `?campaign=${campaignId}` : ""}`;
   const ins = (incoming.data?.transitions.length ?? 0) + (incoming.data?.outcomes.length ?? 0) + (clues?.incoming.length ?? 0);
+  const total = incoming.data && cast.data && clues ? sceneLinkCount(scene, clues, incoming.data, cast.data) : undefined;
   const group = (title: string, count: number, body: ReactNode, first = false, actions?: ReactNode) => <details key={`${title}:${mobile}`} className="profile-link-group" open={!mobile || first}><summary><span className="d-plate">{title}</span><span className="d-note">{count}</span>{actions}</summary>{body}</details>;
   const row = (key: string, type: string, id: number, name: string, note: ReactNode, to?: string) => <div className="profile-link-row" key={key}><ProfileTypeGlyph type={type} /><ProfileEntityLink type={type} id={id} name={name} to={to} /><span className="profile-link-row__note">{note}</span></div>;
-  return <div className="profile-links scene-profile-links"><div className="profile-links__head"><h2 className="d-plate">Связи</h2><Link className="d-btn" to={sceneCanvasHref(scene, campaignId)}><NavIcon name="canvas" /> Показать на холсте</Link></div>
+  return <div className="profile-links scene-profile-links"><div className="profile-links__head"><h2 className="d-plate">Связи</h2>{total != null && <span className="d-note">{total}</span>}<Link className="d-btn" to={sceneCanvasHref(scene, campaignId)}><NavIcon name="canvas" /> Показать на холсте</Link></div>
     {(incoming.error || clueError || cast.error) && <p role="alert">Не удалось прочитать связи: {incoming.error || clueError || cast.error}</p>}
     {(ins > 0 || scene.node_role === "start") && group("Ведут сюда", ins, <>
       {ins === 0 && scene.node_role === "start" && <p className="muted">Стартовая сцена — улики сюда не нужны</p>}

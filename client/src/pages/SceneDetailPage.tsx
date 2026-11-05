@@ -11,7 +11,7 @@ import type { Setting, StoryArc, StoryScene, StorySceneDetail } from "../types";
 import { ContextMenu } from "../components/ContextMenu";
 import { NavIcon } from "../components/NavIcons";
 import { ProfileHero, ProfileText, ProfileBlock, ProfileEntityLink } from "../components/profiles/ProfileParts";
-import { SceneTable, SceneLinks, SceneMaterials, SceneClueSummary, SCENE_TABS, SCENE_TAB_ALIASES, sceneCanvasHref, type SceneProfileClues } from "../components/profiles/SceneProfile";
+import { SceneTable, SceneLinks, SceneMaterials, SceneClueSummary, SCENE_TABS, SCENE_TAB_ALIASES, sceneCanvasHref, useSceneProfileCounts, type SceneProfileClues } from "../components/profiles/SceneProfile";
 import { sceneSession, originalSceneHref } from "../components/profiles/sceneProgress";
 import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
 import { arcCluesPath } from "../data/canvas";
@@ -48,6 +48,7 @@ export function SceneDetailPage() {
 
   const sceneState = useResource<StorySceneDetail>(`/story/scenes/${sceneId}${campaignId ? `?campaign_id=${campaignId}` : ""}`);
   const scene = sceneState.data ?? null;
+  const originalScene = useResource<Pick<StoryScene, "created_at">>(scene?.source_scene_id ? `/story/scenes/${scene.source_scene_id}` : null).data;
   const adventure = useResource<StoryArc>(scene?.arc_id ? `/story/arcs/${scene.arc_id}` : null).data;
   const setting = useResource<Setting>(scene ? `/settings/${scene.setting_id}` : null).data ?? null;
   // Нужна только ради имени в «хлебных крошках», когда сцену открыли из кампании.
@@ -68,6 +69,7 @@ export function SceneDetailPage() {
   const parentAdventure = useResource<StoryArc>(adventure?.parent_id ? `/story/arcs/${adventure.parent_id}` : null).data;
   const presentation = useResource<ScenePresentation>(scene ? `/story/scenes/${scene.id}/presentation${campaignId ? `?campaign_id=${campaignId}` : ""}` : null).data;
   const clueState = useResource<SceneProfileClues>(scene ? `/story/scenes/${scene.id}/profile-clues${campaignId ? `?campaign_id=${campaignId}` : ""}` : null);
+  const counts = useSceneProfileCounts(scene, campaignId, presentation, clueState.data);
   const graph = useResource<ArcClues>(scene?.arc_id ? arcCluesPath(scene.arc_id, campaignId) : null).data;
   const tree = useResource<CampaignAdventureTree[]>(campaignId ? campaignPaths.tree(campaignId) : null).data;
   const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null);
@@ -199,13 +201,13 @@ export function SceneDetailPage() {
         ...(campaignId && scene.is_override ? [{ label: "Вернуть к оригиналу", onClick: revert }] : []),
         { label: "Архивировать", danger: true, onClick: archiveScene },
       ]}
-      tabs={SCENE_TABS}
+      tabs={SCENE_TABS.map((id) => ({ id, count: id === "Материалы" ? counts.materials : id === "Связи" ? counts.links : undefined }))}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof SCENE_TABS)[number])}
       overlays={<>{confirmDialog}{statusMenu && <ContextMenu x={statusMenu.x} y={statusMenu.y} title="Статус сцены" items={SCENE_STATUSES.map((s) => ({ label: s.label, onClick: () => void setStatus(s.key) }))} onClose={() => setStatusMenu(null)} />}</>}
     >
       {tab === "Лист" && <>
-        <ProfileHero type="scene" name={scene.name} subtype={nodeLabel(scene)} createdAt={scene.created_at}
+        <ProfileHero type="scene" name={scene.name} subtype={nodeLabel(scene)} createdAt={scene.source_scene_id ? originalScene?.created_at : scene.created_at}
           image={presentation?.background_url ?? presentation?.layers[0]?.image_url}
           coverLabel={presentation?.background_url || presentation?.layers.length ? "Картинка показа · щелчок — Материалы" : "+ картинка показа"}
           onGallery={() => selectTab("Материалы")}
@@ -224,8 +226,8 @@ export function SceneDetailPage() {
               { key: "node_role", label: "Роль", value: scene.node_role, options: NODE_ROLES.map((r) => ({ value: r.key, label: r.label })) },
             ]} onSaveFields={(v) => save({ name: v.name.trim(), node_type: v.node_type || null, node_role: v.node_role })} />
         </ProfileHero>
-        <div className="profile-visibility"><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><button className="profile-text-link" onClick={() => saveQuietly({ hidden_from_players: !scene.hidden_from_players })}>{scene.hidden_from_players ? "скрыто" : "открыто"} ›</button></div>
-        <div className="scene-profile-read"><ProfileText {...fieldProps} title="Зачитать" value={scene.read_aloud} onSave={(v) => save({ read_aloud: v })} emptyLabel="Текст для чтения вслух при входе в сцену." /></div>
+        <div className="profile-visibility scene-profile-visibility"><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><span className="scene-profile-visibility__note">{scene.hidden_from_players ? "сцена не видна в журнале игроков" : "сцена видна в журнале игроков"}</span><button className="profile-text-link" onClick={() => saveQuietly({ hidden_from_players: !scene.hidden_from_players })}>{scene.hidden_from_players ? "скрыто" : "открыто"} ›</button></div>
+        <div className="scene-profile-read"><ProfileText {...fieldProps} title="Зачитать игрокам" value={scene.read_aloud} onSave={(v) => save({ read_aloud: v })} emptyLabel="Текст для чтения вслух при входе в сцену." /></div>
         <SceneTable scene={scene} onSave={save} />
         <ProfileBlock title="Состав"><div className="scene-profile-cast">
           <section><h3>Сюжетные персонажи</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_plot_characters" participation acceptTypes={PLOT_TYPES} placeholder="Перетащите существо или персонажа" /></section>
