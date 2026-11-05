@@ -67,6 +67,8 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
   const canIssue = profile && ["being", "location", "community", "artifact"].includes(ownerType);
   const campaigns = useResource<IssueCampaign[]>(canIssue ? `/gallery/issue-options?owner_type=${ownerType}&owner_id=${ownerId}` : null);
   const issueCampaigns = (campaigns.data ?? []).filter((c) => !campaignId || c.id === campaignId);
+  // Вне контекста кампании отметке нужно её название, раз кампаний у сеттинга больше одной.
+  const showCampaignName = !campaignId && issueCampaigns.length > 1;
   const [issuing, setIssuing] = useState<number | null>(null);
   const [sizes, setSizes] = useState<Record<number, string>>({});
   const [issuedOnly, setIssuedOnly] = useState(false);
@@ -398,7 +400,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, 
             {canIssue && <div className="gallery-issue-actions" onKeyDown={(e) => e.stopPropagation()}>
               <button type="button" className="d-btn d-btn--sm d-btn--ghost" disabled={!issueCampaigns.length} title={issueCampaigns.length ? "Выдать игрокам" : "Нет кампаний этого сеттинга"} onClick={(e) => { e.stopPropagation(); setIssuing(img.id); }}>Выдать игрокам</button>
               {img.issues?.map((issue) => <Link key={issue.image_id} to={`/campaigns/${issue.campaign_id}?tab=${encodeURIComponent("Для игроков")}&section=${issue.section_id}&image=${issue.image_id}`}>
-                {new Set(img.issues?.map((v) => v.campaign_id)).size > 1 ? `${issue.campaign_name}: ` : ""}{issue.players.length ? `у игроков: ${issue.players.map((p) => p.name).join(", ")}` : `в разделе «${issue.section_name}», не выдана`}
+                {showCampaignName || new Set(img.issues?.map((v) => v.campaign_id)).size > 1 ? `${issue.campaign_name} · ` : ""}{issue.players.length ? `у игроков: ${issue.players.map((p) => p.name).join(", ")}` : `в разделе «${issue.section_name}», не выдана`}
               </Link>)}
             </div>}
           </div>

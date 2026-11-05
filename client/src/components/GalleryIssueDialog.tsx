@@ -16,7 +16,7 @@ export function GalleryIssueDialog({ imageId, campaigns, campaignId, onClose, on
   const [selected, setSelected] = useState(campaignId ?? campaigns[0]?.id);
   const choices = campaignId ? campaigns.filter((c) => c.id === campaignId) : campaigns;
   return <Modal className="modal-sheet gallery-issue-modal" onClose={onClose} ariaLabel="Выдать игрокам"><h2>Выдать игрокам</h2>
-    {choices.length > 1 ? <label>Кампания<select value={selected} onChange={(e) => setSelected(Number(e.target.value))}>{choices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : <p>{choices[0]?.name}</p>}
+    {choices.length > 1 ? <label className="gallery-issue-field">Кампания<select className="d-select" value={selected} onChange={(e) => setSelected(Number(e.target.value))}>{choices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label> : <p className="gallery-issue-field">Кампания<b>{choices[0]?.name}</b></p>}
     {selected && <IssueForm key={selected} imageId={imageId} campaignId={selected} onIssued={onIssued} />}
   </Modal>;
 }
@@ -40,7 +40,7 @@ function IssueForm({ imageId, campaignId, onIssued }: { imageId: number; campaig
       onIssued();
     } catch (err) { setError(errorText(err)); } finally { setSaving(false); }
   }}>
-    {galleries.length ? <label>Раздел<select value={selectedSection ?? ""} onChange={(e) => setSection(Number(e.target.value))}>{galleries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label> : !sections.loading && <p>Будет создан раздел «Изображения»</p>}
+    {galleries.length ? <label className="gallery-issue-field">Раздел<select className="d-select" value={selectedSection ?? ""} onChange={(e) => setSection(Number(e.target.value))}>{galleries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label> : !sections.loading && <p className="gallery-issue-field">Раздел<b>Будет создан раздел «Изображения»</b></p>}
     <fieldset disabled={saving}><legend>Игроки</legend><button type="button" className="d-btn d-btn--sm" onClick={() => setPlayers(roster.map((p) => p.id))}>Всем</button>
       {roster.map((p) => <label className="row" key={p.id}><input type="checkbox" checked={players.includes(p.id)} onChange={(e) => setPlayers((ids) => e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id))} />{p.name}</label>)}
       {!roster.length && <p className="muted">В ростере пока нет игроков.</p>}

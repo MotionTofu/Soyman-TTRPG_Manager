@@ -161,8 +161,9 @@ details[open] > summary .profile-fold-state { display: none; }
 .gallery-issue-actions { display: flex; flex-direction: column; align-items: start; gap: var(--sp-2); margin-top: var(--sp-3); font: var(--fs-meta) var(--font-mono); }
 .gallery-issue-actions a { overflow-wrap: anywhere; }
 .gallery-issue-form fieldset { border: 1px solid var(--line); padding: var(--sp-3); }
-.gallery-issue-form label { min-width: 0; }
-.gallery-issue-form select { width: 100%; }
+.gallery-issue-field { display: grid; gap: var(--sp-2); min-width: 0; margin: 0 0 var(--sp-4); font: var(--fs-micro) var(--font-mono); text-transform: uppercase; color: var(--muted); }
+.gallery-issue-field select { width: 100%; text-transform: none; }
+.gallery-issue-field b { font-family: var(--font-body); font-size: var(--fs-data); text-transform: none; color: var(--ink); }
 
 @media (max-width: 700px) {
   .modal-backdrop:has(> .gallery-issue-modal) { align-items: flex-end; padding: 0; }
