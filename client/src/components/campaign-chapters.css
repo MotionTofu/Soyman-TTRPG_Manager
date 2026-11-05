@@ -9,6 +9,10 @@
   min-width: 0;
   container-type: inline-size;
 }
+.campaign-adventure-actions {
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
 
 /* Голова приключения: kicker, название, логлайн, факты; справа — дыры
    правила трёх, «Холст» и «Редактировать». */

@@ -16,6 +16,7 @@ import { entityMark, openEntityMenu } from "../pageMenu";
 import { arcCluesPath } from "../data/canvas";
 import "./campaign-chapters.css";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
+import { CampaignAdventureActions } from "./CampaignAdventureActions";
 import { useConfirm } from "../hooks/useConfirm";
 
 // Раздел «Главы и сцены» кампании: приключение → главы → сцены. Базово
@@ -177,25 +178,19 @@ export function CampaignChaptersScenes({
     );
   }
 
-  if (tree.length === 0) {
-    return (
-      <EmptyState
-        title="Главы ещё не привязаны"
-        hint="Привяжите приключение в разделе «Обзор → Приключения» — его главы и сцены станут планом кампании."
-        action={<Link to={`/campaigns/${campaignId}`}><button className="primary">К приключениям →</button></Link>}
-      />
-    );
-  }
-
   const visibleTree = adventureId != null ? tree.filter((a) => a.id === adventureId) : tree;
   const current = currentAdventureId(tree);
 
   return (
     <div className="stack campaign-chapters">
+      <CampaignAdventureActions campaignId={campaignId} settingId={settingId} onAdded={onPickAdventure} />
+      {tree.length === 0 && (
+        <EmptyState title="Приключений ещё нет" hint="Создайте приключение или добавьте готовое из сеттинга — его главы и сцены станут планом кампании." />
+      )}
       {adventureId != null && visibleTree.length === 0 && (
         <p className="muted">Приключение не найдено — возможно, его открепили.</p>
       )}
-      {adventureId == null && <AdventuresOverview tree={tree} campaignId={campaignId} onPick={onPickAdventure} adventureMenu={adventureMenu} />}
+      {adventureId == null && tree.length > 0 && <AdventuresOverview tree={tree} campaignId={campaignId} onPick={onPickAdventure} adventureMenu={adventureMenu} />}
       {adventureId != null && visibleTree.map((adv) => (
         <AdventureSection
           key={adv.id}

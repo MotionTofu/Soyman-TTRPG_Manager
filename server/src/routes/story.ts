@@ -650,18 +650,32 @@ function collectCast(arcId: number, sceneIds: number[]) {
 }
 
 storyRouter.post("/arcs", (req, res) => {
-  const { setting_id, parent_id, name, description, campaign_id } = req.body as {
+  const { setting_id, parent_id, name, description, campaign_id, attach_campaign_id } = req.body as {
     setting_id: number;
     parent_id?: number | null;
     name: string;
     description?: string;
     campaign_id?: number | null;
+    attach_campaign_id?: number | null;
   };
   if (!setting_id || !name?.trim()) {
     return res.status(400).json({ error: "setting_id and name are required" });
   }
-  // Приключение, заведённое ИЗ кампании, живёт только в ней и в заготовку
-  // сеттинга не попадает (решение D0 §16). Без `source_arc_id` — это не версия
+  // Создание из «Сюжета»: общий оригинал сеттинга и его привязка сохраняются
+  // вместе. campaign_id по-прежнему означает собственное приключение кампании.
+  if (attach_campaign_id != null) {
+    if (!Number.isSafeInteger(attach_campaign_id) || attach_campaign_id <= 0 || campaign_id != null || parent_id != null) {
+      return res.status(400).json({ error: "В кампанию можно добавить только новое приключение сеттинга" });
+    }
+    const campaign = db.prepare("SELECT setting_id FROM campaigns WHERE id = ? AND archived_at IS NULL")
+      .get(attach_campaign_id) as { setting_id: number | null } | undefined;
+    if (!campaign) return res.status(400).json({ error: "Кампания не найдена" });
+    if (campaign.setting_id !== setting_id) {
+      return res.status(400).json({ error: "Сеттинг приключения должен совпадать с сеттингом кампании" });
+    }
+  }
+  // campaign_id создаёт приключение только для кампании: в заготовку
+  // сеттинга оно не попадает (решение D0 §16). Без `source_arc_id` — это не версия
   // чужого текста, а своя вещь; ровно по этой паре его и находит карта
   // кампании (`GET /canvas/board?campaign_id=`).
   //
@@ -683,14 +697,20 @@ storyRouter.post("/arcs", (req, res) => {
         "SELECT MAX(position) as m FROM story_arcs WHERE setting_id = ? AND IFNULL(parent_id, 0) = IFNULL(?, 0)"
       )
       .get(setting_id, parent_id ?? null) as { m: number | null }).m ?? -1;
-  const info = db.transaction(()=>{const created = db
-    .prepare(
-      "INSERT INTO story_arcs (setting_id, parent_id, name, description, position, campaign_id) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .run(setting_id, parent_id ?? null, name.trim(), description ?? "", position + 1, campaignId);
-  const author=(req as import("../services/auth").AuthedRequest).user;
-  if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"adventure",Number(created.lastInsertRowid));
-  return created;})();
+  const info = db.transaction(() => {
+    const created = db.prepare(
+      `INSERT INTO story_arcs (setting_id, parent_id, name, description, position, campaign_id,
+                               hook, recommended_level, player_count, duration, source, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(setting_id, parent_id ?? null, name.trim(), description ?? "", position + 1, campaignId,
+      req.body.hook ?? "", req.body.recommended_level ?? "", req.body.player_count ?? "",
+      req.body.duration ?? "", req.body.source ?? "", req.body.tags ?? "");
+    const arcId = Number(created.lastInsertRowid);
+    if (attach_campaign_id != null) attachCampaignAdventure(attach_campaign_id, arcId);
+    const author = (req as import("../services/auth").AuthedRequest).user;
+    if (author?.role === "gm") ensureProjectWorkbook(db, author.id, "adventure", arcId);
+    return created;
+  })();
   res.status(201).json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -962,15 +982,19 @@ storyRouter.post("/campaign-adventures", (req, res) => {
   if (!campaign_id || !arc_id) {
     return res.status(400).json({ error: "campaign_id and arc_id are required" });
   }
+  attachCampaignAdventure(campaign_id, arc_id);
+  res.status(201).json({ ok: true });
+});
+
+function attachCampaignAdventure(campaignId: number, arcId: number): void {
   const position =
     (db
       .prepare("SELECT IFNULL(MAX(position), -1) as m FROM campaign_adventures WHERE campaign_id = ?")
-      .get(campaign_id) as { m: number }).m + 1;
+      .get(campaignId) as { m: number }).m + 1;
   db.prepare(
     "INSERT OR IGNORE INTO campaign_adventures (campaign_id, arc_id, position) VALUES (?, ?, ?)"
-  ).run(campaign_id, arc_id, position);
-  res.status(201).json({ ok: true });
-});
+  ).run(campaignId, arcId, position);
+}
 
 storyRouter.put("/campaign-adventures/reorder", (req, res) => {
   const { campaign_id, order } = req.body as { campaign_id?: number; order?: number[] };

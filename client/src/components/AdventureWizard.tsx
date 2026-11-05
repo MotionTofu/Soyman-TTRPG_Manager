@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAfterWrite, write } from "../data/hooks";
+import { campaignAdventureAffects } from "../data/campaigns";
 import { Modal } from "./Modal";
 import type { StoryArc } from "../types";
 
@@ -15,6 +16,8 @@ import type { StoryArc } from "../types";
 interface Props {
   settingId: number;
   campaignId?: number;
+  /** Создать общий оригинал сеттинга и сразу привязать к этой кампании. */
+  attachToCampaignId?: number;
   onClose: () => void;
   onCreated?: (arc: StoryArc) => void;
   /** Кнопка "Создать и открыть холст" — только на полотне. */
@@ -28,7 +31,7 @@ const STEPS = [
   { key: "hook", title: "Завязка" },
 ] as const;
 
-export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onCreatedAndOpenCanvas }: Props) {
+export function AdventureWizard({ settingId, campaignId, attachToCampaignId, onClose, onCreated, onCreatedAndOpenCanvas }: Props) {
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -64,10 +67,11 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
         source,
         tags,
         ...(campaignId ? { campaign_id: campaignId } : {}),
+        ...(attachToCampaignId ? { attach_campaign_id: attachToCampaignId } : {}),
       });
-      afterWrite([{ kind: "adventure" }]);
+      afterWrite(attachToCampaignId ? campaignAdventureAffects(attachToCampaignId) : [{ kind: "adventure" }]);
       onCreated?.(created);
-      if (then === "adventure") navigate(`/adventures/${created.id}`);
+      if (then === "adventure") navigate(`/adventures/${created.id}${attachToCampaignId ? `?campaign=${attachToCampaignId}` : ""}`);
       else if (then === "canvas") onCreatedAndOpenCanvas?.(created);
       onClose();
     } catch (e) {
@@ -78,7 +82,7 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
   }
 
   return (
-    <Modal onClose={onClose} closeOnBackdropClick={false}>
+    <Modal onClose={onClose} closeOnBackdropClick={false} ariaLabel="Новое приключение">
       <div className="stack wizard">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
           <h3 style={{ margin: 0 }}>Новое приключение</h3>
@@ -86,6 +90,9 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
             Шаг {stepIndex + 1} из {totalSteps} — {current?.title}
           </span>
         </div>
+        {attachToCampaignId && (
+          <p className="muted">Приключение будет создано в сеттинге и добавлено в текущую кампанию.</p>
+        )}
 
         {current?.key === "name" && (
           <div className="stack">
@@ -156,7 +163,7 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
           </div>
         )}
 
-        {error && <span className="backup-info error">{error}</span>}
+        {error && <span className="backup-info error" role="alert">{error}</span>}
 
         <div className="row wizard-steps-nav">
           <button disabled={stepIndex === 0} onClick={() => setStepIndex((i) => i - 1)}>
