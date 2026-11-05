@@ -31,7 +31,7 @@ async function prepare(frame: PlayerDisplayFrame): Promise<void> {
 }
 
 /** Composites actual old/new frames. Interruptions freeze the current blend before starting the next one. */
-export function PlayerDisplaySurface({ frame, onError }: { frame: PlayerDisplayFrame | null; onError?: (message: string) => void }) {
+export function PlayerDisplaySurface({ frame, onError }: { frame: PlayerDisplayFrame | null; onError?: (message: string, frame: PlayerDisplayFrame) => void }) {
   const [ready, setReady] = useState<PlayerDisplayFrame | null>(null);
   const preparedKey = useRef<string | null>(null);
   useEffect(() => {
@@ -40,7 +40,7 @@ export function PlayerDisplaySurface({ frame, onError }: { frame: PlayerDisplayF
     let active = true;
     void prepare(frame).then(() => {
       if (active) { preparedKey.current = frame.playKey; setReady(frame); }
-    }).catch(error => { if (active) onError?.(error instanceof Error ? error.message : String(error)); });
+    }).catch(error => { if (active) onError?.(error instanceof Error ? error.message : String(error), frame); });
     return () => { active = false; };
   }, [frame, onError]);
 

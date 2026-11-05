@@ -92,13 +92,15 @@ function fixture(doc = document(), wasOpen = false) {
     }),
     releaseMusic: vi.fn(async () => { musicState = { runId: null, audio: null, revision: musicState.revision + 1 }; return musicState; }),
   };
+  let displayError: ((windowId: string, message: string, playKey: string) => void) | null = null;
   const output: CutsceneOutput = { open: vi.fn(async () => ({ ok: true as const, wasOpen, openedByCall: !wasOpen, windowId: "window-08", screenId: null })),
-    close: vi.fn(async () => true), prepare: vi.fn(async () => vi.fn()), subscribeErrors: () => () => {} };
+    close: vi.fn(async () => true), prepare: vi.fn(async () => vi.fn()), isCurrentFrame: vi.fn(async () => true), subscribeErrors: listener => { displayError = listener; return () => { displayError = null; }; } };
   let id = 0;
   const controller = new CutscenePlaybackController({ repository, audio, music, output, newId: () => `controller-${++id}` });
   cleanups.push(controller.connect());
   const start = async () => { await controller.select(17); return controller.start(); };
   return { controller, repository, audio, application, music, output, gate, start,
+    failDisplay: (key = "current") => displayError?.("window-08", "image failed", key),
     failMusic: () => { runnerState = { ...runnerState, error: "device lost", state: "paused" }; emit(); },
     setPosition: (seconds: number) => { if (current) current = { ...current, positionSeconds: seconds }; },
   };
@@ -315,5 +317,33 @@ describe("cutscene playback lifecycle", () => {
     const observer=new CutscenePlaybackController({repository:f.repository,audio:f.audio,music:f.music,output:f.output});
     await observer.discover();expect(observer.getSnapshot().phase).toBe("recoverable");await f.controller.complete();
     await observer.discover();expect(observer.getSnapshot()).toMatchObject({phase:"idle",run:null});
+  });
+});
+
+describe("ошибки кадра относятся только к текущему показу", () => {
+  it("ошибка старого кадра во время подготовки не прерывает первый шаг", async () => {
+    const f = fixture(), pending = deferred<() => void>();
+    vi.mocked(f.output.prepare).mockReturnValueOnce(pending.promise);
+    const starting = f.start();
+    await vi.waitFor(() => expect(f.output.prepare).toHaveBeenCalled());
+    f.failDisplay("old-cover"); pending.resolve(() => {});
+    expect(await starting).toBe(true); expect(f.controller.getSnapshot()).toMatchObject({ phase: "playing", error: null });
+    expect(f.output.isCurrentFrame).not.toHaveBeenCalled();
+  });
+  it("запоздалая ошибка старого playKey после начала показа игнорируется", async () => {
+    const f = fixture(); await f.start(); vi.mocked(f.output.isCurrentFrame).mockResolvedValue(false);
+    f.failDisplay("old-cover"); await vi.waitFor(() => expect(f.output.isCurrentFrame).toHaveBeenCalledWith("old-cover", expect.anything()));
+    expect(f.controller.getSnapshot()).toMatchObject({ phase: "playing", error: null });
+  });
+  it("ошибка подтверждённого текущего кадра останавливает показ", async () => {
+    const f = fixture(); await f.start(); f.failDisplay();
+    await vi.waitFor(() => expect(f.controller.getSnapshot()).toMatchObject({ phase: "error", busy: false }));
+    expect(f.controller.getSnapshot().error).toMatchObject({ code: "display", message: "image failed" });
+  });
+  it("проверка старой ошибки, завершившаяся после смены шага, ничего не останавливает", async () => {
+    const f = fixture(), check = deferred<boolean>(); await f.start();
+    vi.mocked(f.output.isCurrentFrame).mockReturnValueOnce(check.promise); f.failDisplay();
+    await f.controller.goTo("third"); check.resolve(true); await Promise.resolve(); await Promise.resolve();
+    expect(f.controller.getSnapshot()).toMatchObject({ phase: "playing", error: null, step: { stepId: "third" } });
   });
 });

@@ -190,3 +190,35 @@ describe("фрагменты и переходы одного музыкальн
     expect(runner.getSnapshot()).toMatchObject({ state: "paused", error: "resume blocked" });
   });
 });
+
+describe("обновление доступа к длинному потоку", () => {
+  it("обновляет истёкший источник с текущей позиции и продолжает воспроизведение", async () => {
+    await start(command("stream")); await advance(1);
+    const audio = assets[0].voices[0], position = audio.currentTime;
+    const refresh = vi.fn(async (voice: HTMLAudioElement, at: number) => { voice.currentTime = at; return true; });
+    assets[0].refresh = refresh;
+    audio.dispatchEvent(new Event("error")); await vi.advanceTimersByTimeAsync(0);
+    expect(refresh).toHaveBeenCalledWith(audio, position, expect.any(AbortSignal));
+    expect(audio.paused).toBe(false); expect(audio.currentTime).toBe(position); expect(runner.getSnapshot().error).toBeNull();
+  });
+  it("пауза во время обновления не запускает голос после получения ссылки", async () => {
+    await start(command("stream")); const audio = assets[0].voices[0];
+    let resolve!: (value: boolean) => void;
+    assets[0].refresh = vi.fn(() => new Promise<boolean>(done => { resolve = done; }));
+    audio.dispatchEvent(new Event("error")); runner.pause(); resolve(true); await vi.advanceTimersByTimeAsync(0);
+    expect(audio.paused).toBe(true); expect(runner.capture()?.state).toBe("paused");
+  });
+  it("stop отменяет обновление и не даёт позднему ответу оживить старый голос", async () => {
+    await start(command("stream")); const audio = assets[0].voices[0];
+    let resolve!: (value: boolean) => void, signal!: AbortSignal;
+    assets[0].refresh = vi.fn((_voice, _at, pending) => { signal = pending; return new Promise<boolean>(done => { resolve = done; }); });
+    audio.dispatchEvent(new Event("error")); runner.stop(); expect(signal.aborted).toBe(true);
+    resolve(true); await vi.advanceTimersByTimeAsync(0); expect(playing()).toHaveLength(0); expect(runner.capture()).toBeNull();
+  });
+  it("ошибка свежего источника остаётся ошибкой, а не бесконечным переподключением", async () => {
+    await start(command("stream")); const audio = assets[0].voices[0];
+    assets[0].refresh = vi.fn(async () => false); audio.dispatchEvent(new Event("error")); await vi.advanceTimersByTimeAsync(0);
+    expect(runner.getSnapshot()).toMatchObject({ state: "paused", error: "Ошибка воспроизведения аудио катсцены" });
+    expect(assets[0].refresh).toHaveBeenCalledTimes(1);
+  });
+});

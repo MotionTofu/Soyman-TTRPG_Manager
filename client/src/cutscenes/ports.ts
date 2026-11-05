@@ -1,7 +1,7 @@
 import type { CutsceneRunRepository } from "../data/cutsceneRuns";
 import type { CutsceneAudioController } from "../sound/cutsceneAudio";
 import type { CutsceneAudioRunner } from "../sound/cutsceneAudioRunner";
-import type { PlayerDisplayOpenResult } from "@shared/playerDisplay";
+import type { PlayerDisplayOpenResult, PlayerDisplayOwner } from "@shared/playerDisplay";
 import type { CutsceneOriginal, CutsceneResolvedStep, CutsceneRunError, CutsceneRunPhase,
   CutsceneValidationIssue, CutsceneVisualTransition } from "@shared/cutscenes/types";
 import type { CutsceneRunState } from "@shared/cutscenes/runApi";
@@ -12,7 +12,8 @@ export interface CutsceneOutput {
   close(opened: PlayerDisplayOpenResult): Promise<boolean>;
   /** Prepares pixels without publishing; rehearsal uses the same media check locally. */
   prepare(run: CutsceneRunState, step: CutsceneResolvedStep, signal: AbortSignal): Promise<() => void>;
-  subscribeErrors(listener: (windowId: string, message: string) => void): () => void;
+  isCurrentFrame(playKey: string, owner: PlayerDisplayOwner): Promise<boolean>;
+  subscribeErrors(listener: (windowId: string, message: string, playKey: string) => void): () => void;
 }
 export interface CutscenePlaybackPorts {
   repository: CutsceneRunRepository;

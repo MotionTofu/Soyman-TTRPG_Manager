@@ -89,7 +89,13 @@ export class WorkshopPreviewController {
     const onClose = (windowId: string) => {
       if (this.session?.external && this.session.window?.windowId === windowId) void this.stop();
     };
-    const removeErrors = browserCutsceneOutput.subscribeErrors(onClose), removeClose = subscribePreviewWindowClose(onClose);
+    const removeErrors = browserCutsceneOutput.subscribeErrors((windowId, _reason, playKey) => {
+      const session = this.session, operation = this.operation;
+      if (!session?.external || session.window?.windowId !== windowId || this.state.phase !== "playing") return;
+      void browserCutsceneOutput.isCurrentFrame(playKey, session.owner).then(current => {
+        if (current && operation === this.operation && sameOwner(this.session?.owner, session.owner)) void this.stop();
+      }).catch(() => {});
+    }), removeClose = subscribePreviewWindowClose(onClose);
     this.removeErrors = () => { removeErrors(); removeClose(); };
     return () => { if (this.timer) clearInterval(this.timer); this.timer = null; this.removeErrors?.(); window.removeEventListener("offline", offline); };
   }

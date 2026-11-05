@@ -1,3 +1,4 @@
+import type { PlayerDisplayFrame, PlayerDisplayOwner, PlayerDisplayState } from "@shared/playerDisplay";
 import { randomUUID } from "../utils/uuid";
 import type { CutsceneMediaAccess, CutsceneMediaRef } from "@shared/cutscenes/types";
 import { projectCutscenePlayerFrame } from "@shared/cutscenes/projection";
@@ -15,6 +16,7 @@ interface Message {
   requestId: string;
   urls?: string[];
   error?: string;
+  playKey?: string;
 }
 function channel(receive: (message: Message) => void) {
   const port = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(CHANNEL);
@@ -100,8 +102,13 @@ export const browserCutsceneOutput: CutsceneOutput = {
     if (!windowId) throw new Error("У запуска нет идентификатора окна игроков");
     return preparePlayerWindow(windowId, urls, signal);
   },
+  async isCurrentFrame(playKey: string, owner: PlayerDisplayOwner) {
+    const state = await readOnce<PlayerDisplayState>("/presentation");
+    return state.owner?.runId === owner.runId && state.owner.controllerId === owner.controllerId &&
+      state.snapshot?.source.kind === "cutscene" && state.snapshot.playKey === playKey;
+  },
   subscribeErrors(listener) {
-    const port = channel(value => { if (value.type === "display-error") listener(value.windowId, value.error || "Ошибка изображения в окне игроков"); });
+    const port = channel(value => { if (value.type === "display-error" && typeof value.playKey === "string") listener(value.windowId, value.error || "Ошибка изображения в окне игроков", value.playKey); });
     return () => port.dispose();
   },
 };
@@ -143,9 +150,9 @@ export function listenForCutscenePreparation(): () => void {
   window.addEventListener("beforeunload", closed);
   return () => { window.removeEventListener("beforeunload", closed); for (const entry of pending.values()) { entry.controller.abort(); entry.dispose?.(); } port.dispose(); };
 }
-export function reportCutsceneDisplayError(reason: string): void {
+export function reportCutsceneDisplayError(reason: string, frame: PlayerDisplayFrame): void {
   const windowId = new URL(window.location.href).searchParams.get("windowId");
   if (!windowId) return;
   const port = channel(() => {});
-  port.send({ type: "display-error", windowId, requestId: randomUUID(), error: reason }); port.dispose();
+  port.send({ type: "display-error", windowId, requestId: randomUUID(), error: reason, playKey: frame.playKey }); port.dispose();
 }

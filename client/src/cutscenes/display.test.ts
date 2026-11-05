@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readOnce } from "../data/imperative";
+import type { PlayerDisplayFrame } from "@shared/playerDisplay";
 import { createCutsceneDocument, createCutsceneStep } from "@shared/cutscenes/defaults";
 import { resolveCutsceneStep } from "@shared/cutscenes/resolve";
 import type { CutsceneRunState } from "@shared/cutscenes/runApi";
-import { browserCutsceneOutput, listenForCutscenePreparation, prepareImages } from "./display";
+import { browserCutsceneOutput, listenForCutscenePreparation, prepareImages, reportCutsceneDisplayError } from "./display";
 
 vi.mock("../data/imperative", () => ({ readOnce: vi.fn(async () => ({ ref: { kind: "image", id: "image-08" }, url: "/files/image-08.png", expiresAt: null })) }));
 const ports = new Set<Channel>(), sent: unknown[] = [];
@@ -50,5 +52,26 @@ describe("подготовка изображения без публикаци�
     const run = { snapshot: { mode: "rehearsal", version: { cutsceneId: 17, document } } } as unknown as CutsceneRunState;
     const dispose = await browserCutsceneOutput.prepare(run, resolveCutsceneStep(document, "first")!, new AbortController().signal); dispose();
     expect(sent).toEqual([]);
+  });
+});
+
+describe("принадлежность ошибки изображения кадру", () => {
+  it("передаёт playKey неудавшегося кадра без приватных данных", async () => {
+    const listener = vi.fn(), detach = browserCutsceneOutput.subscribeErrors(listener);
+    reportCutsceneDisplayError("image failed", { playKey: "old-cover" } as PlayerDisplayFrame);
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledWith("window-08", "image failed", "old-cover"); detach();
+  });
+  it("не приписывает ошибку обложки или чужого запуска текущему показу", async () => {
+    const owner = { runId: "run", controllerId: "host" };
+    const snapshot = { playKey: "current", source: { kind: "cutscene" } };
+    vi.mocked(readOnce).mockResolvedValueOnce({ owner, snapshot });
+    expect(await browserCutsceneOutput.isCurrentFrame("old-cover", owner)).toBe(false);
+    vi.mocked(readOnce).mockResolvedValueOnce({ owner, snapshot: { ...snapshot, source: { kind: "cover" } } });
+    expect(await browserCutsceneOutput.isCurrentFrame("current", owner)).toBe(false);
+    vi.mocked(readOnce).mockResolvedValueOnce({ owner: { ...owner, runId: "other" }, snapshot });
+    expect(await browserCutsceneOutput.isCurrentFrame("current", owner)).toBe(false);
+    vi.mocked(readOnce).mockResolvedValueOnce({ owner, snapshot });
+    expect(await browserCutsceneOutput.isCurrentFrame("current", owner)).toBe(true);
   });
 });

@@ -53,3 +53,19 @@ describe("переходы общего окна", () => {
     expect(view.container.querySelectorAll(".player-display-layer")).toHaveLength(1);
   });
 });
+
+it("сообщает идентичность неудавшегося кадра, поздняя ошибка уже сменённого кадра игнорируется", async () => {
+  const images: { onload: (() => void) | null; onerror: (() => void) | null; src: string }[] = [];
+  vi.stubGlobal("Image", class {
+    onload: (() => void) | null = null; onerror: (() => void) | null = null; src = "";
+    constructor() { images.push(this); }
+  });
+  const failed = { ...frame("failed"), content: { kind: "composition" as const, data: { background_url: "/files/missing.png", layers: [] }, visibleLayerIds: [] } } as unknown as PlayerDisplayFrame;
+  const error = vi.fn(), view = render(<PlayerDisplaySurface frame={failed} onError={error} />);
+  await act(async () => { images[0].onerror?.(); });
+  expect(error).toHaveBeenCalledWith("Изображение не загружено", failed);
+  error.mockClear();
+  view.rerender(<PlayerDisplaySurface frame={{ ...failed, playKey: "older" }} onError={error} />); await flush();
+  view.rerender(<PlayerDisplaySurface frame={frame("current")} onError={error} />); await flush();
+  await act(async () => { images[1].onerror?.(); }); expect(error).not.toHaveBeenCalled();
+});

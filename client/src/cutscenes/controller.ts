@@ -66,11 +66,16 @@ export class CutscenePlaybackController {
         }
         if ((!this.run || this.run.endedAt) && !this.state.busy && current.state === "stopped") void this.releaseRetained();
       }),
-      output.subscribeErrors((windowId, reason) => {
-        if (this.owner && this.run?.snapshot.mode === "live" && this.run.snapshot.returnState.window.windowId === windowId &&
-          (this.state.phase === "playing" || this.state.phase === "preparing")) {
-          void this.fail(this.error("display", reason, this.run.checkpoint.pendingStepId ?? this.state.step?.stepId ?? null));
-        }
+      output.subscribeErrors((windowId, reason, playKey) => {
+        const owner = this.owner, token = this.sequence;
+        // The old frame stays visible during preparation; target-image failures arrive through prepare().
+        if (!owner || this.state.phase !== "playing" || this.run?.snapshot.mode !== "live" ||
+          this.run.snapshot.returnState.window.windowId !== windowId) return;
+        void output.isCurrentFrame(playKey, owner).then(current => {
+          if (current && token === this.sequence && sameOwner(this.owner, owner) && this.state.phase === "playing") {
+            void this.fail(this.error("display", reason, this.state.step?.stepId ?? null));
+          }
+        }).catch(() => { /* An unverified old-window message cannot interrupt the current run. */ });
       }),
       onOrdinaryBackgroundIntent(() => { if (!this.run || this.run.endedAt) void this.releaseRetained(true); }),
     ];

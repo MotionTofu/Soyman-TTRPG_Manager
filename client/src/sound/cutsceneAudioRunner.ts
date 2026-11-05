@@ -25,6 +25,7 @@ interface Track {
 interface Voice {
   audio: HTMLAudioElement; track: Track; cycle: number; version: number; wanted: boolean;
   role: "primary" | "loop-tail" | "exit"; exit?: Ramp;
+  recovery?: { controller: AbortController; promise: Promise<void>; position: number };
   cleanup(): void;
 }
 interface Suspension { start: number; duration: number; gains: Map<Voice, number>; resolve(): void; reject(error: Error): void }
@@ -131,13 +132,31 @@ export class CutsceneAudioRunner implements CutsceneMusicPort {
     audio.loop = track.request.command.loop.enabled && track.request.command.loop.transition.mode === "cut" &&
       track.timing.start === 0 && track.timing.end === track.asset.duration;
     const onEnded = () => this.tick();
-    const onError = () => this.fail(new Error("Ошибка воспроизведения аудио катсцены"));
+    const onError = () => { if (!voice.recovery) void this.recoverVoice(voice); };
     const voice: Voice = { track, audio, cycle, role: "primary", version: 0, wanted: false,
       cleanup: () => { audio.removeEventListener("ended", onEnded); audio.removeEventListener("error", onError); } };
     audio.addEventListener("ended", onEnded); audio.addEventListener("error", onError);
     this.voices.set(audio, voice); return voice;
   }
+  private async recoverVoice(voice: Voice): Promise<void> {
+    const refresh = voice.track.asset.refresh;
+    if (!refresh) { this.fail(new Error("Ошибка воспроизведения аудио катсцены")); return; }
+    const recovery = { controller: new AbortController(), position: voice.audio.currentTime, promise: Promise.resolve() };
+    voice.recovery = recovery; voice.version++;
+    recovery.promise = (async () => {
+      const refreshed = await refresh(voice.audio, recovery.position, recovery.controller.signal);
+      if (recovery.controller.signal.aborted || this.voices.get(voice.audio) !== voice) return;
+      if (!refreshed) throw new Error("Ошибка воспроизведения аудио катсцены");
+      voice.recovery = undefined;
+      if (voice.wanted && this.pauseAt === null) await this.play(voice);
+    })().catch(error => {
+      if (!recovery.controller.signal.aborted && this.voices.get(voice.audio) === voice) this.fail(error);
+    }).finally(() => { if (voice.recovery === recovery) voice.recovery = undefined; });
+    return recovery.promise;
+  }
   private async play(voice: Voice): Promise<void> {
+    voice.wanted = true;
+    if (voice.recovery) return voice.recovery.promise;
     const version = ++voice.version; voice.wanted = true;
     try {
       await voice.audio.play();
@@ -152,6 +171,7 @@ export class CutsceneAudioRunner implements CutsceneMusicPort {
   }
   private remove(voice: Voice): void {
     if (this.voices.get(voice.audio) !== voice) return;
+    voice.recovery?.controller.abort();
     voice.version++; voice.wanted = false; voice.audio.pause(); voice.audio.volume = 0; voice.cleanup(); this.voices.delete(voice.audio);
     if (voice.role === "loop-tail") voice.audio.currentTime = voice.track.timing.start;
   }
@@ -211,6 +231,7 @@ export class CutsceneAudioRunner implements CutsceneMusicPort {
     try {
       const time = this.clock();
       for (const voice of [...this.voices.values()]) {
+        if (voice.recovery) continue;
         const { audio, track } = voice, position = audio.currentTime;
         if (voice.role === "exit") {
           const ramp = voice.exit!, t = ramp.duration === 0 ? 1 : unitGain((time - ramp.start) / ramp.duration);
@@ -295,7 +316,7 @@ export class CutsceneAudioRunner implements CutsceneMusicPort {
   capture(): CutsceneRetainedMusicSnapshot | null {
     const track = this.current;
     return track ? { kind: "cutscene", cutsceneId: track.request.cutsceneId, runId: track.request.runId,
-      command: structuredClone(track.request.command), positionSeconds: Math.max(track.timing.start, Math.min(track.timing.end, track.primary.audio.currentTime)),
+      command: structuredClone(track.request.command), positionSeconds: Math.max(track.timing.start, Math.min(track.timing.end, (track.primary.recovery?.position ?? track.primary.audio.currentTime))),
       state: this.getSnapshot().state, volume: track.level } : null;
   }
   async restore(saved: CutsceneRetainedMusicSnapshot, transition?: CutsceneAudioTransition): Promise<void> {
