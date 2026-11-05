@@ -51,3 +51,25 @@ sceneProfileRouter.get("/scenes/:id/profile-clues", (req, res) => {
     WHERE c.scene_id = ? AND c.proposed = 0 ORDER BY c.position, c.id`).all(contentId);
   return res.json({ outgoing, incoming: incomingRows, shown_id: shownId });
 });
+
+/** Состав строк основы: те же секции и награды, что у «Сюжета», без прогресса. */
+sceneProfileRouter.get("/arcs/:id/profile-makeup", (req, res) => {
+  const graph = adventureClueGraph(Number(req.params.id), null);
+  if (!graph) return res.status(404).json({ error: "not found" });
+  type Makeup = { characters: string[]; locations: string[]; obstacles: string[]; loot: string[] };
+  const sections: Record<string, keyof Makeup> = { scene_plot_characters: "characters", scene_location: "locations", scene_obstacles: "obstacles", scene_loot: "loot" };
+  const result: Record<number, Makeup> = {};
+  for (const node of graph.nodes.values()) {
+    const contentId = contentSceneId(node.shown_id);
+    const makeup: Makeup = { characters: [], locations: [], obstacles: [], loot: [] };
+    const links = db.prepare("SELECT section, to_type || ':' || to_id AS k FROM generic_links WHERE from_type = 'scene' AND from_id = ?").all(contentId) as { section: string; k: string }[];
+    for (const link of links) if (sections[link.section]) makeup[sections[link.section]].push(link.k);
+    const rewards = db.prepare("SELECT id, artifact_id FROM story_scene_rewards WHERE scene_id = ?").all(contentId) as { id: number; artifact_id: number | null }[];
+    for (const reward of rewards) {
+      const key = reward.artifact_id == null ? `reward:${reward.id}` : `artifact:${reward.artifact_id}`;
+      if (!makeup.loot.includes(key)) makeup.loot.push(key);
+    }
+    result[node.shown_id] = makeup;
+  }
+  res.json(result);
+});

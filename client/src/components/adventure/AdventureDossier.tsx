@@ -14,7 +14,7 @@ import { PaperFieldsCard as FieldsCard, type PaperField } from "../PaperFieldsCa
 type Field = PaperField;
 
 /** Паспорт приключения: вопросы ваншота, затем поля паспорта сеттинга. */
-const ARC_PASSPORT_FIELDS: readonly Field[] = [
+export const ARC_PASSPORT_FIELDS: readonly Field[] = [
   { key: "theme_question", label: "Тематический вопрос", hint: "Ценностная проблема, которую игра ставит перед героями" },
   ...PASSPORT_FIELDS,
   PASSPORT_NOT_THIS,
@@ -22,7 +22,7 @@ const ARC_PASSPORT_FIELDS: readonly Field[] = [
 ];
 
 /** Исходы по осям (словарь граф №40) — заполняются после игры. */
-const OUTCOME_FIELDS: readonly Field[] = [
+export const OUTCOME_FIELDS: readonly Field[] = [
   { key: "goal", label: "Цель" },
   { key: "cost", label: "Цена" },
   { key: "relations", label: "Отношения" },

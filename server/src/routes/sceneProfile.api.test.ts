@@ -8,6 +8,19 @@ const app = express();
 app.use(sceneProfileRouter);
 const id = (sql: string, ...args: (string | number | null)[]) => Number(db.prepare(sql).run(...args).lastInsertRowid);
 describe("GET scene profile clues", () => {
+  it("читает состав основы и объединяет награды с лутом без записи", async () => {
+    const setting = id("INSERT INTO settings(name) VALUES ('Состав основы')");
+    const arc = id("INSERT INTO story_arcs(name, setting_id) VALUES ('Книга', ?)", setting);
+    const scene = id("INSERT INTO story_scenes(name, setting_id, arc_id) VALUES ('Узел', ?, ?)", setting, arc);
+    const artifact = id("INSERT INTO artifacts(name, setting_id) VALUES ('Ключ', ?)", setting);
+    id("INSERT INTO generic_links(from_type,from_id,to_type,to_id,section) VALUES ('scene',?,'artifact',?,'scene_loot')", scene, artifact);
+    id("INSERT INTO story_scene_rewards(scene_id,artifact_id) VALUES (?,?)", scene, artifact);
+    const before = db.prepare("SELECT total_changes() AS n").get();
+    const result = await request(app).get(`/arcs/${arc}/profile-makeup`);
+    expect(result.status).toBe(200);
+    expect(result.body[scene]).toEqual({ characters: [], locations: [], obstacles: [], loot: [`artifact:${artifact}`] });
+    expect(db.prepare("SELECT total_changes() AS n").get()).toEqual(before);
+  });
   it("читает обе стороны стрелок, исключает предложения и не пишет в базу", async () => {
     const setting = id("INSERT INTO settings(name) VALUES ('Профили')");
     const arc = id("INSERT INTO story_arcs(name, setting_id) VALUES ('Дело', ?)", setting);

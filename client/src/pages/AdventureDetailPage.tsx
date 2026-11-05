@@ -1,27 +1,31 @@
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import { settingAdventuresPath } from "../layout/useSettingCrumbs";
-import { AdventureHead, AdventureParticipants, OutcomesCard, PassportCard } from "../components/adventure/AdventureDossier";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { AdventureParticipants } from "../components/adventure/AdventureDossier";
+import { useRef, useState } from "react";
 import { RevealList } from "../components/RevealList";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { useAction, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { LoadErrorCard } from "../components/Loadable";
 import { EntityPage } from "../components/EntityPage";
-import { EditableTextCard } from "../components/EditableTextCard";
+import { ProfileHero, ProfileBlock, ProfileText } from "../components/profiles/ProfileParts";
+import { AdventureDescription, AdventurePassport, AdventureOutcomes, AdventureMetadataEditor, adventureFacts } from "../components/profiles/AdventureDossier";
+import { AdventureChapters } from "../components/profiles/AdventureChapters";
+import { countHoles, holesLabel } from "../components/profiles/sceneProgress";
+import { TagChips } from "../components/TagChips";
+import { campaignPaths } from "../data/campaigns";
+import { arcCluesPath } from "../data/canvas";
+import type { ArcClues, CampaignAdventureTree, StoryArc } from "../types";
+import "../components/profiles/scene-adventure.css";
 import { MentionText } from "../components/mentions/MentionText";
 import { useTabState } from "../hooks/useTabState";
-import { SCENE_STATUSES, nodeLabel, sceneWord } from "../sceneKinds";
+import { sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
-import type { Setting, StoryArcDetail, StoryScene } from "../types";
+import type { Setting, StoryArcDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
-import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
-import { addToBag } from "../bag";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
 import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "../components/ExportProgress";
-import { useLongPress } from "../hooks/useLongPress";
-import { useUndoDelete } from "../hooks/useUndoDelete";
 import { readOnce } from "../data/imperative";
 import { useImageCrop } from "../hooks/useImageCrop";
 
@@ -85,6 +89,12 @@ export function AdventureDetailPage() {
     }).finally(() => setUploadingCover(false));
   });
 
+  const coverInput = useRef<HTMLInputElement>(null);
+  const [editingMetadata, setEditingMetadata] = useState(false);
+  const peers = useResource<StoryArc[]>(arc ? `/story/arcs?setting_id=${arc.setting_id}` : null).data ?? [];
+  const tree = useResource<CampaignAdventureTree[]>(campaignId ? campaignPaths.tree(campaignId) : null).data;
+  const clues = useResource<ArcClues>(campaignId && arc ? arcCluesPath(arc.id, campaignId) : null).data;
+
   if (arcState.error && !arc) {
     return <LoadErrorCard message={<>Не удалось загрузить приключение: {arcState.error}</>} onRetry={arcState.reload} />;
   }
@@ -93,7 +103,7 @@ export function AdventureDetailPage() {
   // Текстовые карточки держат правку открытой, пока сохранение не удалось:
   // для этого им нужна ошибка, а плашку показывает слой.
   async function save(patch: Record<string, unknown>) {
-    const done = await run(() => write.put(`/story/arcs/${arcId}`, patch).then(() => true), { affects: STORY_AFFECTS });
+    const done = await run(() => write.put(`/story/arcs/${arcId}`, { ...patch, campaign_id: campaignId }).then(() => true), { affects: STORY_AFFECTS });
     if (!done) throw new Error("Не сохранилось");
   }
 
@@ -127,8 +137,15 @@ export function AdventureDetailPage() {
   }
 
 
-  return (
-    <EntityPage
+  const neighbours = peers.filter((a) => a.kind === "adventure" && a.is_default !== 1);
+  const peerIndex = neighbours.findIndex((a) => a.id === arc.id);
+  const neighbour = (offset: number) => { const a = peerIndex < 0 ? undefined : neighbours[peerIndex + offset]; return a ? { name: a.name, href: `/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}` } : undefined; };
+  const inTree = tree?.find((a) => a.id === arc.id);
+  const allScenes = inTree ? [...inTree.scenes, ...inTree.chapters.flatMap((c) => c.scenes)] : [];
+  const unmarked = !clues || clues.nodes.every((n) => n.clue_in === 0 && n.clue_out === 0);
+  const holes = countHoles(allScenes, new Map((unmarked ? [] : clues.nodes).map((n) => [n.shown_id, n])));
+  const canvas = `/canvas?setting=${arc.setting_id}&arc=${arc.id}${campaignId ? `&campaign=${campaignId}` : ""}`;
+  return <EntityPage
       crumbs={campaignId ? [
         { label: "Кампании", to: "/campaigns" },
         { label: arcCampaigns.find((c) => c.id === campaignId)?.name ?? "Кампания", to: `/campaigns/${campaignId}` },
@@ -143,517 +160,39 @@ export function AdventureDetailPage() {
         },
         { label: arc.name },
       ]}
-      entityType="adventure"
-      title={arc.name}
-      paper
-      badges={arc.is_default === 1 ? <span className="badge tag">стандартное</span> : undefined}
-      // Под именем — источник и теги метками, ниже логлайн строкой (доска 36).
-      meta={
-        <span className="paper-ident-tags">
-          {arc.source && <span className="badge tag">{arc.source}</span>}
-          {arc.tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-            .map((t) => (
-              <span key={t} className="badge tag">
-                {t}
-              </span>
-            ))}
-          {arc.description && (
-            <span className="adventure-logline">
-              <MentionText text={arc.description} />
-            </span>
-          )}
-        </span>
-      }
-      // Стандартное приключение не переименовывают и не архивируют: оно
-      // приходит из книги, а не заводится руками.
+      entityType="adventure" title={arc.name} profile={{ id: arc.id, previous: neighbour(-1), next: neighbour(1) }}
       actions={[
-        {
-          label: exportBusy ? "Выгружаем…" : "Выгрузить в файл",
-          onClick: () => void exportArc(),
-        },
-        ...(arc.is_default !== 1
-          ? [
-              {
-                label: "Переименовать",
-                onClick: async () => {
-                  const name = await promptText({
-                    title: "Переименовать приключение",
-                    message: "Название приключения",
-                    defaultValue: arc.name,
-                  });
-                  if (name?.trim()) saveQuietly({ name: name.trim() });
-                },
-              },
-              { label: "Архивировать", danger: true, onClick: archive },
-            ]
-          : []),
+        { label: exportBusy ? "Выгружаем…" : "Выгрузить в файл", onClick: () => void exportArc() },
+        ...(arc.is_default !== 1 ? [{ label: "Переименовать", onClick: async () => { const name = await promptText({ title: "Переименовать приключение", message: "Название приключения", defaultValue: arc.name }); if (name?.trim()) saveQuietly({ name: name.trim() }); } }, { label: "Архивировать", danger: true, onClick: archive }] : []),
       ]}
-      tabs={TABS}
-      tab={tab}
-      onTab={(t) => selectTab(t as (typeof TABS)[number])}
-      overlays={
-        <>
-          {confirmDialog}
-          {promptDialog}
-          {coverCrop.modal}
-        </>
-      }
+      tabs={TABS} tab={tab} onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      overlays={<>{confirmDialog}{promptDialog}{coverCrop.modal}{editingMetadata && <AdventureMetadataEditor arc={arc} onSave={save} onClose={() => setEditingMetadata(false)} />}</>}
     >
-
-      <ProjectWorkbooks type="adventure" id={arcId}/>
-      {tab === "Досье" && (
-        <div className="dossier">
-          <aside className="dossier__aside">
-            <label className="dossier__portrait dossier__portrait--cover" title="Сменить обложку">
-              {arc.thumbnail_image_url ? (
-                <img src={arc.thumbnail_image_url} alt={`Обложка: ${arc.name}`} />
-              ) : (
-                <span className="dossier__portrait-empty">Обложка</span>
-              )}
-              <span className="dossier__portrait-hint">{uploadingCover ? "Загружается…" : "Сменить обложку"}</span>
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={(e) => {
-                  coverCrop.onSelect(e.target.files?.[0] ?? null);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <dl className="paper-facts">
-              {setting && (
-                <div>
-                  <dt className="paper-label">Сеттинг</dt>
-                  <dd>
-                    <Link className="mention-link mention--loc" to={`/settings/${arc.setting_id}`}>
-                      {setting.name}
-                    </Link>
-                  </dd>
-                </div>
-              )}
-              {arcCampaigns.length > 0 && (
-                <div>
-                  <dt className="paper-label">Кампании</dt>
-                  <dd>
-                    {arcCampaigns.map((c, i) => (
-                      <span key={c.id}>
-                        {i > 0 && ", "}
-                        <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              )}
-            </dl>
-            <div className="dossier__search">
-              <Link className="paper-more" to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}>
-                Схема на холсте ›
-              </Link>
-            </div>
-          </aside>
-
-          <div className="dossier__main">
-            <AdventureHead arc={arc} passport={arc.passport ?? {}} inCampaign={campaignId != null} onSave={save} />
-            <EditableTextCard
-              title="Завязка"
-              help="Как партия вообще попадает в это приключение."
-              value={arc.hook}
-              onSave={(v) => save({ hook: v })}
-              rows={4}
-              entityType="adventure"
-              entityId={arcId}
-              defaultSettingId={arc.setting_id}
-              emptyLabel="завязка"
-            />
-            <PassportCard passport={arc.passport ?? {}} onSave={save} />
-            <AdventureParticipants arcId={arcId} settingId={arc.setting_id} />
-            <OutcomesCard outcomes={arc.outcomes ?? {}} onSave={save} />
-
-            {/* Справка: логлайн, источник и теги правятся здесь — под именем
-                они только показываются. */}
-            <details className="paper-fold">
-              <summary>Справка</summary>
-              <div className="paper-fold__body stack">
-                <EditableTextCard
-                  title="Логлайн"
-                  value={arc.description}
-                  onSave={(v) => save({ description: v })}
-                  rows={4}
-                  entityType="adventure"
-                  entityId={arcId}
-                  defaultSettingId={arc.setting_id}
-                  emptyLabel="логлайн"
-                />
-                <FieldRow label="Источник" value={arc.source} onSave={(v) => saveQuietly({ source: v })} />
-                <FieldRow label="Теги" value={arc.tags} onSave={(v) => saveQuietly({ tags: v })} />
-              </div>
-            </details>
-          </div>
-        </div>
-      )}
-
-      {tab === "Главы и сцены" && (
-        <>
-          {campaignId == null && (
-            <CrossLinksWizard
-              ownerKind="adventure"
-              ownerId={arcId}
-              help="Ищет в тексте сцен имена сущностей сеттинга и записей компендиума — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-            />
-          )}
-          <ChaptersAndScenes arc={arc} campaignId={campaignId} />
-        </>
-      )}
-
-      {tab === "Тайны и вехи" && (
-        <div className="paper-groups">
-          <section>
-            <h2 className="paper-group__head">
-              Тайны и зацепки <span className="paper-group__count">{arc.secrets.length}</span>
-            </h2>
-            <Secrets arc={arc} campaignId={campaignId} />
-          </section>
-          <section>
-            <h2 className="paper-group__head">
-              Вехи <span className="paper-group__count">{arc.milestones.length}</span>
-            </h2>
-            <Milestones arc={arc} campaignId={campaignId} />
-          </section>
-          <section>
-            <h2 className="paper-group__head">Выводы</h2>
-            <RevealList arcId={arc.id} campaignId={campaignId} />
-          </section>
-        </div>
-      )}
-    </EntityPage>
-  );
-}
-
-// One short single-line field of the Обзор card, edited in place.
-function FieldRow({
-  label,
-  value,
-  onSave,
-}: {
-  label: string;
-  value: string;
-  onSave: (v: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <span className="muted">{label}</span>
-      {editing ? (
-        <span className="row">
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button
-            className="primary"
-            onClick={() => {
-              onSave(draft);
-              setEditing(false);
-            }}
-          >
-            OK
-          </button>
-        </span>
-      ) : (
-        <span className="row">
-          <span>{value || "—"}</span>
-          <button onClick={() => setEditing(true)}>Изменить</button>
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ChaptersAndScenes({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
-  const run = useAction();
-  const afterWrite = useAfterWrite();
-  const [confirmDialog, confirm] = useConfirm();
-  const [promptDialog, promptText] = usePrompt();
-  const { deleteWithUndo } = useUndoDelete();
-  const navigate = useNavigate();
-  const [menu, setMenu] = useState<{ x: number; y: number; scene: StoryScene } | null>(null);
-  const [chapterName, setChapterName] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [dragId, setDragId] = useState<number | null>(null);
-  // Collapsed chapters, remembered per adventure so a long book doesn't
-  // re-expand every time the tab is reopened.
-  const storageKey = `adventure-collapsed-${arc.id}`;
-  const [collapsed, setCollapsed] = useState<number[]>(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      return raw ? (JSON.parse(raw) as number[]) : [];
-    } catch {
-      return [];
-    }
-  });
-  const suffix = campaignId ? `?campaign=${campaignId}` : "";
-
-  function toggleCollapsed(groupArcId: number) {
-    setCollapsed((prev) => {
-      const next = prev.includes(groupArcId)
-        ? prev.filter((id) => id !== groupArcId)
-        : [...prev, groupArcId];
-      localStorage.setItem(storageKey, JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function setAllCollapsed(collapse: boolean) {
-    const next = collapse ? [arc.id, ...arc.chapters.map((c) => c.id)] : [];
-    localStorage.setItem(storageKey, JSON.stringify(next));
-    setCollapsed(next);
-  }
-
-  async function createChapter() {
-    if (!chapterName.trim()) return;
-    const body = { setting_id: arc.setting_id, parent_id: arc.id, kind: "chapter", name: chapterName };
-    // Без «Повторить»: повтор после потерянного ответа завёл бы главу дважды.
-    // Набранное остаётся в поле.
-    const done = await run(() => write.post("/story/arcs", body).then(() => true), { affects: STORY_AFFECTS, retry: false });
-    if (done) setChapterName("");
-  }
-
-  async function createScene(targetArcId: number) {
-    const key = String(targetArcId);
-    const name = drafts[key];
-    if (!name?.trim()) return;
-    const body = { setting_id: arc.setting_id, arc_id: targetArcId, campaign_id: campaignId, name: name.trim() };
-    const done = await run(() => write.post("/story/scenes", body).then(() => true), { affects: STORY_AFFECTS, retry: false });
-    if (done) setDrafts((d) => ({ ...d, [key]: "" }));
-  }
-
-  // Reorder is scoped to one group: the ids sent are exactly the scenes of
-  // that chapter, in their new order.
-  async function reorderScenes(group: StoryScene[], draggedId: number, targetId: number) {
-    if (draggedId === targetId) return;
-    const ids = group.map((s) => s.id);
-    const from = ids.indexOf(draggedId);
-    const to = ids.indexOf(targetId);
-    if (from === -1 || to === -1) return;
-    ids.splice(to, 0, ...ids.splice(from, 1));
-    await run(() => write.put("/story/scenes/reorder", { order: ids }), { affects: STORY_AFFECTS });
-  }
-
-  async function moveChapter(chapterId: number, delta: number) {
-    const ids = arc.chapters.map((c) => c.id);
-    const i = ids.indexOf(chapterId);
-    const j = i + delta;
-    if (i === -1 || j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    await run(() => write.put("/story/arcs/reorder", { order: ids }), { affects: STORY_AFFECTS });
-  }
-
-  async function setStatus(scene: StoryScene, status: string) {
-    if (!campaignId) return;
-    await run(() => write.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status }), { affects: STORY_AFFECTS });
-  }
-
-  // Renaming a scene from inside a campaign goes through the same
-  // copy-on-write path as any other edit, so the setting's title is safe.
-  async function renameScene(scene: StoryScene) {
-    const name = await promptText({ title: "Переименовать сцену", message: "Название сцены", defaultValue: scene.name });
-    if (!name?.trim() || name.trim() === scene.name) return;
-    const body = { name: name.trim(), campaign_id: campaignId };
-    await run(() => write.put(`/story/scenes/${scene.id}`, body), { affects: STORY_AFFECTS });
-  }
-
-  async function archiveScene(scene: StoryScene) {
-    if (!(await confirm({ message: `Отправить сцену «${scene.name}» в архив?`, confirmLabel: "Архивировать", danger: true })))
-      return;
-    await run(
-      () =>
-        deleteWithUndo({
-          entityName: scene.name,
-          deleteFn: async () => {
-            await write.del(`/story/scenes/${scene.id}`);
-          },
-          // Ошибку возврата показывает сам тост отмены — здесь её не глотать.
-          restoreFn: async () => {
-            await write.put(`/story/scenes/${scene.id}/restore`, {});
-            afterWrite(STORY_AFFECTS);
-          },
-        }),
-      { affects: STORY_AFFECTS, retry: false }
-    );
-  }
-
-  const openMenu = useCallback((scene: StoryScene, at: { clientX: number; clientY: number }) => {
-    setMenu({ x: at.clientX, y: at.clientY, scene });
-  }, []);
-
-  function renderGroup(title: string, groupArcId: number, scenes: StoryScene[], controls?: ReactNode) {
-    const isCollapsed = collapsed.includes(groupArcId);
-    return (
-      <div className="card stack" key={groupArcId}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <button
-            type="button"
-            onClick={() => toggleCollapsed(groupArcId)}
-            title={isCollapsed ? "Развернуть" : "Свернуть"}
-          >
-            {isCollapsed ? "▶" : "▼"}
-          </button>
-          <strong className="entry-title" style={{ flex: 1 }}>
-            {title}
-            {isCollapsed && (
-              <span className="muted"> · {scenes.length} {sceneWord(scenes.length)}</span>
-            )}
-          </strong>
-          {controls}
-        </div>
-        {!isCollapsed && (
-          <>
-            <div className="entity-row-list">
-              {scenes.map((s) => (
-                <SceneRow
-                  key={s.id}
-                  scene={s}
-                  onDragStart={() => setDragId(s.id)}
-                  onDrop={() => dragId != null && reorderScenes(scenes, dragId, s.id)}
-                  onMenu={openMenu}
-                >
-                  <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
-                    {s.name}
-                  </Link>
-                  <span className="muted">{nodeLabel(s)}</span>
-                  <SegmentFullness scene={s} />
-                  {s.is_override && <span className="badge tag">изменено в кампании</span>}
-                  {s.campaign_only && <span className="badge tag">только в кампании</span>}
-                  <span className="entity-row-actions">
-                    {campaignId && (
-                      <select
-                        value={s.state?.status ?? "pending"}
-                        onChange={(e) => setStatus(s, e.target.value)}
-                      >
-                        {SCENE_STATUSES.map((st) => (
-                          <option key={st.key} value={st.key}>
-                            {st.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <button onClick={() => renameScene(s)}>Переименовать</button>
-                    {/* Archiving a setting scene from inside a campaign would
-                        remove it for every other campaign too — only scenes
-                        that belong to this campaign can be archived here. */}
-                    {(!campaignId || s.campaign_only) && (
-                      <button className="danger" onClick={() => archiveScene(s)}>
-                        <NavIcon name="archive" /> Архивировать
-                      </button>
-                    )}
-                  </span>
-                </SceneRow>
-              ))}
-              {scenes.length === 0 && <p className="muted">Сцен пока нет.</p>}
-            </div>
-            <div className="row">
-              <input
-                placeholder="Название сцены"
-                value={drafts[String(groupArcId)] ?? ""}
-                onChange={(e) => setDrafts((d) => ({ ...d, [String(groupArcId)]: e.target.value }))}
-              />
-              <button onClick={() => createScene(groupArcId)}>+ Сцена</button>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  const direct = arc.scenes.filter((s) => s.arc_id === arc.id);
-
-  // Сцену сеттинга нельзя убрать изнутри кампании — она пропала бы у всех
-  // остальных; собственную сцену кампании можно. То же правило, что и у
-  // кнопки в строке.
-  const menuItems: ContextMenuItem[] = menu
-    ? [
-        { label: "Открыть", onClick: () => navigate(`/scenes/${menu.scene.id}${suffix}`) },
-        { label: "Переименовать", onClick: () => renameScene(menu.scene) },
-        { label: "В мешок", onClick: () => addToBag({ type: "scene", id: menu.scene.id, title: menu.scene.name }) },
-        ...(!campaignId || menu.scene.campaign_only
-          ? [{ label: "Архивировать", danger: true, onClick: () => archiveScene(menu.scene) }]
-          : []),
-      ]
-    : [];
-
-  return (
-    <div className="stack">
-      {confirmDialog}
-      {promptDialog}
-      {menu && (
-        <ContextMenu x={menu.x} y={menu.y} title={menu.scene.name} items={menuItems} onClose={() => setMenu(null)} />
-      )}
-      <span className="muted">
-        Сцены перетаскиваются внутри главы, главы двигаются стрелками и сворачиваются.
-      </span>
-      {(arc.chapters.length > 0 || direct.length > 0) && (
-        <div className="row">
-          <button onClick={() => setAllCollapsed(true)}>Свернуть все</button>
-          <button onClick={() => setAllCollapsed(false)}>Развернуть все</button>
-        </div>
-      )}
-      {renderGroup(arc.chapters.length > 0 ? "Без главы" : "Сцены", arc.id, direct)}
-      {arc.chapters.map((c) =>
-        renderGroup(
-          c.name,
-          c.id,
-          arc.scenes.filter((s) => s.arc_id === c.id),
-          <span className="row">
-            <button onClick={() => moveChapter(c.id, -1)}>↑</button>
-            <button onClick={() => moveChapter(c.id, 1)}>↓</button>
-            {!campaignId && (
-              <>
-                <button
-                  onClick={async () => {
-                    const name = await promptText({ title: "Переименовать главу", message: "Название главы", defaultValue: c.name });
-                    if (name?.trim()) {
-                      await run(() => write.put(`/story/arcs/${c.id}`, { name: name.trim() }), { affects: STORY_AFFECTS });
-                    }
-                  }}
-                >
-                  Переименовать
-                </button>
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    if (!(await confirm({ message: `Отправить главу «${c.name}» в архив вместе со сценами?`, confirmLabel: "Архивировать", danger: true })))
-                      return;
-                    await run(() => write.del(`/story/arcs/${c.id}`), { affects: STORY_AFFECTS });
-                  }}
-                >
-                  <NavIcon name="archive" /> Архивировать
-                </button>
-              </>
-            )}
-          </span>
-        )
-      )}
-      {!campaignId && (
-        <div className="row">
-          <input
-            placeholder="Название главы"
-            value={chapterName}
-            onChange={(e) => setChapterName(e.target.value)}
-          />
-          <button className="primary" onClick={createChapter}>
-            + Глава
-          </button>
-        </div>
-      )}
-    </div>
-  );
+      <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => { coverCrop.onSelect(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+      {tab === "Досье" && <>
+        <ProfileHero type="adventure" name={arc.name} createdAt={arc.created_at} subtype={`${arc.scenes.length} ${sceneWord(arc.scenes.length)}`}
+          image={arc.thumbnail_image_url} onGallery={() => { if (!uploadingCover) coverInput.current?.click(); }} coverLabel={uploadingCover ? "Загружается…" : "Обложка · щелчок — сменить"}
+          labels={<>{adventureFacts(arc).map((fact) => <span className="gch" key={fact}>{fact}</span>)}{arc.source && <span className="gch">{arc.source}</span>}<TagChips profile tags={arc.tags.split(",").map((t) => t.trim()).filter(Boolean)} onChange={(tags) => saveQuietly({ tags: tags.join(", ") })} />{campaignId && inTree && <span className="gch">сыграно {allScenes.filter((s) => s.state?.status === "done").length} из {allScenes.length}</span>}{campaignId && holes > 0 && <span className="adventure-profile-warning">{holesLabel(holes)}</span>}</>}>
+          <div className="adventure-profile-actions"><Link className="d-btn" to={canvas}><NavIcon name="canvas" /> Холст</Link><button className="d-btn d-btn--ghost" onClick={() => setEditingMetadata(true)}>Редактировать</button></div>
+          <ProfileText title="Завязка" value={arc.hook} onSave={(v) => save({ hook: v })} defaultSettingId={arc.setting_id} focal />
+        </ProfileHero>
+        <div className="profile-columns"><AdventureDescription arc={arc} onSave={save} /><AdventurePassport arc={arc} onSave={save} /></div>
+        <AdventureOutcomes arc={arc} onSave={save} />
+        <details className="paper-fold"><summary>Справка <span className="profile-fold-note">логлайн · источник · экспорт · участники · тетради</span></summary><div className="paper-fold__body stack">
+          <ProfileText title="Логлайн" value={arc.description} onSave={(v) => save({ description: v })} defaultSettingId={arc.setting_id} />
+          <ProfileText title="Источник" value={arc.source} onSave={(v) => save({ source: v })} rows={1} />
+          <button className="d-btn" disabled={exportBusy} onClick={() => void exportArc()}>Выгрузить в файл</button>{(exportBusy || exportError) && <ExportProgress error={exportError} />}
+          <AdventureParticipants arcId={arcId} settingId={arc.setting_id} /><ProjectWorkbooks type="adventure" id={arcId} />
+        </div></details>
+      </>}
+      {tab === "Главы и сцены" && <>{campaignId == null && <details className="paper-fold"><summary>Связать упоминания в тексте</summary><CrossLinksWizard ownerKind="adventure" ownerId={arcId} help="Ищет имена сущностей в сценах. Запись — после подтверждения." /></details>}<AdventureChapters arc={arc} campaignId={campaignId} /></>}
+      {tab === "Тайны и вехи" && <><div className="profile-columns"><Secrets arc={arc} campaignId={campaignId} /><Milestones arc={arc} campaignId={campaignId} /></div><ProfileBlock title="Выводы"><RevealList arcId={arc.id} campaignId={campaignId} /></ProfileBlock></>}
+    </EntityPage>;
 }
 
 function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
   const run = useAction();
+  const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sceneId, setSceneId] = useState("");
@@ -668,6 +207,7 @@ function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: numb
     });
     if (!done) return;
     setTitle("");
+    setAdding(false);
     setDescription("");
     setSceneId("");
   }
@@ -689,7 +229,8 @@ function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: numb
   }
 
   return (
-    <div className="card stack">
+    <ProfileBlock title="Вехи" count={arc.milestones.length} actions={!campaignId && arc.milestones.length > 0 && !adding && <button className="d-btn d-btn--sm d-btn--ghost" onClick={() => setAdding(true)}>+ Веха</button>}>
+      <div className="adventure-profile-records stack">
       <span className="muted">
         Ключевые точки сюжета в порядке следования.{" "}
         {campaignId
@@ -728,9 +269,9 @@ function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: numb
           </span>
         </div>
       ))}
-      {arc.milestones.length === 0 && <p className="muted">Вех пока нет.</p>}
-      {!campaignId && (
-        <div className="row">
+      {arc.milestones.length === 0 && !adding && <div className="profile-invitation"><NavIcon name="book" /><span>Отметки, к которым партия приходит по ходу приключения.</span>{campaignId ? <Link className="d-btn d-btn--sm" to={`/adventures/${arc.id}?tab=${encodeURIComponent("Тайны и вехи")}`}>В основу сеттинга ›</Link> : <button className="d-btn d-btn--sm" onClick={() => setAdding(true)}>+ Веха</button>}</div>}
+      {!campaignId && adding && (
+        <div className="adventure-profile-add stack">
           <input placeholder="Название вехи" value={title} onChange={(e) => setTitle(e.target.value)} />
           <input
             placeholder="Описание"
@@ -765,12 +306,14 @@ function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: numb
           </button>
         </div>
       )}
-    </div>
+      </div>
+    </ProfileBlock>
   );
 }
 
 function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
   const run = useAction();
+  const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [kind, setKind] = useState("secret");
@@ -784,6 +327,7 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
     });
     if (!done) return;
     setTitle("");
+    setAdding(false);
     setContent("");
   }
 
@@ -795,7 +339,8 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
   }
 
   return (
-    <div className="card stack">
+    <ProfileBlock title="Тайны и зацепки" count={arc.secrets.length} actions={!campaignId && arc.secrets.length > 0 && !adding && <button className="d-btn d-btn--sm d-btn--ghost" onClick={() => setAdding(true)}>+ Тайна</button>}>
+      <div className="adventure-profile-records stack">
       <span className="muted">
         Тайны, улики и сюжетные нити приключения.{" "}
         {campaignId && "Отметка «раскрыто» относится только к этой кампании."}
@@ -850,9 +395,9 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
           )}
         </div>
       ))}
-      {arc.secrets.length === 0 && <p className="muted">Пока пусто.</p>}
-      {!campaignId && (
-        <div className="row">
+      {arc.secrets.length === 0 && !adding && <div className="profile-invitation"><NavIcon name="book" /><span>Что партия может узнать в этом приключении.</span>{campaignId ? <Link className="d-btn d-btn--sm" to={`/adventures/${arc.id}?tab=${encodeURIComponent("Тайны и вехи")}`}>В основу сеттинга ›</Link> : <button className="d-btn d-btn--sm" onClick={() => setAdding(true)}>+ Тайна</button>}</div>}
+      {!campaignId && adding && (
+        <div className="adventure-profile-add stack">
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
             {SECRET_KINDS.map((k) => (
               <option key={k.key} value={k.key}>
@@ -867,69 +412,7 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-// Наполнение сцены: в каких текстовых сегментах уже что-то есть. Не оценка
-// «готово/не готово» (её приложение за Мастера не выдумывает), а факты:
-// пустая строка показывает, что дописать. Полностью заполненные сцены
-// маркера не несут — им нечего сказать.
-const SCENE_SEGMENTS = [
-  { key: "summary", label: "Описание" },
-  { key: "read_aloud", label: "Зачитать" },
-  { key: "whats_happening", label: "Что происходит" },
-  { key: "entry_condition", label: "Вход" },
-  { key: "outcomes", label: "Исходы" },
-] as const;
-
-function SegmentFullness({ scene }: { scene: StoryScene }) {
-  const filled = SCENE_SEGMENTS.filter((seg) =>
-    (scene[seg.key] as string | null)?.trim()
-  ).map((seg) => seg.label);
-  if (filled.length >= SCENE_SEGMENTS.length) return null;
-  return (
-    <span
-      className="muted"
-      title={filled.length > 0 ? `Наполнено: ${filled.join(", ")}` : "Пустая сцена — ни один сегмент не заполнен"}
-      style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}
-    >
-      {filled.length}/{SCENE_SEGMENTS.length}
-    </span>
-  );
-}
-
-// Строка сцены. Живёт отдельным компонентом ради собственного `useLongPress`:
-// хук нельзя звать внутри `map`, а зажатие нужно каждой строке — на планшете
-// правой кнопки нет, а действия строки прячутся в контекстное меню.
-function SceneRow({
-  scene,
-  onDragStart,
-  onDrop,
-  onMenu,
-  children,
-}: {
-  scene: StoryScene;
-  onDragStart: () => void;
-  onDrop: () => void;
-  onMenu: (scene: StoryScene, at: { clientX: number; clientY: number }) => void;
-  children: ReactNode;
-}) {
-  const longPress = useLongPress(useCallback((at) => onMenu(scene, at), [onMenu, scene]));
-  return (
-    <div
-      className="entity-row"
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onMenu(scene, { clientX: e.clientX, clientY: e.clientY });
-      }}
-      {...longPress}
-    >
-      {children}
-    </div>
+      </div>
+    </ProfileBlock>
   );
 }
