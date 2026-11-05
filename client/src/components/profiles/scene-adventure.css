@@ -3,6 +3,9 @@
 .scene-profile-read { border-left: var(--sp-1) solid var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); margin-bottom: var(--sp-4); }
 .scene-profile-read .profile-block { border: 0; background: none; }
 .scene-profile-read .profile-prose { font-style: italic; font-size: var(--fs-lead); }
+.scene-profile-visibility__note { min-width: 0; color: var(--muted); }
+.scene-profile-links .profile-links__head > h2 { margin-right: 0; }
+.scene-profile-links .profile-links__head > .d-btn { margin-left: auto; }
 .scene-profile-frame { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .scene-profile-frame b, .scene-profile-flow dt { font: var(--fs-micro) var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .scene-profile-flow { margin: 0; min-width: 0; }
@@ -36,6 +39,7 @@
 .entity-page--profile[data-entity-type="scene"] .profile-tabbar__actions a,
 .entity-page--profile[data-entity-type="adventure"] .profile-tabbar__actions a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 700px) {
+  .scene-profile-visibility__note { flex-basis: 100%; order: 1; }
   .scene-profile-cast { grid-template-columns: minmax(0, 1fr); }
   .scene-material-layout { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
   .scene-profile-links .profile-link-row { grid-template-columns: 20px minmax(0, 1fr); }
