@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import {useEffect,useRef,useState} from "react";
 import {Link} from "react-router-dom";
 import {useResource} from "../../data/hooks";
@@ -92,7 +93,7 @@ function SheetForm({sheet,index,template,answers,change,disabled,onCard}:{sheet:
  return <>
   <header className="wb-sheet-head">{(sheetNumber(template,index)||sheet.part)&&<div className="paper-label">{[sheetNumber(template,index)&&`Лист ${sheetNumber(template,index)}`,sheet.part].filter(Boolean).join(" · ")}</div>}<h2>{sheet.title}</h2>{sheet.instructions&&<details className="wb-about"><summary>О листе</summary><MentionText text={sheet.instructions}/></details>}</header>
   <fieldset className="wb-fields" disabled={disabled}>{sheet.fields.map(field=>field.type==="group"
-   ?<CardList key={field.key} field={field} rows={(Array.isArray(values[field.key])?values[field.key]:[]) as Row[]} disabled={disabled} onOpen={row=>onCard(field.key,row)} onAdd={()=>{const id=crypto.randomUUID(),rows=(Array.isArray(values[field.key])?values[field.key]:[]) as Row[];change(sheet.key,field.key,[...rows,{_id:id}]);onCard(field.key,id);}}/>
+   ?<CardList key={field.key} field={field} rows={(Array.isArray(values[field.key])?values[field.key]:[]) as Row[]} disabled={disabled} onOpen={row=>onCard(field.key,row)} onAdd={()=>{const id=randomUUID(),rows=(Array.isArray(values[field.key])?values[field.key]:[]) as Row[];change(sheet.key,field.key,[...rows,{_id:id}]);onCard(field.key,id);}}/>
    :<WorkbookFieldInput key={field.key} field={field} value={values[field.key]} onChange={v=>change(sheet.key,field.key,v)}/>)}</fieldset>
   {here.length>0&&<details className="workbook-former"><summary>Прежние графы · {here.length}</summary>{here.map(f=><div key={f.path}><strong>{f.label}</strong><p className="muted">{typeof f.value==="string"?f.value:JSON.stringify(f.value)}</p><FormerToRecord value={f.value}/></div>)}</details>}
  </>;
@@ -129,7 +130,7 @@ function CardSheet({sheet,group,rowId,answers,change,disabled,onRow}:{sheet:Work
    <div className="wb-card__title">{name?<input aria-label={name.label} placeholder={name.label} value={typeof row[name.key]==="string"?String(row[name.key]):""} onChange={e=>set(name.key,e.target.value)}/>:<h2>{cardName(group,row,i)}</h2>}<span>{p.filled} из {p.total} граф</span></div>
    <WorkbookRow.Provider value={row}><div className="wb-card__grid">{(group.fields??[]).filter(f=>f!==name).map(f=><WorkbookFieldInput key={f.key} field={f} value={row[f.key]} onChange={v=>set(f.key,v)}/>)}</div></WorkbookRow.Provider>
    <div className="wb-card__actions">
-    <button type="button" className="wb-card-add" onClick={()=>{const id=crypto.randomUUID();change(sheet.key,group.key,[...rows,{_id:id}]);onRow(id);}}>+ {group.entity?group.entity[0].toUpperCase()+group.entity.slice(1):"Карточка"}</button>
+    <button type="button" className="wb-card-add" onClick={()=>{const id=randomUUID();change(sheet.key,group.key,[...rows,{_id:id}]);onRow(id);}}>+ {group.entity?group.entity[0].toUpperCase()+group.entity.slice(1):"Карточка"}</button>
     <button type="button" className="wb-link" onClick={async()=>{if(!await confirm({message:`Удалить карточку «${cardName(group,row,i)}»?`,confirmLabel:"Удалить",danger:true}))return;change(sheet.key,group.key,rows.filter(r=>r._id!==rowId));onRow(next?._id??prev?._id??null);}}>Удалить карточку</button>
    </div>
   </fieldset>
@@ -145,7 +146,7 @@ function SheetNotes({sheet,sheets,answers,change,bookNotes,disabled}:{sheet:Work
  const targets=sheet.fields.filter(writable);
  const paste=(text:string,fieldKey:string)=>{const before=answers[sheet.key]?.[fieldKey];change(sheet.key,fieldKey,typeof before==="string"&&before.trim()?`${before}\n\n${text}`:text);};
  const toField=(text:string)=>targets.length>0&&<select className="wb-to-field" aria-label="Вставить в графу" value="" disabled={disabled} onChange={e=>{if(e.target.value)paste(text,e.target.value);}}><option value="">→ в графу</option>{targets.map(f=><option key={f.key} value={f.key}>{f.label}</option>)}</select>;
- const add=()=>{const body=draft.trim();if(!body)return;const note:WorkbookNote={id:crypto.randomUUID(),body,at:new Date().toISOString()};change(WORKBOOK_NOTES,sheet.key,[...own,note]);setDraft("");};
+ const add=()=>{const body=draft.trim();if(!body)return;const note:WorkbookNote={id:randomUUID(),body,at:new Date().toISOString()};change(WORKBOOK_NOTES,sheet.key,[...own,note]);setDraft("");};
  if(all)return <>
   <header className="wb-sheet-head"><div className="paper-label">Вся тетрадь</div><h2>Все записи</h2><button type="button" className="wb-link" onClick={()=>setAll(false)}>← К этому листу</button></header>
   {sheets.map((s,i)=>{const list=[...bookNotes.filter(n=>n.sheet_key===s.key).map(n=>n.body||n.quote),...sheetNotes(answers,s.key).map(n=>n.body)];return list.length>0&&<section key={s.key} className="wb-notes-group"><div className="paper-label">{sheetLabel(sheetNumber({sheets},i),s.title)}</div>{list.map((text,j)=><p key={j} className="wb-note">{text}</p>)}</section>;})}

@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import { CUTSCENE_DEFAULTS } from "@shared/cutscenes/defaults";
 import { resolveCutsceneStep } from "@shared/cutscenes/resolve";
 import type { CutsceneLaunchContext, CutsceneResolvedStep, CutsceneRunCheckpoint,
@@ -39,7 +40,7 @@ export class CutscenePlaybackController {
   private retainedKnown = false;
   private detach: (() => void) | null = null;
 
-  constructor(ports: CutscenePlaybackPorts) { this.ports = ports; this.newId = ports.newId ?? (() => crypto.randomUUID()); }
+  constructor(ports: CutscenePlaybackPorts) { this.ports = ports; this.newId = ports.newId ?? (() => randomUUID()); }
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = (): CutscenePlaybackState => this.state;
   private publish(patch: Partial<CutscenePlaybackState>): void {

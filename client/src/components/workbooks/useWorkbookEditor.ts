@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import {useCallback,useEffect,useRef,useState} from "react";
 import {useAfterWrite,useResource,write} from "../../data/hooks";
 import {readOnce} from "../../data/imperative";
@@ -20,7 +21,7 @@ export function useWorkbookEditor(id:string|number){
  const state=useRef({doc:null as WorkbookInstance|null,answers:{} as WorkbookAnswers,base:{} as WorkbookAnswers,dirty:false,generation:0,saving:false,paused:false});
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined),after=useRef(afterWrite);after.current=afterWrite;
  const recoveryKey=useRef("");
- const windowKey=useRef(sessionStorage.getItem("workbookDraftWindow")??crypto.randomUUID());
+ const windowKey=useRef(sessionStorage.getItem("workbookDraftWindow")??randomUUID());
  sessionStorage.setItem("workbookDraftWindow",windowKey.current);
  const remember=()=>{if(!recoveryKey.current)return;if(!state.current.dirty){localStorage.removeItem(recoveryKey.current);return;}try{localStorage.setItem(recoveryKey.current,JSON.stringify({answers:state.current.answers,base:state.current.base,revision:state.current.doc?.revision}));}catch{/* введённые ответы остаются в окне */}};
  const save=useCallback(async()=>{

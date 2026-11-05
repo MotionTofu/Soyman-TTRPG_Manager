@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import { wallHit } from "../wallGeometry";
 import { labelBox } from "../labelStyle";
 /** Подпись со своим размером выбирается кликом по буквам, а не только по точке привязки. */
@@ -79,7 +80,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     }
     if (current.type === "wall-line") {
       const line = current.kind;
-      if (line === "quarter") { if (!cancel) commit(before => createQuarter(before, current.layerId, crypto.randomUUID(), current.points, quarter)); return; }
+      if (line === "quarter") { if (!cancel) commit(before => createQuarter(before, current.layerId, randomUUID(), current.points, quarter)); return; }
       if (!cancel) commit(before => line && line !== "wall" ? addFreePath(before, current.layerId, current.points, line, settings.lineWidth, closed, (line === "road" ? settings.roadStyle : settings.riverStyle) || undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed, settings.wallStyle || undefined));
       return;
     }
@@ -100,7 +101,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else {
       try {
         const next = current.type === "line" ? addFreePath(current.before, activeLayer, current.points ?? [], tool === "river" ? "river" : "road", settings.lineWidth, false, (tool === "road" ? settings.roadStyle : settings.riverStyle) || undefined)
-          : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap, quarter ?? false);
+          : createRoom(current.before, activeLayer, randomUUID(), current.start, current.last, snap, quarter ?? false);
         if (next !== current.before) { history.push(current.before); setDocument(next); }
       } catch (error) { showError(error); }
     }
@@ -289,12 +290,12 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else if (tool === "road" || tool === "river") {
       try { requireEditableLayer(document, activeLayer, "path"); gesture.current = { type: "line", before: document, start: point, last: point, pointerId: event.pointerId, points: [point] }; setDraftLine([point]); } catch (error) { showError(error); }
     } else if (tool === "shape") gesture.current = { type: "room", before: document, start: point, last: point, pointerId: event.pointerId };
-    else if (tool === "door") commit((before) => createDoor(before, activeLayer, crypto.randomUUID(), point, snap, settings.orientation, settings.door));
+    else if (tool === "door") commit((before) => createDoor(before, activeLayer, randomUUID(), point, snap, settings.orientation, settings.door));
     else if (tool === "label") {
       try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, place()), activeLayer); }
       catch (error) { showError(error); }
     }
-    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, place()), pickVariant(pickOwnVariant(settings.symbol))));
+    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, randomUUID(), quantize(before, point, place()), pickVariant(pickOwnVariant(settings.symbol))));
   }
   function track(point: Vec2) {
     const grid = documentRef.current?.grid;

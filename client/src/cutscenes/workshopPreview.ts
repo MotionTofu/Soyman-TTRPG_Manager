@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import type { CutsceneDocument, CutsceneAudioCommand, CutsceneResolvedStep } from "@shared/cutscenes/types";
 import type { CutscenePreviewState, CutscenePreviewUpdate, CutsceneVisualPlayback } from "@shared/cutscenes/previewApi";
 import { selectedPreviewDocument } from "@shared/cutscenes/previewApi";
@@ -42,7 +43,7 @@ export class WorkshopPreviewController {
   private finishing: Promise<boolean> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private removeErrors: (() => void) | null = null;
-  private controllerId = crypto.randomUUID();
+  private controllerId = randomUUID();
   private reloadOwner: string | null = null;
   private auditionLoop = false;
   private knownMusic = false;
@@ -168,7 +169,7 @@ export class WorkshopPreviewController {
   private async ensure(mode: "general" | "audition") {
     const projected = this.projection(mode); if (!projected || !this.latest) throw new Error("Выбранный шаг не готов к предпросмотру");
     if (!this.session) {
-      const owner = { runId: crypto.randomUUID(), controllerId: this.controllerId };
+      const owner = { runId: randomUUID(), controllerId: this.controllerId };
       this.starting = true;
       try {
         const id = this.latest.id;

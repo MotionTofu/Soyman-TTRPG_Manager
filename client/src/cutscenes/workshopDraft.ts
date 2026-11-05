@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import type { CutsceneDocument, CutsceneStep, CutsceneComposition } from "@shared/cutscenes/types";
 import { createCutsceneStep, createCutsceneVisualTransition } from "@shared/cutscenes/defaults";
 
@@ -49,7 +50,7 @@ export function mergeWorkshopDraft<T>(base: T, local: T, remote: T, focus: Draft
 }
 
 export const emptyComposition = (): CutsceneComposition => ({ background: null, layers: [], title: "", title_secs: 3, fade_ms: 600 });
-export const workshopId = () => crypto.randomUUID();
+export const workshopId = () => randomUUID();
 export function duplicateWorkshopStep(step: CutsceneStep): CutsceneStep {
   return { ...step, id: workshopId(),
     image: step.image.action === "replace" ? { ...step.image, composition: { ...step.image.composition,

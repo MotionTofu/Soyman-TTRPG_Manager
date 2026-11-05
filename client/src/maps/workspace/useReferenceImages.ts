@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import type { MapDocumentV6, ReferenceImage, Vec2 } from "@shared/maps/core";
 import { addReferenceImage, createReferenceLayer, updateReferenceImage } from "../core/mutations/references";
@@ -68,7 +69,7 @@ export function useReferenceImages({ map, document, documentRef, activeLayer, se
       const current = documentRef.current;
       if (!current) return;
       const target = open ?? [...current.layers].reverse().find((entry) => entry.kind === "reference");
-      const layerId = target?.id ?? crypto.randomUUID(), id = crypto.randomUUID();
+      const layerId = target?.id ?? randomUUID(), id = randomUUID();
       const all = current.layers.flatMap((entry) => entry.kind === "reference" ? entry.items : []);
       const previous = (target?.kind === "reference" ? target.items.at(-1) : undefined) ?? all.at(-1) ?? null;
       const bounds = worldBounds(map.grid, map.width, map.height);

@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import type { CutsceneMediaAccess, CutsceneMediaRef } from "@shared/cutscenes/types";
 import { projectCutscenePlayerFrame } from "@shared/cutscenes/projection";
 import { readCutscenePreview } from "./preview";
@@ -29,7 +30,7 @@ function channel(receive: (message: Message) => void) {
   };
   if (port) port.onmessage = event => accept(event.data); else window.addEventListener("storage", storage);
   return {
-    send(value: Message) { if (port) port.postMessage(value); else localStorage.setItem(CHANNEL, JSON.stringify({ ...value, nonce: crypto.randomUUID() })); },
+    send(value: Message) { if (port) port.postMessage(value); else localStorage.setItem(CHANNEL, JSON.stringify({ ...value, nonce: randomUUID() })); },
     dispose() { port?.close(); window.removeEventListener("storage", storage); },
   };
 }
@@ -55,7 +56,7 @@ export function prepareImages(urls: readonly string[], signal: AbortSignal): Pro
 export function preparePlayerWindow(windowId: string, urls: string[], signal: AbortSignal): Promise<() => void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) { reject(abort()); return; }
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const port = channel(value => {
       if (value.windowId !== windowId || value.requestId !== requestId) return;
       if (value.type === "ready") finish();
@@ -138,7 +139,7 @@ export function listenForCutscenePreparation(): () => void {
       port.send({ type: "failed", windowId, requestId: value.requestId, error: entry.error });
     });
   });
-  const closed = () => port.send({ type: "display-closed", windowId, requestId: crypto.randomUUID() });
+  const closed = () => port.send({ type: "display-closed", windowId, requestId: randomUUID() });
   window.addEventListener("beforeunload", closed);
   return () => { window.removeEventListener("beforeunload", closed); for (const entry of pending.values()) { entry.controller.abort(); entry.dispose?.(); } port.dispose(); };
 }
@@ -146,5 +147,5 @@ export function reportCutsceneDisplayError(reason: string): void {
   const windowId = new URL(window.location.href).searchParams.get("windowId");
   if (!windowId) return;
   const port = channel(() => {});
-  port.send({ type: "display-error", windowId, requestId: crypto.randomUUID(), error: reason }); port.dispose();
+  port.send({ type: "display-error", windowId, requestId: randomUUID(), error: reason }); port.dispose();
 }

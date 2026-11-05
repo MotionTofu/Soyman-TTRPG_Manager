@@ -41,6 +41,23 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 describe("проигрывание черновика мастерской", () => {
+  it("запускается по HTTP в локальной сети без crypto.randomUUID", async () => {
+    vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    try {
+      const { controller } = fixture();
+      expect(await controller.play("general")).toBe(true);
+      expect(repository.start).toHaveBeenCalledWith(expect.objectContaining({
+        owner: {
+          runId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+          controllerId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+        },
+      }));
+      await controller.stop();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("запоздавшее обнаружение не принимает свой только что запущенный просмотр за чужой", async () => {
     const { controller } = fixture();
     let resolve!: (state: CutscenePreviewState | null) => void;

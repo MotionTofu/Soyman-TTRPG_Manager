@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
 import { CRYPT_PACK } from "../assets/crypt";
 import { mapAssetPackForId } from "../assets/registry";
@@ -20,7 +21,7 @@ export function addWall(document: MapDocumentV6, layerId: string, points: readon
   const installed = document.assetPacks.find(pack => pack.id === required.id);
   if (installed && installed.version !== required.version) throw new Error("Эта карта использует другую версию набора стен");
   const base = installed ? document : { ...document, assetPacks: [...document.assetPacks, required] };
-  return editGeometry(base, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind: "wall", width,
+  return editGeometry(base, view => createSplinePath(view, layerId, { id: randomUUID(), kind: "wall", width,
     styleRef: style ? { type: "asset", assetId: style } : { type: "builtin", key: "path/wall" }, nodes: anchors.map(position => ({ position })), properties: { closed } }));
 }
 export function setWallClosed(document: MapDocumentV6, layerId: string, id: string, closed: boolean) {

@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import type { PlayerDisplayOpenResult } from "@shared/playerDisplay";
 import { openOnScreen, saveLastScreenId, type ScreenChoice } from "./screens";
 
@@ -24,7 +25,7 @@ export async function openPlayerDisplayWindow(screen: ScreenChoice | null): Prom
     if (!win) return { ok: false, reason: "Браузер заблокировал окно игроков. Разрешите всплывающие окна." };
     const wasOpen = win.location.href !== "about:blank";
     let windowId = wasOpen ? new URL(win.location.href).searchParams.get("windowId") : null;
-    if (!windowId) windowId = crypto.randomUUID();
+    if (!windowId) windowId = randomUUID();
     if (!wasOpen) win.location.replace(`${PLAYER_DISPLAY_ROUTE}?windowId=${encodeURIComponent(windowId)}`);
     else if (!new URL(win.location.href).searchParams.has("windowId")) {
       win.history.replaceState(null, "", `${win.location.pathname}?windowId=${encodeURIComponent(windowId)}`);
@@ -94,7 +95,7 @@ function windowChannel(onMessage: (message: WindowMessage) => void) {
 }
 function requestClose(windowId: string): Promise<boolean> {
   return new Promise(resolve => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const channel = windowChannel(msg => {
       if (msg.type === "closing" && msg.windowId === windowId && msg.requestId === requestId) finish(true);
     });

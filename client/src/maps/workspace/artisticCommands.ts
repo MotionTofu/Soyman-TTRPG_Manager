@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import { pathNodesFromAnchors } from "./pathAnchors";
 import { ARTWORK_SCATTER, mapAssetPackForId } from "../assets/registry";
 import type { MapDocumentV6, ScatterArea, SplineNode, Vec2 } from "@shared/maps/core";
@@ -17,7 +18,7 @@ export function paintSurfaceStroke(document: MapDocumentV6, layerId: string, poi
   if (layer.kind !== "terrain" || layer.representation !== "mask") throw new Error("Выберите слой плавной поверхности");
   if (!(radius >= 0.25 && radius <= 8)) throw new Error("Размер кисти должен быть от 0,25 до 8");
   return editGeometry(document, view => paintTerrainMaskStroke(view, layerId, points, radius,
-    material === null ? null : builtinMaterial(material), () => crypto.randomUUID()));
+    material === null ? null : builtinMaterial(material), () => randomUUID()));
 }
 /** `style` — id ассета: полоса дороги или вода реки; без него линия рисуется тушью. */
 export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number, closed = false, style?: string) {
@@ -28,7 +29,7 @@ export function addFreePath(document: MapDocumentV6, layerId: string, points: Ve
   const required = style && !atlas ? mapAssetPackForId(style) : null;
   if (style && !atlas && !required) throw new Error("Этот рисунок линии отсутствует в библиотеке");
   const base = required && !document.assetPacks.some(pack => pack.id === required.id) ? { ...document, assetPacks: [...document.assetPacks, required] } : document;
-  return editGeometry(base, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind,
+  return editGeometry(base, view => createSplinePath(view, layerId, { id: randomUUID(), kind,
     styleRef: atlas ? { type: "builtin", key: `path/${atlas}` } : style ? { type: "asset", assetId: style } : { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
 }
 export function selectedPath(document: MapDocumentV6, selection: WorkspaceSelection | null) {
@@ -58,7 +59,7 @@ export function pathHit(nodes: readonly SplineNode[], point: Vec2, tolerance: nu
 }
 export function addScatter(document: MapDocumentV6, layerId: string, point: Vec2, radius: number, profile: string, density: number, size: number, seed: number) {
   const layer = requireEditableLayer(document, layerId, "scatter"); if (layer.kind !== "scatter") return document;
-  const area: ScatterArea = { id: crypto.randomUUID(), shape: { type: "ellipse", center: point, rx: radius, ry: radius },
+  const area: ScatterArea = { id: randomUUID(), shape: { type: "ellipse", center: point, rx: radius, ry: radius },
     profileRef: { type: "builtin", key: profile }, seed, density, overrides: { size } };
   return putScatter(document, layerId, area);
 }

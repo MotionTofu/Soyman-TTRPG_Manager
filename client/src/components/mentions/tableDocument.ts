@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import { marked, type Tokens } from "marked";
 import type { CSSProperties } from "react";
 import { parseTextTable, serializeTextTable, type TableCell, type TextTable } from "@shared/textTables";
@@ -8,7 +9,7 @@ export type EditorBlock = TableBlock | ProseBlock;
 
 export function createTextTable(rows: number, columns: number, values?: string[][]): TextTable {
   return {
-    version: 1, id: crypto.randomUUID(), header: true,
+    version: 1, id: randomUUID(), header: true,
     cells: Array.from({ length: Math.max(1, rows) }, (_, r) => Array.from({ length: Math.max(1, columns) }, (_, c) => ({
       text: values?.[r]?.[c] ?? (r === 0 ? `Заголовок ${c + 1}` : ""),
     }))),

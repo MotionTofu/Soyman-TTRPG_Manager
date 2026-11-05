@@ -1,3 +1,4 @@
+import { randomUUID } from "../utils/uuid";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { Setting, SettingGenre } from "../types";
@@ -201,7 +202,7 @@ export function MapWorkspacePage() {
     if (next === "liquid") {
       if (current.grid?.type !== "square") { doc.setActionError("Жидкости пока доступны для квадратной сетки"); return; }
       // Слой жидкостей заводится сам, и в него переезжает вода, накрашенная раньше кистью поверхности.
-      const layerId = current.layers.find(isLiquidLayer)?.id ?? crypto.randomUUID();
+      const layerId = current.layers.find(isLiquidLayer)?.id ?? randomUUID();
       commit((before) => editGeometry(before, (view) => {
         let base = view;
         if (!view.layers.some((entry) => entry.id === layerId)) {
@@ -210,7 +211,7 @@ export function MapWorkspacePage() {
           if (!placed.ok) return placed;
           base = placed.document;
         }
-        const moved = moveLiquidsToLayer(base, layerId, () => crypto.randomUUID());
+        const moved = moveLiquidsToLayer(base, layerId, () => randomUUID());
         return moved.ok && !moved.changed && base !== view ? { ok: true, changed: true, document: base } : moved;
       }));
       setActiveLayer(layerId); return;
@@ -234,7 +235,7 @@ export function MapWorkspacePage() {
     else setActiveLayer("");
   }
   function addLayer(kind: NewLayerKind, name = newLayerName(kind, mapKind(map?.scale ?? "locality")), role?: MapLayerRole) {
-    finishGesture(); const layerId = crypto.randomUUID();
+    finishGesture(); const layerId = randomUUID();
     commit((before) => editGeometry(before, (view) => {
       const result = LAYER_CREATORS[kind](view, { id: layerId, name, ...(role ? { role } : {}) });
       if (!result.ok) return result;
@@ -390,7 +391,7 @@ export function MapWorkspacePage() {
   useEffect(() => {
     const current = documentRef.current;
     if (!current || !writable) return;
-    const fresh = moveRiversOutOfRoads(freshObjectSizes(current), () => crypto.randomUUID());
+    const fresh = moveRiversOutOfRoads(freshObjectSizes(current), () => randomUUID());
     if (fresh !== current) { setDocument(fresh); autosave.schedule(); }
   }, [opened, ownPacks, writable, documentRef, setDocument, autosave]);
   const offeredLiquids = useMemo(() => packLiquids(packs), [packs]);
@@ -575,7 +576,7 @@ export function MapWorkspacePage() {
 
     <DungeonGenerator key={map.id} open={generatorOpen} current={disabled ? undefined : document} seed={map.seed} disabled={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"}
       onClose={() => setGeneratorOpen(false)} onApply={applyDungeon} />
-    {label && <Modal className="workspace-editor-label-dialog workspace-label-form" ariaLabel="Подпись карты" onClose={() => setLabel(null)}><h2>Подпись карты</h2><form onSubmit={(event) => { event.preventDefault(); commit((before) => addLabel(before, label.layerId, crypto.randomUUID(), label.position, label.text.trim())); setLabel(null); }}><label>Текст<input autoFocus placeholder="Например: Старый мост" value={label.text} maxLength={200} onChange={(event) => setLabel({ ...label, text: event.target.value })} /></label><div className="modal-footer"><button type="button" onClick={() => setLabel(null)}>Отмена</button><button className="primary" disabled={!label.text.trim()}>Добавить</button></div></form></Modal>}
+    {label && <Modal className="workspace-editor-label-dialog workspace-label-form" ariaLabel="Подпись карты" onClose={() => setLabel(null)}><h2>Подпись карты</h2><form onSubmit={(event) => { event.preventDefault(); commit((before) => addLabel(before, label.layerId, randomUUID(), label.position, label.text.trim())); setLabel(null); }}><label>Текст<input autoFocus placeholder="Например: Старый мост" value={label.text} maxLength={200} onChange={(event) => setLabel({ ...label, text: event.target.value })} /></label><div className="modal-footer"><button type="button" onClick={() => setLabel(null)}>Отмена</button><button className="primary" disabled={!label.text.trim()}>Добавить</button></div></form></Modal>}
     {entityPreview && <Modal className="workspace-editor-label-dialog workspace-editor-entity-dialog" ariaLabel="Карточка источника на карте" returnFocusTo={canvasRef} onClose={() => setEntityPreview(null)}>
       <EntityPreviewContent type={entityPreview.type} id={entityPreview.id} hideProfileButton statblockInline onClose={() => setEntityPreview(null)} />
     </Modal>}

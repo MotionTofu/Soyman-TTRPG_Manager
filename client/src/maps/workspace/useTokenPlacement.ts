@@ -1,3 +1,4 @@
+import { randomUUID } from "../../utils/uuid";
 import { useEffect, useRef, useState } from "react";
 import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
 import { mapWorkspaceApi } from "./mapApi";
@@ -23,7 +24,7 @@ export function useTokenPlacement(args: { mapId: number; enabled: boolean; getDo
   function confirm(position?: Vec2) {
     const current = pendingRef.current, options = latest.current;
     if (!current?.source || !options.enabled) return;
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     try {
       const document = options.getDocument();
       if (!document) return;
