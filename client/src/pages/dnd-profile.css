@@ -1,0 +1,63 @@
+/* Sys-DnD v84: только профили записей Мастера. Свиток листа и визарда прежний. */
+.dnd-card-profile .profile-hero { grid-template-columns: minmax(0, 1.95fr) minmax(220px, 1fr); }
+.dnd-card-profile .dnd-card-cover { aspect-ratio: auto; display: block; padding: 0; }
+.dnd-card-cover .dc-img { display: block; position: static; width: 100%; height: auto; aspect-ratio: 2/3; object-fit: contain; border-radius: 0; }
+.dnd-card-cover .profile-cover__caption { position: static; display: block; white-space: normal; }
+.dnd-profile-short { margin: 0 0 var(--sp-5); font-size: var(--fs-body); }
+.dnd-profile-short > .d-note { margin-right: var(--sp-2); }
+.dnd-profile-short p, .dnd-equipment-variant p, .dnd-profile-fields p { display: inline; margin: 0; }
+.dnd-equipment-variant { margin-bottom: var(--sp-3); font-size: var(--fs-body); line-height: 1.5; }
+.dnd-profile-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--sp-4) var(--sp-5); margin: var(--sp-4) 0 0; }
+.dnd-profile-fields > div { border-top: 1px solid var(--line); padding-top: var(--sp-3); min-width: 0; }
+.dnd-profile-fields dt { font: var(--fs-micro) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: var(--sp-2); }
+.dnd-profile-fields dd { margin: 0; font-size: var(--fs-body); line-height: 1.5; overflow-wrap: anywhere; }
+.dnd-card-profile .dnd-facts dd, .dnd-vehicle-profile .dnd-facts dd { font-size: var(--fs-lead); white-space: normal; }
+.dnd-card-profile .dnd-profile-fields > div:nth-child(n+3) { grid-column: 1/-1; }
+.dnd-card-profile .dnd-profile-fields .mention-link { background: color-mix(in srgb,var(--compendium) 42%,var(--sheet)); color: var(--ink); }
+.dnd-card-profile .dnd-facts > div { max-width: 100%; }
+.dnd-level-row { border-top: 1px solid var(--line); }
+.dnd-level-row__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); padding: var(--sp-3) 0; }
+.dnd-level-row__head > span { flex: 0 0 60px; font: var(--fs-meta) var(--font-mono); color: var(--muted); }
+.dnd-level-row__head > button { border: 0; background: none; color: var(--ink); font: var(--fs-body) var(--font-body); padding: 0; min-height: 24px; cursor: pointer; text-align: left; }
+.dnd-level-row__head > button[aria-expanded="true"] { background: var(--hover); text-decoration: underline; text-decoration-color: var(--acc); text-decoration-thickness: 3px; }
+.dnd-feature-row { border-top: 1px solid var(--line); }
+.dnd-feature-row > button { width: 100%; display: grid; grid-template-columns: minmax(160px,1fr) minmax(0,3fr) auto; align-items: baseline; gap: var(--sp-3); border: 0; background: none; color: var(--ink); padding: var(--sp-3) 0; text-align: left; cursor: pointer; }
+.dnd-feature-row > button strong { font: var(--fs-body) var(--font-body); }
+.dnd-feature-row > button > span { color: var(--muted); font-size: var(--fs-meta); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.dnd-feature-row > button[aria-expanded="true"] { background: var(--hover); }
+.dnd-subclass-cards { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: var(--sp-3); }
+.dnd-subclass-cards--large { grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--sp-5); }
+.dnd-subclass-cards > a { min-width: 0; color: var(--ink); text-decoration: none; }
+.dnd-subclass-cards .dc-img { display: block; width: 100%; aspect-ratio: 2/3; height: auto; border: 1px solid var(--line); }
+.dnd-subclass-cards > a > span:last-child { display: block; margin-top: var(--sp-2); font: var(--fs-body) var(--font-ui); }
+.dnd-progression-scroll { overflow-x: auto; }
+.dnd-progression { border-collapse: collapse; width: 100%; font-size: var(--fs-data); }
+.dnd-progression th { text-align: left; font: var(--fs-micro) var(--font-mono); text-transform: uppercase; letter-spacing: .06em; border-bottom: 2px solid var(--ink); vertical-align: bottom; }
+.dnd-progression th, .dnd-progression td { padding: var(--sp-3) var(--sp-2); border-right: 1px solid var(--line); }
+.dnd-progression td { border-bottom: 1px solid var(--line); }
+.dnd-progression th:last-child, .dnd-progression td:last-child { border-right: 0; }
+.dnd-progression th small { display: block; margin-top: var(--sp-2); color: var(--muted); text-transform: none; }
+.dnd-progression .is-subclass-level { background: color-mix(in srgb,var(--compendium) 13%,var(--sheet)); }
+.dnd-progression__ability { display: inline; border: 0; border-radius: 0; background: color-mix(in srgb,var(--compendium) 42%,var(--sheet)); color: var(--ink); font: inherit; padding: 0 var(--sp-1); cursor: pointer; text-align: left; }
+.dnd-vessel-cover { min-width: 0; }
+.dnd-vessel-empty { color: var(--muted); font-family: var(--font-ui); }
+.dnd-vessel-cover > button { width: 100%; aspect-ratio: 4/5; margin: 0; border: var(--edge-width) solid var(--ink); border-radius: 0; }
+.dnd-vessel-cover .vehicle-plan-preview__frame { border: 0; flex: 1; }
+.dnd-vehicle-profile .paper-rows { margin: 0; }
+.dnd-vehicle-profile .paper-rows > li { border-bottom: 1px solid var(--line); }
+@media (max-width: 700px) {
+  .dnd-card-profile .profile-hero { grid-template-columns: minmax(0,1fr); }
+  .dnd-card-profile .dnd-card-cover { order: -1; width: 58%; justify-self: center; aspect-ratio: auto; }
+  .dnd-vessel-cover { order: -1; width: 58%; justify-self: center; }
+  .dnd-card-profile .dnd-profile-fields { grid-template-columns: minmax(0,1fr); }
+  .dnd-card-profile .profile-block__head, .dnd-vehicle-profile .profile-block__head { flex-wrap: wrap; gap: var(--sp-2); }
+  .dnd-card-profile .profile-block__head h2 { white-space: normal; }
+  .dnd-card-profile .profile-block__actions { flex-wrap: wrap; max-width: 100%; }
+  .dnd-features__progression { display: none; }
+  .dnd-subclass-cards, .dnd-subclass-cards--large { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .dnd-level-row__head { column-gap: var(--sp-3); }
+  .dnd-level-row__head > span { flex-basis: 100%; }
+  .dnd-feature-row > button { grid-template-columns: minmax(0,1fr) auto; }
+  .dnd-feature-row > button > span { display: none; }
+  .dnd-progression { min-width: 800px; }
+}

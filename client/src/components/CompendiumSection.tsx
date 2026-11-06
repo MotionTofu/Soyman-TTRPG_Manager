@@ -781,6 +781,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   useEffect(() => {
     if (!focusEntryId || entries.length === 0) return;
     const byId = new Map(entries.map((e) => [e.id, e]));
+    // Править / + Умение из профиля ведут в прежний редактор раздела.
+    // Одноразовый флаг снимается, чтобы reload не открывал отменённую правку.
+    const editTarget = byId.get(focusEntryId);
+    if (isDnd && editTarget && searchParams.get("edit") === "1") {
+      startEdit(editTarget);
+      setSearchParams((previous) => { const next = new URLSearchParams(previous); next.delete("edit"); return next; }, { replace: true });
+    }
     const toExpand = new Set<number>();
     if (isDnd) toExpand.add(focusEntryId);
     let cur = byId.get(focusEntryId);
@@ -800,7 +807,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     }, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusEntryId, entries, isDnd]);
+  }, [focusEntryId, entries, isDnd, searchParams]);
 
   const childrenOf = useMemo(() => {
     const map = new Map<number | null, CompendiumEntry[]>();

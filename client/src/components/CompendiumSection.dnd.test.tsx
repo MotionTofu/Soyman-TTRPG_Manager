@@ -23,7 +23,7 @@ vi.mock("./otherscape/OtherscapePowerSetBody",()=>({OtherscapePowerSetBody:()=><
 const entry=(patch:Partial<CompendiumEntry>={})=>({id:1,system_id:1,section_id:2,parent_id:null,kind:"equipment",name:"Кинжал",name_original:"Dagger",description:"Текст оружия",level:null,data:{category:"Простое оружие",damage:"1к4 колющий",cost:"2 зм",weight:"1 фнт.",weapon_properties:[{id:11,name:"Фехтовальное [Finesse]"}],weapon_mastery:{id:12,name:"Выпад"}},position:0,...patch} as CompendiumEntry);
 beforeEach(()=>{localStorage.clear();fixture.put.mockClear();fixture.sync.mockClear();fixture.code="phb";fixture.entries=[];HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(cleanup);
-function show(kind="equipment",focus=1){return render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={["/systems/1?section=2&view=list"]}><CompendiumSection systemId={1} section={{id:2,name:kind==="feat" ? "Черты" : "Снаряжение",kind} as SystemSection} focusEntryId={focus} /></MemoryRouter></QueryClientProvider>);}
+function show(kind="equipment",focus=1,edit=false){return render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><MemoryRouter initialEntries={[`/systems/1?section=2&view=list${edit ? "&edit=1" : ""}`]}><CompendiumSection systemId={1} section={{id:2,name:kind==="feat" ? "Черты" : "Снаряжение",kind} as SystemSection} focusEntryId={focus} /></MemoryRouter></QueryClientProvider>);}
 
 it("section/entry раскрывает оружие в статье с цифрами и свойствами",async()=>{
   fixture.entries=[entry()];show();
@@ -46,6 +46,12 @@ it("правка из статьи сохраняет прежним PUT и ос
   fireEvent.change(screen.getByPlaceholderText("Название"),{target:{value:"Свой клинок"}});
   fireEvent.click(screen.getByRole("button",{name:"Сохранить"}));
   await waitFor(()=>expect(fixture.put).toHaveBeenCalledWith("/systems/entries/1",expect.objectContaining({name:"Свой клинок",data:expect.objectContaining({damage:"1к4 колющий",weapon_properties:[{id:11,name:"Фехтовальное [Finesse]"}]})})));
+  await waitFor(()=>expect(screen.queryByPlaceholderText("Название")).toBeNull());
+});
+it("Править из профиля открывает прежний редактор одноразовым edit=1",async()=>{
+  fixture.entries=[entry()];show("equipment",1,true);
+  expect((await screen.findByPlaceholderText("Название") as HTMLInputElement).value).toBe("Кинжал");
+  fireEvent.click(screen.getAllByRole("button",{name:"Отмена"}).at(-1)!);
   await waitFor(()=>expect(screen.queryByPlaceholderText("Название")).toBeNull());
 });
 it("Otherscape сохраняет своё особое тело и не получает статью ДнД",async()=>{
