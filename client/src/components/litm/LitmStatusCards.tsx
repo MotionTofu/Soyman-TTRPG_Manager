@@ -7,6 +7,7 @@ import {
   heroCondition,
   parseStatusTag,
   reduceStatus,
+  sameStatus,
   statusTier,
   type LitmStatus,
 } from "@shared/litm/status";
@@ -25,23 +26,36 @@ function parseInput(text: string): { name: string; tier: number } | null {
  * Клетка — дать статус этого уровня по правилу сложения; «−» ослабляет на 1,
  * «✕» снимает. Пятая клетка — предел героя, шестая — необратимое.
  */
-export function LitmStatusCards({ statuses, onChange }: { statuses: LitmStatus[]; onChange: (next: LitmStatus[]) => void }) {
+export function LitmStatusCards({
+  statuses,
+  onChange,
+  compact,
+}: {
+  statuses: LitmStatus[];
+  /** Операция над списком, а не готовый список: пульт применяет её к свежему
+   *  листу (игрок может править тот же лист в ту же минуту). */
+  onChange: (update: (list: LitmStatus[]) => LitmStatus[]) => void;
+  /** Карточка героя на пульте: без рамки и шапки «Статусы». */
+  compact?: boolean;
+}) {
   const [draft, setDraft] = useState("");
   const { overcome, beyond } = heroCondition(statuses);
 
   function add() {
     const s = parseInput(draft);
     if (!s) return;
-    onChange(giveStatus(statuses, s.name, s.tier));
+    onChange((list) => giveStatus(list, s.name, s.tier));
     setDraft("");
   }
 
   return (
-    <div className="card stack litm-status-block">
-      <div className="litm-status-head">
-        <strong>Статусы</strong>
-        <span className="muted">предел {HERO_LIMIT}</span>
-      </div>
+    <div className={compact ? "stack litm-status-block is-compact" : "card stack litm-status-block"}>
+      {!compact && (
+        <div className="litm-status-head">
+          <strong>Статусы</strong>
+          <span className="muted">предел {HERO_LIMIT}</span>
+        </div>
+      )}
       {beyond ? (
         <div className="litm-status-down">Необратимо: {formatStatus(beyond)} — гибель или превращение</div>
       ) : overcome ? (
@@ -61,15 +75,15 @@ export function LitmStatusCards({ statuses, onChange }: { statuses: LitmStatus[]
                   className={`litm-status-box${s.marks.includes(k) ? " is-on" : ""}${k === HERO_LIMIT ? " is-limit" : ""}${k === STATUS_MAX_TIER ? " is-fatal" : ""}`}
                   aria-label={`${s.name}: дать уровень ${k}`}
                   title={`Дать ${s.name}-${k}`}
-                  onClick={() => onChange(giveStatus(statuses, s.name, k))}
+                  onClick={() => onChange((list) => giveStatus(list, s.name, k))}
                 />
               ))}
             </span>
             <b className="litm-status-tier">{tier}</b>
-            <button type="button" className="litm-status-act" aria-label={`Ослабить ${s.name} на 1`} title="Ослабить на 1" onClick={() => onChange(reduceStatus(statuses, s.name, 1))}>
+            <button type="button" className="litm-status-act" aria-label={`Ослабить ${s.name} на 1`} title="Ослабить на 1" onClick={() => onChange((list) => reduceStatus(list, s.name, 1))}>
               −
             </button>
-            <button type="button" className="litm-status-act" aria-label={`Снять ${s.name}`} title="Снять" onClick={() => onChange(statuses.filter((x) => x !== s))}>
+            <button type="button" className="litm-status-act" aria-label={`Снять ${s.name}`} title="Снять" onClick={() => onChange((list) => list.filter((x) => !sameStatus(x.name, s.name)))}>
               ✕
             </button>
           </div>

@@ -6,7 +6,9 @@ import { mightOf, type LitmChallengeProfileData, type LitmChallengeTag } from ".
 /** Профиль вызова (доска Litm-Challenges): угрозы → последствия и особенности
  *  слева; пределы, теги и статусы, Могущество справа. На телефоне правая колонка
  *  встаёт над угрозами. */
-export function LitmChallengeProfile({ profile }: { profile: LitmChallengeProfileData }) {
+/** `hideLimits` — гнездо пульта «Вызовы»: пределы там живые, своим блоком над
+ *  профилем, второй раз их не показывать. */
+export function LitmChallengeProfile({ profile, hideLimits }: { profile: LitmChallengeProfileData; hideLimits?: boolean }) {
   const p = profile;
   if (p.legacy) return <LegacyProfile profile={p} />;
   return (
@@ -33,7 +35,7 @@ export function LitmChallengeProfile({ profile }: { profile: LitmChallengeProfil
           )}
         </div>
         <aside className="lb-prof__side">
-          {p.limitList.length > 0 && (
+          {!hideLimits && p.limitList.length > 0 && (
             <div>
               <div className="lb-lbl">Пределы<small>Limits</small></div>
               {p.limitList.map((l, i) => (

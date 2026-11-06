@@ -540,7 +540,7 @@ export function LitMCharacterView({
         </div>
       )}
 
-      <LitmStatusCards statuses={value.statuses ?? []} onChange={(statuses) => onQuickUpdate({ ...value, statuses })} />
+      <LitmStatusCards statuses={value.statuses ?? []} onChange={(update) => onQuickUpdate({ ...value, statuses: update(value.statuses ?? []) })} />
 
       {value.themes.length > 0 && <strong>Карты Тем</strong>}
       <div className="litm-theme-row">

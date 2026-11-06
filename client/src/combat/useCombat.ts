@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { LITM_CHALLENGE_KIND, LITM_SCENE_KIND } from "@shared/litm/conflict";
 import { dataKeys } from "../data/entities";
 import { useAction, useEntity, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
@@ -41,6 +42,10 @@ const NO_LINES: BattleLogLine[] = [];
 const snapshotting = new Set<number>();
 
 /** Очередь хода сессии — тот же путь, что задевает сигнал `initiative-updated`. */
+function isLitmEntry(e: InitiativeEntry): boolean {
+  return e.kind === LITM_CHALLENGE_KIND || e.kind === LITM_SCENE_KIND;
+}
+
 export function initiativePath(sessionId: number): string {
   return `/initiative-entries?session_id=${sessionId}`;
 }
@@ -88,7 +93,9 @@ export function useCombat(sessionId: number) {
   // Очередь и сессия — под ключами слоя. Игрок назвал свою инициативу —
   // сигнал `initiative-updated` задевает этот путь (data/syncAffects.ts), и
   // оба экземпляра видят одно и то же.
-  const entries = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
+  // Строки расклада «Вызовов» LitM живут в той же таблице, но в бой не входят.
+  const raw = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
+  const entries = useMemo(() => (raw.some(isLitmEntry) ? raw.filter((e) => !isLitmEntry(e)) : raw), [raw]);
   const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
   // Идущий бой и его лог (шаг 4). Действия пульта пишутся в лог, пока он есть.
   const battleId = session?.combat_active ? (session.combat_battle_id ?? null) : null;

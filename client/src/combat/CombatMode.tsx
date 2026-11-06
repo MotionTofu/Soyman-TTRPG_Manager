@@ -323,14 +323,19 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
  * вокруг курсора 30–150% (Q8, Q14). Смена хода и «К ходящему» центрируют
  * гнездо, масштаб не трогают. Масштаб помнится на компьютере.
  */
-function Ribbon({
+export function Ribbon({
   currentId,
   onContext,
   children,
+  hint = "Пробел — следующий ход · Shift+пробел — назад · колесо — масштаб · средняя кнопка — сдвиг",
+  toActiveLabel = "К ходящему",
 }: {
   currentId: number | null;
   onContext: (x: number, y: number, nestId: number | null) => void;
   children: ReactNode;
+  /** Подсказка внизу ленты; режим «Вызовы» LitM ставит свою. */
+  hint?: string;
+  toActiveLabel?: string;
 }) {
   const vpRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -461,14 +466,12 @@ function Ribbon({
         {children}
       </div>
       <div className="cm-vp-tools">
-        <span className="cm-vp-hint">
-          Пробел — следующий ход · Shift+пробел — назад · колесо — масштаб · средняя кнопка — сдвиг
-        </span>
+        <span className="cm-vp-hint">{hint}</span>
         <span className="cm-vp-hint">{Math.round(view.scale * 100)}%</span>
       </div>
       {activeOff && currentId != null && (
         <button type="button" className="cm-btn cm-btn--primary cm-to-active" onClick={() => centerOn(currentId)}>
-          К ходящему
+          {toActiveLabel}
         </button>
       )}
     </div>

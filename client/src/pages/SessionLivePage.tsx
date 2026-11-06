@@ -24,6 +24,8 @@ import { ContextMenu } from "../components/ContextMenu";
 import { requestPultGridReset } from "../pultGridReset";
 import { sessionPaths } from "../data/sessions";
 import { isAtTable } from "../characterStatus";
+import { LitmConflictMode, LitmRibbonTarget } from "../components/litm/pult/LitmConflictMode";
+import { useSessionSystemCode } from "../components/litm/pult/useLitmRibbon";
 
 // Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
 // каждой отрисовке перерисовывал бы их зря.
@@ -98,6 +100,8 @@ export function SessionLivePage() {
   // Объединение зависит и от отметок приключений, и от того, какая сцена идёт
   // (пометка «в сцене»): запуск задевает сессию, и оно перечитывается само.
   const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;
+  // Кампания LitM: вместо боя D&D — режим «Вызовы» (Д33, Q1).
+  const litm = useSessionSystemCode(sessionId) === "litm";
 
   const { save } = useSaveEntity<SessionDetail>("session", sessionId, {
     affects: session ? [{ path: sessionPaths.campaignSessions(session.campaign_id) }] : [],
@@ -177,7 +181,7 @@ export function SessionLivePage() {
             aria-pressed={combatMode}
             onClick={() => setCombatModeOpen(sessionId, !combatMode)}
           >
-            Бой
+            {litm ? "Вызовы" : "Бой"}
           </button>
           <SessionLiveControls session={session} onFinished={onFinished} />
           <button
@@ -206,7 +210,10 @@ export function SessionLivePage() {
 
       {/* Боевой режим (Q1) занимает основную область пульта: сцены, показ и
           сетку панелей. Полоса времени и управление сессией остаются. */}
-      {combatMode ? (
+      {litm && <LitmRibbonTarget sessionId={sessionId} />}
+      {combatMode && litm ? (
+        <LitmConflictMode sessionId={sessionId} systemId={campaign.system_id} settingId={campaign.setting_id} characters={characters} union={union} />
+      ) : combatMode ? (
         <CombatMode sessionId={sessionId} />
       ) : (
         <>
