@@ -85,6 +85,7 @@ interface Props {
   searchActive: boolean;
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
   onEdit?: (entry: CompendiumEntry) => void;
+  onOpenEntry?: (entry:CompendiumEntry)=>void;
 }
 
 export function EquipmentTileGrid({
@@ -95,8 +96,10 @@ export function EquipmentTileGrid({
   searchActive,
   onToggleFavourite,
   onEdit,
+  onOpenEntry,
 }: Props) {
   const [modal, setModal] = useState<CompendiumEntry | null>(null);
+  const openEntry = useCallback((entry:CompendiumEntry)=>onOpenEntry ? onOpenEntry(entry) : setModal(entry),[onOpenEntry]);
 
   const favourites = useMemo(
     () =>
@@ -121,7 +124,7 @@ export function EquipmentTileGrid({
           sectionId={sectionId}
           list={favourites}
           forceOpen={searchActive}
-          onOpenModal={setModal}
+          onOpenModal={openEntry}
           onToggleFavourite={onToggleFavourite}
           onEdit={onEdit}
         />
@@ -133,7 +136,7 @@ export function EquipmentTileGrid({
           sectionId={sectionId}
           list={list}
           forceOpen={searchActive}
-          onOpenModal={setModal}
+          onOpenModal={openEntry}
           onToggleFavourite={onToggleFavourite}
           onEdit={onEdit}
         />

@@ -86,6 +86,8 @@ export interface EntityPageTab {
 }
 
 export interface EntityPageProps {
+  /** Системы «Д», Q7: оглавление рядом с листом вместо полосы вкладок. */
+  systemNavigation?: ReactNode;
   /** Prof-* v68: отдельный opt-in, не меняет лист персонажа и вид игрока. */
   profile?: { id: number; tone?: TimeTone; previous?: { href: string; name: string }; next?: { href: string; name: string } };
   /** Крошки. Обязательны даже у хаба — там это одна ступень («Сеттинги ▸
@@ -159,6 +161,7 @@ export interface EntityPageProps {
 }
 
 export function EntityPage({
+  systemNavigation,
   crumbs,
   entityType,
   title,
@@ -353,7 +356,7 @@ export function EntityPage({
 
       <Breadcrumbs items={crumbs} compact={!!profile} />
 
-      {(!paper || titleAbove || avatar || primaryAction || (more && !moreInTabs)) && (
+      {!systemNavigation && (!paper || titleAbove || avatar || primaryAction || (more && !moreInTabs)) && (
         <div className="entity-page__head">
           {avatar && <div className="entity-page__avatar">{avatar}</div>}
 
@@ -393,7 +396,8 @@ export function EntityPage({
       {sheet ? (
         // Ярлыки и лист — одним блоком: зазор колонки .stack не должен
         // отрывать ярлыки от листа.
-        <div className="d-tabbed">
+        <div className={`d-tabbed${systemNavigation ? " sys-layout" : ""}`}>
+          {systemNavigation}
           {profile && tabs?.length ? <div className="profile-tabbar">{tabStrip}<div className="profile-tabbar__actions">
             {profile.previous && <Link to={profile.previous.href}>‹ {profile.previous.name}</Link>}
             {profile.next && <Link to={profile.next.href}>{profile.next.name} ›</Link>}

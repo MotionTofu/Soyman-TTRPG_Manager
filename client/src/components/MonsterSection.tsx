@@ -13,6 +13,8 @@ import { loadMechanicsOptions, type MechanicsOption } from "../compendiumMechani
 import { MonsterTileGrid, saveFavourite, type MonsterGrouping } from "./MonsterTileGrid";
 import { COMBAT_ROLES } from "./CreatureCard";
 import { NavIcon } from "./NavIcons";
+import { ContextMenu } from "./ContextMenu";
+import { TidyCompendiumDialog } from "./TidyCompendiumDialog";
 import { EmptyState } from "./EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 import { useCompendiumViewMode } from "../hooks/useCompendiumViewMode";
@@ -51,6 +53,8 @@ export function MonsterSection({ systemId, section }: Props) {
   const [creatureTypes, setCreatureTypes] = useState<MechanicsOption[]>([]);
   const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
   const isPhb = systemCode === "phb";
+  const [menuAt,setMenuAt] = useState<{x:number;y:number}|null>(null);
+  const [tidying,setTidying] = useState(false);
   const [filterCreatureType, setFilterCreatureType] = useState("");
   const [filterCR, setFilterCR] = useState("");
   const [filterSize, setFilterSize] = useState("");
@@ -283,8 +287,27 @@ export function MonsterSection({ systemId, section }: Props) {
     </button>
   );
 
+  const displayControls = (<div className="monster-bar monster-bar--total">
+        <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>
+        <span className="d-end monster-bar__segs">
+          <span className="d-seg" role="group" aria-label="Сортировка">
+            {sortButton("alpha", sortMode === "alpha" && sortDir === "desc" ? "Я–А" : "А–Я")}
+            {sortButton("creature_type", "Тип")}
+            {isPhb && sortButton("cr", "КО")}
+            {isPhb && sortButton("size", "Размер")}
+          </span>
+          <span className="d-seg" role="group" aria-label="Вид">
+            <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>Плитки</button>
+            <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>Список</button>
+          </span>
+        </span>
+      </div>);
+
   return (
-    <div className="stack monster-section">
+    <div className={`stack monster-section${isPhb ? " monster-section--dnd" : ""}`}>
+      {isPhb && <div className="dnd-section__head"><h2>{section.name}</h2><span className="d-note">{entries.length}</span><div className="d-bar">{displayControls}<button type="button" className="d-btn d-btn--sm" onClick={addMonster}>+ Существо</button><button type="button" className="d-btn d-btn--sm" aria-label="Действия раздела" onClick={(event)=>{const r=event.currentTarget.getBoundingClientRect();setMenuAt({x:r.left,y:r.bottom});}}>⋯</button></div></div>}
+      {menuAt && <ContextMenu {...menuAt} onClose={()=>setMenuAt(null)} items={[{label:"А–Я",onClick:()=>changeSortMode("alpha")},{label:"По типу",onClick:()=>changeSortMode("creature_type")},{label:"По КО",onClick:()=>changeSortMode("cr")},{label:"По размеру",onClick:()=>changeSortMode("size")},{label:"Плитки",onClick:()=>setViewMode("grid")},{label:"Список",onClick:()=>setViewMode("list")},{label:"+ Существо",onClick:addMonster},{label:"Привести в порядок",onClick:()=>setTidying(true)}]} />}
+      {tidying && <TidyCompendiumDialog systemId={systemId} onClose={()=>setTidying(false)} />}
       <div className="monster-bar">
         <label className="d-field monster-bar__search">
           <NavIcon name="search" />
@@ -407,21 +430,7 @@ export function MonsterSection({ systemId, section }: Props) {
           </button>
         )}
       </div>
-      <div className="monster-bar monster-bar--total">
-        <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>
-        <span className="d-end monster-bar__segs">
-          <span className="d-seg" role="group" aria-label="Сортировка">
-            {sortButton("alpha", sortMode === "alpha" && sortDir === "desc" ? "Я–А" : "А–Я")}
-            {sortButton("creature_type", "Тип")}
-            {isPhb && sortButton("cr", "КО")}
-            {isPhb && sortButton("size", "Размер")}
-          </span>
-          <span className="d-seg" role="group" aria-label="Вид">
-            <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>Плитки</button>
-            <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>Список</button>
-          </span>
-        </span>
-      </div>
+      {!isPhb && displayControls}
       <div className="comp-list">
         {viewMode === "grid" ? (
           <MonsterTileGrid

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { DSeg } from "./DSeg";
+import { CompendiumArticle, CompendiumGrantFields, CompendiumRefs } from "./CompendiumArticle";
+import { compendiumFacts, entryValue } from "./compendiumArticleData";
+import { DndGroupIndex, DndRegister } from "./DndCompendiumViews";
+import { ContextMenu } from "./ContextMenu";
+import { TidyCompendiumDialog } from "./TidyCompendiumDialog";
+import { openEntityMenu } from "../pageMenu";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys, type Affect } from "../data/entities";
@@ -312,7 +318,7 @@ function getExtraFields(entry: CompendiumEntry, parentGroupName?: string): Field
       : entry.kind === "magic_item"
       ? (entry.data.item_type as string | undefined)
       : undefined;
-  if (category === "Оружие") return [WEAPON_DAMAGE_FIELD];
+  if (/оружие/i.test(category ?? "")) return [WEAPON_DAMAGE_FIELD];
   if (category === "Доспехи") return [ARMOR_TYPE_FIELD, ARMOR_AC_FIELD, ARMOR_MAX_DEX_FIELD, ARMOR_STR_REQ_FIELD, AC_BONUS_FIELD];
   if (entry.kind === "equipment" && (category === "Инструменты" || category === "Ремесленные инструменты")) {
     return category === "Ремесленные инструменты"
@@ -471,6 +477,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const entriesPath = compendiumPaths.sectionEntries(systemId, section.id);
   const entriesState = useResource<CompendiumEntry[]>(entriesPath);
   const entries = entriesState.data ?? NO_ENTRIES;
+  const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
+  const isDnd = systemCode === "phb" || systemCode === "dnd55";
+  const [showFavOnly, setShowFavOnly] = useState(false);
+  const [categoryChip, setCategoryChip] = useState("");
+  const [rulesGrouping, setRulesGrouping] = useState<"groups" | "alpha">("groups");
+  const [sectionMenu, setSectionMenu] = useState<{x:number;y:number} | null>(null);
+  const [tidying, setTidying] = useState(false);
   // Оптимистичная правка списка на экране: порядок и звёздочка меняются сразу.
   const setEntries = useCallback(
     (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
@@ -522,10 +535,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [storedViewMode, storeViewMode] = useCompendiumViewMode(section.id, "grid");
   // Ссылка из каталога открывает существующее раскрытие записи, в том числе
   // в новом окне. После ручного выбора вида предпочтение снова хранится хуком.
-  const viewMode = searchParams.get("view") === "list" ? "list" : storedViewMode;
+  const viewMode = searchParams.get("view") === "list" || (isDnd && focusEntryId != null) ? "list" : storedViewMode;
   const setViewMode = (mode: "grid" | "list") => {
     storeViewMode(mode);
-    setSearchParams((params) => { params.delete("view"); return params; }, { replace: true });
+    setSearchParams((params) => { params.delete("view"); if (isDnd && mode === "grid") params.delete("entry"); return params; }, { replace: true });
   };
   // Совместимость: старый ключ снаряжения уже мигрирован хуком, оставляем алиас
   const equipmentViewMode = viewMode;
@@ -645,7 +658,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     );
     if (shown) showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
   }
-  const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
   // Каталоги Otherscape (макеты «Д»): «Темы персонажа» и «Испытания» по
   // умолчанию — список слева, карточка справа; выбранное — в адресе (?entry=).
   const osThemes = isOtherscapeThemesSection(systemCode, section.name);
@@ -770,7 +782,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   useEffect(() => {
     if (!focusEntryId || entries.length === 0) return;
     const byId = new Map(entries.map((e) => [e.id, e]));
+    // Править / + Умение из профиля ведут в прежний редактор раздела.
+    // Одноразовый флаг снимается, чтобы reload не открывал отменённую правку.
+    const editTarget = byId.get(focusEntryId);
+    if (isDnd && editTarget && searchParams.get("edit") === "1") {
+      startEdit(editTarget);
+      setSearchParams((previous) => { const next = new URLSearchParams(previous); next.delete("edit"); return next; }, { replace: true });
+    }
     const toExpand = new Set<number>();
+    if (isDnd) toExpand.add(focusEntryId);
     let cur = byId.get(focusEntryId);
     while (cur && cur.parent_id != null) {
       toExpand.add(cur.parent_id);
@@ -779,10 +799,16 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (toExpand.size > 0) {
       setExpanded((prev) => new Set([...prev, ...toExpand]));
     }
-    const el = document.getElementById(`comp-entry-${focusEntryId}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`comp-entry-${focusEntryId}`);
+      for (let parent = el?.parentElement; parent; parent = parent.parentElement) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true;
+      }
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusEntryId, entries]);
+  }, [focusEntryId, entries, isDnd, searchParams]);
 
   const childrenOf = useMemo(() => {
     const map = new Map<number | null, CompendiumEntry[]>();
@@ -852,9 +878,14 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     for (const e of entries) if (e.kind === "subclass" && e.parent_id != null) counts[e.parent_id] = (counts[e.parent_id] ?? 0) + 1;
     return counts;
   }, [entries]);
-  const effectiveChildrenOf = searchVisible
-    ? (parentId: number | null) => childrenOf(parentId).filter((e) => searchVisible.visible.has(e.id))
-    : childrenOf;
+  const favouriteVisible = useMemo(() => {
+    if (!isDnd || !showFavOnly) return null;
+    const ids = new Set(entries.filter((e) => e.favourite).map((e) => e.id));
+    const byId = new Map(entries.map((e) => [e.id,e]));
+    for (const id of [...ids]) { let parent = byId.get(id)?.parent_id; while (parent != null && !ids.has(parent)) { ids.add(parent); parent=byId.get(parent)?.parent_id; } }
+    return ids;
+  }, [entries,isDnd,showFavOnly]);
+  const effectiveChildrenOf = (parentId:number|null) => childrenOf(parentId).filter((e) => (!searchVisible || searchVisible.visible.has(e.id)) && (!favouriteVisible || favouriteVisible.has(e.id)));
 
   function toggle(id: number) {
     setExpanded((prev) => {
@@ -1207,14 +1238,14 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   }
 
   const topLevel = effectiveChildrenOf(null);
-  const rootKind = section.kind === "wiki" ? "wiki" : section.kind;
+  const rootKind = section.kind === "wiki" ? "wiki" : isDnd && section.kind === "mechanics" ? "mechanic_group" : section.kind;
   const categoryGroups: readonly string[] | null =
     section.kind === "feat" ? FEAT_CATEGORIES : section.kind === "equipment" ? EQUIPMENT_CATEGORIES : null;
 
   // Фильтры одни и те же на каждый ре-рендер, но результат обязан быть
   // стабильным по ссылке: дерево ниже кэширует группы через useMemo, и новый
   // массив каждый рендер сводил бы этот кэш к нулю.
-  const filteredTopLevel = useMemo(() => {
+  const filteredTopLevelBase = useMemo(() => {
     if (isSpellSection)
       return topLevel.filter((e) => {
         if (filterLevel !== "" && (e.level ?? 0) !== Number(filterLevel)) return false;
@@ -1296,7 +1327,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     classHierarchy,
   ]);
 
+  const filteredTopLevel = isDnd && categoryChip ? filteredTopLevelBase.filter((e) => entryValue(e,"category") === categoryChip) : filteredTopLevelBase;
   const nodeProps = {
+    dnd: isDnd,
     expanded,
     editing,
     childrenOf: effectiveChildrenOf,
@@ -1342,6 +1375,54 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (!isMechanicsSection) return [] as CompendiumEntry[];
     return entries.filter((e) => e.favourite);
   }, [isMechanicsSection, entries]);
+
+  const sectionOverlays = <>
+    {sectionMenu && <ContextMenu {...sectionMenu} onClose={()=>setSectionMenu(null)} items={[
+      {label:"По алфавиту",onClick:()=>{changeSortMode("alpha");setRulesGrouping("alpha");}},
+      {label:"По категориям / группам",onClick:()=>{changeSortMode("type");setRulesGrouping("groups");}},
+      ...(!isMechanicsSection && section.kind !== "bastion" ? [{label:"Плитки",onClick:()=>setViewMode("grid")},{label:"Список",onClick:()=>setViewMode("list")}] : []),
+      {label:`+ ${kindLabel(rootKind)}`,onClick:()=>addEntry(null,rootKind)},
+      ...(isMechanicsSection ? [{label:"+ Статья",onClick:()=>addEntry(null,"mechanic_item")}] : []),
+      {label:"Сортировка вручную",onClick:()=>{changeSortMode("manual");setViewMode("list");}},
+      {label:"Свернуть всё",onClick:()=>{setExpanded(new Set());document.querySelectorAll<HTMLDetailsElement>(".comp-dnd details[open]").forEach((details)=>{details.open=false;});}},
+      ...(isMechanicsSection ? [{label:bulkSelect ? "Завершить массовый выбор" : "Массовый выбор",onClick:toggleBulkSelect}] : []),
+      {label:"Привести в порядок",onClick:()=>setTidying(true)},
+    ]} />}
+    {tidying && <TidyCompendiumDialog systemId={systemId} onClose={()=>setTidying(false)} />}
+  </>;
+  const dndHeader = <div className="dnd-section__head">
+    <h2>{section.name}</h2><span className="d-note">{isClassSection ? entries.filter((entry)=>entry.kind === "class" && entry.parent_id == null).length : entries.length}</span>
+    <div className="d-bar">
+      {isMechanicsSection ? <DSeg label="Порядок справочника" value={rulesGrouping} onChange={setRulesGrouping} items={[{id:"groups",label:"По группам"},{id:"alpha",label:"А–Я"}]} /> : <DSeg label="Сортировка" value={sortMode} onChange={changeSortMode} items={[
+        {id:"alpha",label:"А–Я"},
+        ...((isEquipmentSection || isFeatSection || isMagicItemSection) ? [{id:"type" as const,label:"Категория"}] : []),
+        ...(isSpellSection ? [{id:"level" as const,label:"Круг"},{id:"school" as const,label:"Школа"}] : []),
+        {id:"manual",label:"Вручную"},
+      ]} />}
+      {!isMechanicsSection && section.kind !== "bastion" && <DSeg label="Вид" value={viewMode} onChange={setViewMode} items={[{id:"grid",label:isSpellSection ? "Таблица" : "Плитки"},{id:"list",label:"Список"}]} />}
+      <button type="button" className="d-btn d-btn--sm" onClick={()=>addEntry(null,rootKind)}>+ {isMechanicsSection ? "Группа" : kindLabel(rootKind)}</button>
+      {isMechanicsSection && <button type="button" className="d-btn d-btn--sm" onClick={()=>addEntry(null,"mechanic_item")}>+ Статья</button>}
+      <button type="button" className="d-btn d-btn--sm" aria-label="Действия раздела" onClick={(event)=>{const r=event.currentTarget.getBoundingClientRect();setSectionMenu({x:r.left,y:r.bottom});}}>⋯</button>
+    </div>
+  </div>;
+  const categoryCounts = isDnd && (isEquipmentSection || isFeatSection) ? [...new Set(topLevel.map((entry)=>entryValue(entry,"category")))].filter(Boolean).map((name)=>({name,count:topLevel.filter((entry)=>entryValue(entry,"category")===name).length})) : [];
+  const categoryChips = categoryCounts.length > 0 && <nav className="dnd-categories" aria-label="Категории"><button type="button" className={!categoryChip ? "active" : ""} onClick={()=>setCategoryChip("")}>Все {topLevel.length}</button>{categoryCounts.map(({name,count})=><button key={name} type="button" className={categoryChip===name ? "active" : ""} onClick={()=>setCategoryChip(categoryChip===name ? "" : name)}>{name} {count}</button>)}</nav>;
+
+  if (isDnd && isMechanicsSection) {
+    const groups = topLevel.filter((entry)=>entry.kind === "mechanic_group");
+    const flat = sortForDisplay(entries.filter((entry)=>entry.kind !== "mechanic_group" && (!searchVisible || searchVisible.visible.has(entry.id)) && (!showFavOnly || entry.favourite))).sort((a,b)=>a.name.localeCompare(b.name,"ru"));
+    return <div className="stack comp-section comp-dnd">
+      {dndHeader}
+      {loadError && <LoadErrorCard message={<>Не удалось загрузить записи: {loadError}</>} onRetry={entriesState.reload} />}
+      <div className="d-bar"><label className="d-field d-bar__grow"><NavIcon name="search" /><input type="search" aria-label="Поиск по названию" placeholder="Найти правило, состояние, термин…" value={searchQuery} onChange={(event)=>setSearchQuery(event.target.value)} /></label><button type="button" className={`d-btn${showFavOnly ? " active" : ""}`} aria-pressed={showFavOnly} onClick={()=>setShowFavOnly(!showFavOnly)}>★ Избранное</button></div>
+      <DndGroupIndex groups={groups} entries={entries} onSelect={(id)=>{setRulesGrouping("groups");setExpanded((previous)=>new Set([...previous,id]));setTimeout(()=>document.getElementById(`comp-entry-${id}`)?.scrollIntoView({block:"start",behavior:"auto"}),0);}} />
+      {bulkSelect && <div className="d-bar"><label><input type="checkbox" checked={flat.length>0 && flat.every((entry)=>selectedIds.has(entry.id))} onChange={(event)=>setSelectedIds(event.target.checked ? new Set(flat.map((entry)=>entry.id)) : new Set())} /> Выбрать всё</label><button type="button" className="d-btn" disabled={selectedIds.size===0} onClick={()=>setVerstakOpen(true)}>Верстак · {selectedIds.size}</button><button type="button" className="d-btn d-btn--ghost" onClick={()=>setSelectedIds(new Set())}>Сбросить</button></div>}
+      <div className="comp-list">{(rulesGrouping === "alpha" ? flat : sortForDisplay(topLevel)).map((entry)=><SortableRow key={entry.id} entry={entry} group={topLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}><EntryNode {...nodeProps} entry={entry} depth={0} flat={rulesGrouping === "alpha"} /></SortableRow>)}</div>
+      {topLevel.length===0 && <p className="muted">{searchQuery || showFavOnly ? "Подходящих записей нет." : "Добавьте первую группу или статью."}</p>}
+      {verstakOpen && <Verstak entries={entries} selectedIds={selectedIds} onPrint={handlePrint} onShow={handleShowToPlayers} forceOpen onClose={()=>setVerstakOpen(false)} onRemove={(id)=>setSelectedIds((previous)=>{const next=new Set(previous);next.delete(id);return next;})} />}
+      {sectionOverlays}{alertDialog}{confirmDialog}
+    </div>;
+  }
 
   // Справочник — 6 блоков как ОБЩЕЕ + отдельный Избранное. Остальные разделы — прежний один-карточный вид.
   if (isMechanicsSection) {
@@ -1542,7 +1623,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   );
 
   return (
-    <div className="stack comp-section">
+    <div className={`stack comp-section${isDnd ? " comp-dnd" : ""}`}>
+      {isDnd && dndHeader}
       {loadError && (
         <LoadErrorCard message={<>Не удалось загрузить записи раздела: {loadError}</>} onRetry={() => void entriesState.reload()} />
       )}
@@ -1566,7 +1648,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           <option value="">Любая сложность</option>
           {[1, 2, 3, 4, 5].map((n) => <option key={n} value={String(n)}>Сложность {n}</option>)}
         </select>}
-        {isEquipmentSection && (
+        {isEquipmentSection && !isDnd && (
           <select className="d-select" aria-label="Категория" value={filterEquipmentCategory} onChange={(e) => setFilterEquipmentCategory(e.target.value)}>
             <option value="">Все категории</option>
             {EQUIPMENT_CATEGORIES.map((c) => (
@@ -1698,8 +1780,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             </select>
           </>
         )}
+      {isDnd && <button type="button" className="d-btn" aria-pressed={showFavOnly} onClick={()=>setShowFavOnly(!showFavOnly)}>★ Избранное</button>}
       </div>
-      <div className="d-bar">
+      {isDnd && categoryChips}
+      {!isDnd && <div className="d-bar">
         {!osCatalog && <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>}
         <span className="d-end d-bar">
           {!osCatalog && <span className="d-seg" role="group" aria-label="Сортировка">
@@ -1724,10 +1808,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             </span>
           )}
         </span>
-      </div>
+      </div>}
 
       <div className="comp-list">
-        {osThemes && viewMode === "grid" ? (
+        {isDnd && (viewMode === "list" || section.kind === "bastion") && ["equipment","feat","background","magic_item","bastion","vehicle"].includes(section.kind) ? <DndRegister entries={sortForDisplay(filteredTopLevel)} kind={section.kind} grouping={sortMode === "alpha" ? "alpha" : sortMode === "manual" ? "manual" : "category"} expanded={expanded} editingId={editing?.id} focusEntryId={focusEntryId} manual={sortMode === "manual"} onToggle={toggle} onDrag={setDragId} onDrop={reorderWithinGroup} renderArticle={(entry)=><EntryNode {...nodeProps} entry={entry} depth={0} hideRow />} /> : osThemes && viewMode === "grid" ? (
           <OtherscapeThemesView entries={entries} query={searchQuery} grouping={themeGrouping} selectedId={focusEntryId} onSelect={selectEntry} />
         ) : osChallenges && viewMode === "grid" ? (
           <OtherscapeChallengesView entries={sortForDisplay(entries)} query={searchQuery} difficulty={challengeDifficulty} selectedId={focusEntryId} onSelect={selectEntry} />
@@ -1770,6 +1854,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             onToggleFavourite={toggleFavourite}
             categoryField="category"
             kindLabel="Черта"
+            onOpenEntry={isDnd ? (entry)=>selectEntry(entry.id) : undefined}
           />
         ) : isBackgroundSection && viewMode === "grid" ? (
           <SimpleKindTileGrid
@@ -1781,6 +1866,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             onToggleFavourite={toggleFavourite}
             categoryField={null}
             kindLabel="Предыстория"
+            onOpenEntry={isDnd ? (entry)=>selectEntry(entry.id) : undefined}
           />
         ) : isMagicItemSection && viewMode === "grid" ? (
           <SimpleKindTileGrid
@@ -1792,6 +1878,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             onToggleFavourite={toggleFavourite}
             categoryField={sortMode === "rarity" ? "rarity" : "item_type"}
             kindLabel="Маг. предмет"
+            onOpenEntry={isDnd ? (entry)=>selectEntry(entry.id) : undefined}
           />
         ) : isEquipmentSection && viewMode === "grid" ? (
           <EquipmentTileGrid
@@ -1801,7 +1888,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             sectionId={section.id}
             searchActive={searchQuery.trim() !== ""}
             onToggleFavourite={toggleFavourite}
-            onEdit={startEdit}
+            onEdit={isDnd ? (entry)=>{selectEntry(entry.id);startEdit(entry);} : startEdit}
+            onOpenEntry={isDnd ? (entry)=>selectEntry(entry.id) : undefined}
           />
         ) : isSpellSection
           ? sortMode === "school"
@@ -1914,18 +2002,21 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           <p className="muted">Ничего не найдено по фильтрам.</p>
         )}
       </div>
-      {section.kind !== "mechanics" && topLevel.length > 0 && (
+      {!isDnd && section.kind !== "mechanics" && topLevel.length > 0 && (
         <button style={{ alignSelf: "flex-start" }} onClick={() => addEntry(null, rootKind)}>
           + Добавить {kindLabel(rootKind).toLowerCase()}
         </button>
       )}
-      {alertDialog}
+      {isDnd && sectionOverlays}{alertDialog}
       {confirmDialog}
     </div>
   );
 }
 
 interface NodeProps {
+  dnd?: boolean;
+  hideRow?: boolean;
+  flat?: boolean;
   entry: CompendiumEntry;
   depth: number;
   expanded: Set<number>;
@@ -2057,14 +2148,15 @@ function EntryNode(props: NodeProps) {
   // У транспорта и поста экипажа своя страница — как у существа: статблок
   // поста и список постов судна в развёрнутой строке раздела не помещаются.
   const isVehicle = entry.kind === "vehicle" || entry.kind === "vehicle_post";
-  const hasOwnPage = isMonster || isVehicle;
+  const isCardProfile = isClass || isSubclass || isSpecies;
+  const hasOwnPage = isMonster || isVehicle || isCardProfile;
   const isEquipment = entry.kind === "equipment";
   const equipCategory = isEquipment
     ? (entry.data.category as string | undefined)
     : isMagicItem
     ? (entry.data.item_type as string | undefined)
     : undefined;
-  const isWeaponEntry = equipCategory === "Оружие";
+  const isWeaponEntry = /оружие/i.test(equipCategory ?? "");
   const isArmorEntry = equipCategory === "Доспехи";
   const grantedSpells = Array.isArray(entry.data.granted_spells)
     ? (entry.data.granted_spells as { id: number; name: string; grantLevel?: number }[])
@@ -2182,11 +2274,14 @@ function EntryNode(props: NodeProps) {
     isMonster;
 
   const isMechanicGroup = entry.kind === "mechanic_group";
-  const canToggle = hasBody || isEditing;
+  const canToggle = !!props.dnd || hasBody || isEditing;
+  const frame = (body:ReactNode) => props.dnd && !isMechanicGroup
+    ? <CompendiumArticle entry={entry} parentName={props.parentGroupName} editing={isEditing} onEdit={()=>isEditing ? props.onCancel() : props.onEdit(entry)} onCollapse={()=>{if(isEditing)props.onCancel();else props.onToggle(entry.id);}} onDelete={()=>props.onDelete(entry)} onFavourite={props.onToggleFavourite ? ()=>props.onToggleFavourite!(entry,!entry.favourite) : undefined} actions={(def?.childKinds ?? []).map((child)=>({label:`+ ${child.label}`,onClick:()=>props.onAddChild(entry.id,child.kind)}))}>{body}</CompendiumArticle>
+    : <div className="comp-body">{body}</div>;
 
   return (
     <div className={`comp-node${isMechanicGroup ? " comp-node--group" : ""}${otherscapeDossier ? ` otherscape-dossier${otherscapePowerSet ? " otherscape-power-set" : otherscapeChallenge ? " otherscape-challenge" : otherscapeEquipment ? " otherscape-equipment" : otherscapeDevelopment ? " otherscape-development" : otherscapeCrew ? " otherscape-crew" : " otherscape-archetype"}${isOpen && !isEditing ? " otherscape-dossier--open" : ""}` : ""}`} id={`comp-entry-${entry.id}`} role="listitem">
-      <div
+      {!props.hideRow && <div
         role="button"
         tabIndex={canToggle ? 0 : -1}
         aria-expanded={canToggle ? (isOpen || isEditing) : undefined}
@@ -2278,7 +2373,19 @@ function EntryNode(props: NodeProps) {
           </span>
         )}
         {entry.level != null && !isSpell && <span className="comp-level">ур. {entry.level}</span>}
+        {props.dnd && !isMechanicGroup && <span className="comp-row__excerpt">{stripMentions(entry.description).split("\n")[0]}</span>}
+        {props.dnd && isMechanicGroup && <span className="d-note">{kids.length} · {isOpen ? "▴ свернуть" : "▸"}</span>}
         <span className="comp-actions" onClick={(e) => e.stopPropagation()}>
+          {props.dnd ? <>
+            {props.onToggleFavourite && <button type="button" className="comp-mini" aria-label={entry.favourite ? "Убрать из избранного" : "В избранное"} onClick={()=>props.onToggleFavourite!(entry,!entry.favourite)}><NavIcon name="star" filled={!!entry.favourite} /></button>}
+            {isCardProfile && <Link className="comp-mini" to={`/systems/${entry.system_id}/entries/${entry.id}`}>Профиль ›</Link>}
+            <button type="button" className="comp-mini" aria-label={`Действия: ${entry.name}`} onClick={(event)=>{const r=event.currentTarget.getBoundingClientRect();openEntityMenu({type:"compendium_entry",id:entry.id,name:entry.name},r.left,r.bottom,[
+              {label:"Править",onClick:()=>props.onEdit(entry)},
+              {label:"Скопировать ссылку на запись",onClick:copyLink},
+              ...(def?.childKinds ?? []).map((child)=>({label:`+ ${child.label}`,onClick:()=>props.onAddChild(entry.id,child.kind)})),
+              {label:"Удалить",danger:true,onClick:()=>props.onDelete(entry)},
+            ]);}}>⋯</button>
+          </> : <>
           {(entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (
             <button
               className={`comp-mini${entry.favourite ? " is-active" : ""}`}
@@ -2311,7 +2418,7 @@ function EntryNode(props: NodeProps) {
           {hasOwnPage && (
             <Link
               className="comp-mini"
-              to={`/compendium/${entry.id}`}
+              to={isCardProfile ? `/systems/${entry.system_id}/entries/${entry.id}` : `/compendium/${entry.id}`}
               title={isVehicle ? "Открыть страницу транспорта" : "Открыть страницу существа"}
             >
               <NavIcon name="arrowRight" />
@@ -2327,11 +2434,12 @@ function EntryNode(props: NodeProps) {
           <button className="comp-mini danger" title="Удалить" onClick={() => props.onDelete(entry)}>
             <NavIcon name="delete" />
           </button>
+          </>}
         </span>
-      </div>
+      </div>}
 
       {isEditing && editing && (
-        <div className="comp-body">
+        frame(<>
           <div className="stack" style={{ gap: 6 }}>
             <div className="row">
               <input
@@ -2366,6 +2474,7 @@ function EntryNode(props: NodeProps) {
                   }
                 >
                   <option value="">{f.label}</option>
+                  {props.dnd && editing.data[f.key] && !f.options?.includes(editing.data[f.key]) && <option value={editing.data[f.key]}>{editing.data[f.key]}</option>}
                   {(f.options ?? []).map((o) => (
                     <option key={o} value={o}>
                       {o}
@@ -3105,7 +3214,7 @@ function EntryNode(props: NodeProps) {
               <button onClick={props.onCancel}>Отмена</button>
             </div>
           </div>
-        </div>
+        </>)
         )}
 
 
@@ -3130,7 +3239,8 @@ function EntryNode(props: NodeProps) {
           </div>
         )}
         {isOpen && !isEditing && !(entry.kind === 'themebook' || entry.kind === 'theme_kit' || entry.kind === 'treasure' || entry.kind === 'magic_way') && (
-        <div className="comp-body">
+        frame(<>
+          {props.dnd && entry.kind === "feat" && <CompendiumGrantFields entry={entry} />}
           {isMonster && (
             <StatblockList
               ownerType="compendium_entry"
@@ -3141,7 +3251,7 @@ function EntryNode(props: NodeProps) {
               ownerCreatureCR={entry.data.cr as string | undefined}
             />
           )}
-          {filledFields.length > 0 && (
+          {props.dnd ? <dl className="dnd-fields">{filledFields.filter((field)=>!["category","source","prerequisite",...compendiumFacts(entry).facts.map((fact)=>fact.key)].includes(field.key)).map((field)=><div key={field.key}><dt>{field.label}</dt><dd><MentionText text={String(entry.data[field.key])} /></dd></div>)}</dl> : filledFields.length > 0 && (
             <div className="comp-fields">
               {filledFields.map((f) => (
                 <div key={f.key} className="muted">
@@ -3275,9 +3385,12 @@ function EntryNode(props: NodeProps) {
               )}
             </div>
           )}
-          {hasWeaponSummary && (
+          {props.dnd && hasWeaponSummary ? <dl className="dnd-fields">
+            {weaponProperties.length>0 && <div><dt>Свойства</dt><dd><CompendiumRefs refs={weaponProperties} /></dd></div>}
+            {weaponMastery && <div><dt>Мастерство</dt><dd><CompendiumRefs refs={[weaponMastery]} /></dd></div>}
+          </dl> : hasWeaponSummary && (
             <div className="comp-fields">
-              {(attackMelee || attackRanged) && (
+              {!props.dnd && (attackMelee || attackRanged) && (
                 <div className="muted">
                   <strong>Атака:</strong>{" "}
                   {[attackMelee && "рукопашная", attackRanged && "дальнобойная"].filter(Boolean).join(", ")}
@@ -3285,12 +3398,12 @@ function EntryNode(props: NodeProps) {
               )}
               {weaponProperties.length > 0 && (
                 <div className="muted">
-                  <strong>Свойства:</strong> {weaponProperties.map((p) => p.name).join(", ")}
+                  <strong>Свойства:</strong> {props.dnd ? <CompendiumRefs refs={weaponProperties} /> : weaponProperties.map((p) => p.name).join(", ")}
                 </div>
               )}
               {weaponMastery && (
                 <div className="muted">
-                  <strong>Мастерство:</strong> {weaponMastery.name}
+                  <strong>Мастерство:</strong> {props.dnd ? <CompendiumRefs refs={[weaponMastery]} /> : weaponMastery.name}
                 </div>
               )}
             </div>
@@ -3349,17 +3462,17 @@ function EntryNode(props: NodeProps) {
               )}
               {classWeaponProfs.length > 0 && (
                 <div className="muted">
-                  <strong>Владения оружием:</strong> {classWeaponProfs.map((w) => w.name).join(", ")}
+                  <strong>Владения оружием:</strong> {props.dnd ? <CompendiumRefs refs={classWeaponProfs} /> : classWeaponProfs.map((w) => w.name).join(", ")}
                 </div>
               )}
               {classArmorProfs.length > 0 && (
                 <div className="muted">
-                  <strong>Тренированность с доспехами:</strong> {classArmorProfs.map((a) => a.name).join(", ")}
+                  <strong>Тренированность с доспехами:</strong> {props.dnd ? <CompendiumRefs refs={classArmorProfs} /> : classArmorProfs.map((a) => a.name).join(", ")}
                 </div>
               )}
               {classToolProfs.length > 0 && (
                 <div className="muted">
-                  <strong>Владения инструментами:</strong> {classToolProfs.map((t) => t.name).join(", ")}
+                  <strong>Владения инструментами:</strong> {props.dnd ? <CompendiumRefs refs={classToolProfs} /> : classToolProfs.map((t) => t.name).join(", ")}
                 </div>
               )}
               {classSkillChoiceOptions.length > 0 && (
@@ -3401,10 +3514,10 @@ function EntryNode(props: NodeProps) {
               )}
             </details>
           )}
-          {isClass
+          {!props.flat && (isClass
             ? <ChildGroups {...props} />
-            : kids.length > 0 && <ChildGroups {...props} />}
-          {!isClass && def?.childKinds && (entry.kind !== "mechanic_item" || props.depth < 2) && (
+            : kids.length > 0 && <ChildGroups {...props} />)}
+          {!props.dnd && !props.flat && !isClass && def?.childKinds && (entry.kind !== "mechanic_item" || props.depth < 2) && (
             <div className="row" style={{ marginTop: 6 }}>
               {def.childKinds.map((ck) => (
                 <button key={ck.kind} className="comp-mini" onClick={() => props.onAddChild(entry.id, ck.kind)}>
@@ -3413,7 +3526,7 @@ function EntryNode(props: NodeProps) {
               ))}
             </div>
           )}
-        </div>
+        </>)
       )}
     </div>
   );

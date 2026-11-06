@@ -202,14 +202,25 @@ systemsRouter.get("/:id/sections", (req, res) => {
 systemsRouter.get("/:id/entry-counts", (req, res) => {
   const rows = db
     .prepare(
-      `SELECT s.id AS section_id, COUNT(e.id) AS count
+      `SELECT s.id AS section_id, COUNT(e.id) AS count,
+       SUM(CASE WHEN e.kind = 'class' AND e.parent_id IS NULL THEN 1 ELSE 0 END) AS class_count,
+       SUM(CASE WHEN e.kind = 'species' AND e.parent_id IS NULL THEN 1 ELSE 0 END) AS species_count
        FROM system_sections s
        LEFT JOIN compendium_entries e ON e.section_id = s.id
        WHERE s.system_id = ?
        GROUP BY s.id`
     )
-    .all(req.params.id) as { section_id: number; count: number }[];
-  res.json(rows.map((r) => ({ section_id: Number(r.section_id), count: Number(r.count) })));
+    .all(req.params.id) as { section_id: number; count: number; class_count: number; species_count: number }[];
+  res.json(rows.map((r) => ({ section_id: Number(r.section_id), count: Number(r.count), class_count: Number(r.class_count), species_count: Number(r.species_count) })));
+});
+
+// Обзор системы: только избранное вошедшего пользователя, без записи данных.
+systemsRouter.get("/:id/entries/favourites", (req: AuthedRequest, res) => {
+  const rows = db.prepare(`SELECT e.* FROM compendium_entries e
+    JOIN compendium_favourites f ON f.entry_id = e.id
+    WHERE e.system_id = ? AND f.user_id = ? ORDER BY e.name COLLATE NOCASE, e.id`)
+    .all(req.params.id, req.user?.id ?? null) as EntryRow[];
+  res.json(rows.map((row) => ({ ...parseEntry(row), favourite: true })));
 });
 
 systemsRouter.post("/:id/sections", (req, res) => {

@@ -1,0 +1,85 @@
+/* Sys-DnD v84, только ДнД. Особые тела других систем не входят в область. */
+.dnd-section__head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-4); }
+.dnd-section__head h2 { margin: 0; font: 500 var(--fs-h2) var(--font-ui); }
+.dnd-section__head > .d-bar { margin-left: auto; }
+.dnd-section__head .d-end { margin-left: 0; }
+.dnd-section__head .d-bar { gap: var(--sp-3); }
+.monster-section--dnd .monster-bar--total { margin: 0; }
+.monster-section--dnd .monster-bar--total > .d-mono { display: none; }
+.dnd-categories { display: flex; flex-wrap: wrap; gap: var(--sp-3); scrollbar-width: none; }
+.dnd-categories button { padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); background: transparent; font-size: var(--fs-meta); }
+.dnd-categories button.active { background: var(--ink); color: var(--sheet); }
+.dnd-article { border-left: 6px solid var(--compendium); background: var(--sheet); padding: var(--sp-6); min-width: 0; color: var(--ink); font-size: var(--fs-body); line-height: 1.55; }
+.dnd-article__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-4); margin-bottom: var(--sp-3); }
+.dnd-article__head > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-3); min-width: 0; }
+/* кегль мимо шкалы намеренно — статья Sys-DnD v84: Oswald 24px. */
+.dnd-article__head h3 { margin: 0; font: 500 24px var(--font-ui); overflow-wrap: anywhere; }
+.dnd-article__original { font: var(--fs-meta) var(--font-mono); color: var(--muted); }
+.dnd-article__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.dnd-article__passport { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-5); font: var(--fs-micro) var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.dnd-article__passport > span:first-child { background: color-mix(in srgb, var(--compendium) 45%, transparent); color: var(--ink); padding: 0 var(--sp-2); }
+.dnd-article__body { overflow-wrap: anywhere; min-width: 0; }
+.dnd-article__body > .comp-fields { margin-block: var(--sp-4); }
+.dnd-article .comp-fields { font-size: var(--fs-body); }
+.dnd-article__source { margin-top: var(--sp-5); font: var(--fs-micro) var(--font-mono); text-transform: uppercase; color: var(--muted); letter-spacing: .08em; }
+.dnd-facts { display: flex; flex-wrap: wrap; margin: 0 0 var(--sp-5); }
+.dnd-facts > div { border: 1px solid var(--line); padding: var(--sp-3) var(--sp-4); min-width: 0; }
+.dnd-facts dt, .dnd-requirement dt, .dnd-fields dt { font: var(--fs-micro) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.dnd-facts dd { margin: var(--sp-2) 0 0; font: 500 var(--fs-lead) var(--font-ui); }
+.dnd-requirement { display: flex; align-items: baseline; gap: var(--sp-4); border: 1px solid var(--edge); padding: var(--sp-3); margin: 0 0 var(--sp-5); }
+.dnd-requirement dd { margin: 0; min-width: 0; }
+.dnd-fields { margin-block: var(--sp-4); }
+.dnd-fields > div { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(0,4fr); gap: var(--sp-4); padding-block: var(--sp-3); border-top: 1px solid var(--line); }
+.dnd-fields dd { margin: 0; }
+.dnd-article .mention-link { background: color-mix(in srgb, var(--compendium) 42%, transparent); color: var(--ink); }
+.dnd-register table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--fs-data); }
+.dnd-register__group > summary { display: flex; align-items: baseline; gap: var(--sp-4); padding: var(--sp-4) var(--sp-2); cursor: pointer; font: var(--fs-lead) var(--font-ui); text-transform: uppercase; border-bottom: 1px solid var(--line); list-style: none; }
+.dnd-register__group[open] > summary > span { padding: var(--sp-2) var(--sp-4); color: var(--sheet); background: var(--ink); }
+.dnd-register__group summary b { font: var(--fs-micro) var(--font-mono); color: var(--muted); }
+.dnd-register__group summary small { margin-left: auto; }
+.dnd-register thead { border-bottom: var(--edge-width) solid var(--ink); }
+.dnd-register thead th { font: var(--fs-micro) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.dnd-register th, .dnd-register td { text-align: left; padding: var(--sp-3) var(--sp-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid var(--line); font-weight: 400; }
+.dnd-register th:first-child { width: 26%; }
+.dnd-register th:last-child { width: 24px; }
+.dnd-register tbody th > button { border: 0; padding: 0; background: none; color: var(--ink); text-align: left; font: inherit; }
+.dnd-register tbody th small { margin-left: var(--sp-3); font: var(--fs-micro) var(--font-mono); color: var(--muted); }
+.dnd-register tbody tr.is-open { background: var(--tab); font-weight: 700; }
+.dnd-register__article > td { padding: var(--sp-2) var(--sp-3) var(--sp-4); background: var(--tab); white-space: normal; overflow: visible; }
+.dnd-register .comp-node { border: 0; margin: 0; }
+.dnd-register .comp-body { margin: 0; }
+.dnd-register--feat th:first-child { width: 31%; }
+.dnd-group-index { border: 1px solid var(--line); padding: var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.dnd-group-index button { border: 0; padding: var(--sp-1) 0; background: transparent; font: inherit; color: var(--ink); }
+.dnd-group-index small { font: var(--fs-micro) var(--font-mono); color: var(--muted); }
+.comp-dnd .comp-node--group > .comp-row { border-bottom: var(--edge-width) solid var(--ink); font: var(--fs-lead) var(--font-ui); text-transform: uppercase; }
+.comp-dnd .comp-node--group > .comp-body { margin-left: 0; padding-left: 0; border-left: 0; }
+.comp-dnd .comp-row__excerpt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-meta); color: var(--muted); }
+@media (max-width: 700px) {
+  .dnd-section__head { align-items: start; }
+  .dnd-section__head > .d-bar { width: auto; flex-wrap: wrap; }
+  .dnd-section__head .d-seg, .dnd-section__head > .d-bar > button:not([aria-label="Действия раздела"]) { display: none; }
+  .monster-section--dnd .monster-bar--total { display: none; }
+  .dnd-section__head .d-end { flex-wrap: wrap; }
+  .dnd-categories { flex-wrap: nowrap; overflow-x: auto; }
+  .dnd-categories button { flex: none; }
+  .dnd-article { padding: var(--sp-4); }
+  .dnd-article__bag, .dnd-article__collapse { display: none; }
+  .dnd-requirement { flex-wrap: wrap; gap: var(--sp-2); }
+  .dnd-fields > div { grid-template-columns: minmax(0,1fr); gap: var(--sp-2); }
+  .dnd-register thead { display: none; }
+  .dnd-register table, .dnd-register tbody { display: block; }
+  .dnd-register tbody tr { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,auto) 16px; border-bottom: 1px solid var(--line); }
+  .dnd-register th, .dnd-register td { border-bottom: 0; }
+  .dnd-register th:first-child { width: auto; }
+  .dnd-register tbody tr:not(.dnd-register__article) > td:nth-child(2) { max-width: 120px; }
+  .dnd-register tbody th { white-space: normal; }
+  .dnd-register tbody th small { display: block; margin: var(--sp-1) 0 0; }
+  .dnd-register tbody tr:not(.dnd-register__article) > td:not(:nth-child(2)):not(:last-child) { display: none; }
+  .dnd-register tbody tr.dnd-register__article, .dnd-register__article > td { display: block; }
+  .dnd-register__article > td { padding-inline: 0; width: 100%; }
+  .dnd-register--feat th:first-child { width: auto; }
+  .dnd-group-index { flex-wrap: nowrap; overflow-x: auto; }
+  .dnd-group-index button { white-space: nowrap; flex: none; }
+  .comp-dnd .comp-row__excerpt { display: none; }
+}

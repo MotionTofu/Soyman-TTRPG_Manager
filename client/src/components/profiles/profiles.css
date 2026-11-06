@@ -193,3 +193,4 @@ details[open] > summary .profile-fold-state { display: none; }
 .entity-page--profile .profile-block .chevron-summary { display: flex; align-items: center; gap: var(--sp-2); font-family: var(--font-ui); font-size: var(--fs-body); }
 .entity-page--profile .profile-block .chevron-summary .entry-title { font-family: var(--font-ui); font-size: var(--fs-body); }
 .entity-page--profile .profile-block .chevron-summary .danger { margin-left: auto; background: transparent; border: 1px solid var(--line); color: var(--muted); padding: var(--sp-1) var(--sp-2); }
+:root { --compendium: #44AA99; }

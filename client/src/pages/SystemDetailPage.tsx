@@ -13,13 +13,20 @@ import { MechanicsSection } from "../components/MechanicsSection";
 import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "../components/ExportProgress";
 import { useImageCrop } from "../hooks/useImageCrop";
-import type { Campaign, System, SystemGroup, SystemSection } from "../types";
+import type { Campaign, CompendiumEntry, System, SystemGroup, SystemSection } from "../types";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityPage } from "../components/EntityPage";
+import { ContextMenu } from "../components/ContextMenu";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { readOnce } from "../data/imperative";
+
+// У классов и видов в разделе лежат и их умения/черты: в оглавлении считаем
+// сами классы и виды, общий итог «с вложенными» остаётся полным.
+function topLevelCount(kind: string | undefined, r: { count: number; class_count?: number; species_count?: number }): number {
+  return kind === "class" ? r.class_count ?? r.count : kind === "species" ? r.species_count ?? r.count : r.count;
+}
 
 function entriesLabel(n: number): string {
   const tail = n % 100;
@@ -48,6 +55,9 @@ export function SystemDetailPage() {
   const [alertDialog, showAlert] = useAlert();
   const [exportImages, setExportImages] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const favourites = useResource<CompendiumEntry[]>(`/systems/${systemId}/entries/favourites`).data;
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get("section") ?? "overview";
@@ -55,12 +65,12 @@ export function SystemDetailPage() {
   // Сколько записей в каждом разделе — строка «Классы: 13» в хиро-карточке
   // «Обзора» и счётчики на ярлыках. Считает сервер одним запросом, без
   // вытягивания самих записей.
-  const countRows = useResource<{ section_id: number; count: number }[]>(
+  const countRows = useResource<{ section_id: number; count: number; class_count?: number; species_count?: number }[]>(
     sections.length > 0 ? systemPaths.entryCounts(systemId) : null
   ).data;
   const sectionCounts = useMemo<Record<number, number>>(
-    () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, r.count])),
-    [countRows]
+    () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, topLevelCount(sections.find((s) => s.id === r.section_id)?.kind, r)])),
+    [countRows, sections]
   );
   const fieldsAffects = systemFieldsAffects(systemId);
 
@@ -99,6 +109,7 @@ export function SystemDetailPage() {
 
   function selectTab(t: string) {
     setSearchParams(t === "overview" ? {} : { section: t });
+    setTocOpen(false);
   }
 
   async function saveName(name: string, code: string) {
@@ -183,16 +194,30 @@ export function SystemDetailPage() {
   }
 
   const currentSection = sections.find((s) => String(s.id) === activeTab) ?? null;
+  const systemActions = [
+    { label: "Привести справочник в порядок", onClick: () => setTidying(true) },
+    { label: "Экспорт", onClick: () => setExporting(true) },
+    { label: "Импорт", onClick: () => importInputRef.current?.click() },
+    { label: "Архивировать", danger: true, onClick: archiveSystem },
+  ];
+  const toc = <nav className="sys-toc__items" aria-label="Разделы системы">
+    <button type="button" className={activeTab === "overview" ? "active" : ""} aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectTab("overview")}>Обзор</button>
+    <div className="sys-toc__label d-mono">Разделы · {sections.length}</div>
+    {sections.map((sec) => <button key={sec.id} type="button" className={activeTab === String(sec.id) ? "active" : ""} aria-current={activeTab === String(sec.id) ? "page" : undefined} onClick={() => selectTab(String(sec.id))}><span>{sec.name}</span>{" "}<b>{sectionCounts[sec.id] ?? "…"}</b></button>)}
+  </nav>;
 
   return (
     <EntityPage
-      crumbs={[{ label: "Системы", to: "/systems" }, { label: system.name }]}
+      crumbs={[{ label: "Системы", to: "/systems" }, { label: system.name, to: currentSection ? `/systems/${systemId}` : undefined }, ...(currentSection ? [{ label: currentSection.name }] : [])]}
       entityType="system"
       title={system.name}
       // «Обзор» стоит в полосе первой вкладкой. Прежде его в полосе не было
       // вовсе: попасть на обзор можно было только щелчком по названию
       // системы — приём, о котором неоткуда узнать.
-      tabs={[{ id: "overview", label: "Обзор" }, ...sections.map((sec) => ({ id: String(sec.id), label: sec.name, count: sectionCounts[sec.id] }))]}
+      systemNavigation={<>
+        <aside className="sys-toc"><div className="sys-toc__head"><div className="sys-toc__name">{system.name}</div><div className="row">{system.code && <span className="sys-stamp">{system.code}</span>}<button type="button" className="sys-toc__more" aria-label="Ещё действия" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }); }}>⋯</button></div></div>{toc}</aside>
+        <div className="sys-toc-mobile"><button type="button" className="d-btn" aria-haspopup="dialog" onClick={() => setTocOpen(true)}><span>{currentSection?.name ?? "Обзор"}{currentSection ? ` ${sectionCounts[currentSection.id] ?? "…"}` : ""}</span><span>Разделы ▾</span></button></div>
+      </>}
       sheet
       tab={activeTab}
       onTab={(t) => selectTab(t)}
@@ -209,6 +234,8 @@ export function SystemDetailPage() {
         <>
           {confirmDialog}
           {alertDialog}
+          {menuAt && <ContextMenu {...menuAt} items={systemActions} onClose={() => setMenuAt(null)} />}
+          {tocOpen && <Modal ariaLabel="Разделы системы" className="sys-toc-sheet" onClose={() => setTocOpen(false)}><h2>{system.name}</h2>{toc}<button type="button" className="d-btn" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.top }); }}>Действия системы ⋯</button></Modal>}
           <SectionBackground />
           {/* Импорт — файловое поле; пункт меню щёлкает по нему. */}
           <input
@@ -236,12 +263,6 @@ export function SystemDetailPage() {
               <div className="d-mono">Система{system.code ? ` · ${system.code}` : ""}</div>
               {/* каркас в обход намеренно — на «Обзоре» название стоит на листе (макет Roll-OS-Overview), над ярлыками его нет */}
               <h1 className="sys-hero2__title">{system.name}</h1>
-              <dl className="sys-hero2__facts">
-                <dt>Кампании</dt>
-                <dd>{campaigns.length || "пока нет"}</dd>
-                <dt>Разделы</dt>
-                <dd>{sections.length || "пока нет"}</dd>
-              </dl>
               <div className="sys-hero2__desc">
                 <EditableTextCard
                   key={`desc-${system.id}`}
@@ -265,6 +286,7 @@ export function SystemDetailPage() {
                   onSaveFields={(v) => saveName(v.name, v.code)}
                 />
               </div>
+              <dl className="sys-hero2__facts"><dt>Код</dt><dd>{system.code ? <>{system.code} — ссылки вида [[{system.code}:…]]</> : "не задан"}</dd><dt>Кампании</dt><dd>{campaigns.length || "пока нет"}</dd></dl>
             </div>
             <div className="sys-hero2__thumb">
               <div className="entity-image-slots">
@@ -280,10 +302,13 @@ export function SystemDetailPage() {
               {thumbnailCrop.modal}
             </div>
           </section>
+          <section><div className="d-plate-row"><h2 className="d-plate">Частые обращения</h2></div>
+            {favourites?.length ? <div className="sys-favourites">{favourites.map((entry) => <Link key={entry.id} to={["class", "subclass", "species"].includes(entry.kind) ? `/systems/${systemId}/entries/${entry.id}` : ["monster", "vehicle", "vehicle_post"].includes(entry.kind) ? `/compendium/${entry.id}` : `/systems/${systemId}?section=${entry.section_id}&entry=${entry.id}`}><span>{entry.name}</span></Link>)}</div> : <p className="muted">{favourites ? "Отметьте ★ записи, к которым обращаетесь чаще всего, — они встанут сюда" : "Загружаю избранное…"}</p>}
+          </section>
           <section>
             <div className="d-plate-row">
               <h2 className="d-plate">Состав справочника</h2>
-              <span className="d-note">{entriesLabel(Object.values(sectionCounts).reduce((sum, n) => sum + n, 0))}</span>
+              <span className="d-note">{entriesLabel((countRows ?? []).reduce((sum, r) => sum + r.count, 0))} с вложенными</span>
             </div>
             {sections.length === 0 ? (
               <span className="muted">Разделов пока нет.</span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { readResource } from "../data/imperative";
 import { fetchEntityDetail } from "../api/resolveEntity";
@@ -22,6 +22,8 @@ interface Props {
   type: string;
   id: number;
   onClose: () => void;
+  /** Статья умения на вкладке развития; остальным упоминаниям прежний вид. */
+  children?: ReactNode;
 }
 
 export function parseDndStatblock(statblock: Statblock): DndCharacterData | DndCreatureData {
@@ -343,7 +345,7 @@ function OtherEntityPreview({
 // открывает карточку вместо навигации (openMentionPreview → MentionPreviewRoot).
 // SectionDropZone и другие места также её используют; внизу остаётся
 // "Открыть полностью →" для перехода на детальную страницу.
-export function EntityPreviewModal({ type, id, onClose }: Props) {
+export function EntityPreviewModal({ type, id, onClose, children }: Props) {
   // Жетон спутника открывает эту же модалку и у игрока: без секретов
   // и без кнопки в мастерский профиль.
   const { user } = useCurrentUser();
@@ -351,7 +353,7 @@ export function EntityPreviewModal({ type, id, onClose }: Props) {
   return (
     <Modal onClose={onClose} ariaLabel={playerSafe ? undefined : "Упоминание"} className={!playerSafe && (type === "being" || type === "compendium_entry") ? "profile-mention-modal" : undefined}>
       {!playerSafe && <h2>Упоминание</h2>}
-      <EntityPreviewContent
+      {children && !playerSafe ? children : <EntityPreviewContent
         type={type}
         id={id}
         onClose={onClose}
@@ -359,7 +361,7 @@ export function EntityPreviewModal({ type, id, onClose }: Props) {
         playerSafe={playerSafe}
         // Без пользователя (OneShot) мастерского профиля нет вовсе — ссылка вела в никуда.
         hideProfileButton={playerSafe || !user}
-      />
+      />}
     </Modal>
   );
 }

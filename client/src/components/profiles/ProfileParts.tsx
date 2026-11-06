@@ -15,38 +15,40 @@ const LABELS: Record<string, string> = { being: "Существо", location: "�
 
 /** У события нет собственного цвета: те же переменные, что у точки Хроники. */
 export function profileColor(type: string, tone: TimeTone = "past") {
-  return type === "adventure" ? "var(--type-adventure)" : type.endsWith("_event") ? `var(--t-${tone})` : TYPE_COLORS[type] ?? "var(--ink)";
+  return type === "compendium_entry" ? "var(--compendium)" : type === "adventure" ? "var(--type-adventure)" : type.endsWith("_event") ? `var(--t-${tone})` : TYPE_COLORS[type] ?? "var(--ink)";
 }
 
 export function profileStyle(type: string, tone?: TimeTone): CSSProperties {
   return { "--profile-type": profileColor(type, tone) } as CSSProperties;
 }
 
-export function ProfileTypeLabel({ type }: { type: string }) {
-  return <span className="profile-type-label">{LABELS[type] ?? type}</span>;
+export function ProfileTypeLabel({ type, label }: { type: string; label?: string }) {
+  return <span className="profile-type-label">{label ?? LABELS[type] ?? type}</span>;
 }
 
 export function ProfileTypeGlyph({ type }: { type:string }) {
   return <TypeGlyph type={type === "campaign_event" ? "setting_event" : type} />;
 }
 
-export function ProfileHero({ type, name, subtype, createdAt, labels, image, onGallery, coverLabel, children }: {
+export function ProfileHero({ type, typeLabel, name, subtype, createdAt, labels, image, onGallery, coverLabel, cover, children }: {
   type: string; name: string; subtype?: ReactNode; createdAt?: string; labels?: ReactNode;
   image?: string | null; onGallery?: () => void; coverLabel?: string; children?: ReactNode;
+  /** Карта ДнД и существующее превью чертежа в том же герое профиля. */
+  typeLabel?: string; cover?: ReactNode;
 }) {
   const date = createdAt?.slice(0, 10).split("-").reverse().join(".");
   return <section className={`profile-hero profile-hero--${type}`}>
     <div className="profile-hero__main">
-      <div className="profile-passport"><ProfileTypeGlyph type={type} /><ProfileTypeLabel type={type} />{subtype && <span>{subtype}</span>}{date && <span>С {date}</span>}</div>
+      <div className="profile-passport"><ProfileTypeGlyph type={type} /><ProfileTypeLabel type={type} label={typeLabel} />{subtype && <span>{subtype}</span>}{date && <span>С {date}</span>}</div>
       <h1 className="profile-title">{name}</h1>
       {labels && <div className="profile-labels">{labels}</div>}
       {children}
     </div>
-    <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label={coverLabel ?? (onGallery ? (type.endsWith("_event") ? "Сменить картинку события" : "Открыть галерею") : "Картинка не задана")} disabled={!onGallery}>
+    {cover ?? <button type="button" className={`profile-cover${image ? "" : " profile-cover--ph"}`} onClick={onGallery} aria-label={coverLabel ?? (onGallery ? (type.endsWith("_event") ? "Сменить картинку события" : "Открыть галерею") : "Картинка не задана")} disabled={!onGallery}>
       {image ? <img src={image} alt={name} /> : <ProfileTypeGlyph type={type} />}
       {onGallery && !coverLabel && !type.endsWith("_event") && <span className="profile-cover__from">Из галереи</span>}
       <span className="profile-cover__caption">{coverLabel ?? (type.endsWith("_event") ? "Картинка события · щелчок — сменить" : <>{type === "being" ? "Портрет" : "Картинка"}{onGallery ? " · открыть галерею" : " · не задана"}</>)}</span>
-    </button>
+    </button>}
   </section>;
 }
 
