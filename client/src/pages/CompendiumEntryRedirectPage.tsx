@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { LoadErrorCard } from "../components/Loadable";
 import { useEntity, useResource } from "../data/hooks";
 import { MonsterDetailPage } from "./MonsterDetailPage";
+import { LitmChallengePage } from "./LitmChallengePage";
 import { VehicleDetailPage } from "./VehicleDetailPage";
 import type { CompendiumEntry, System } from "../types";
 
@@ -24,7 +25,8 @@ export function CompendiumEntryRedirectPage() {
   const entryState = useEntity<CompendiumEntry>("compendium_entry", id ? Number(id) : null);
   const loaded = entryState.data;
   const ownPage = !!loaded && OWN_PAGE_KINDS.has(loaded.kind);
-  const system = useResource<System>(loaded && ownPage ? `/systems/${loaded.system_id}` : null).data ?? null;
+  const systemState = useResource<System>(loaded && ownPage ? `/systems/${loaded.system_id}` : null);
+  const system = systemState.data ?? null;
 
   useEffect(() => {
     if (!loaded || ownPage) return;
@@ -40,6 +42,11 @@ export function CompendiumEntryRedirectPage() {
   }
   if (!loaded || !ownPage) return <p className="muted">Загрузка…</p>;
   const entry = loaded;
-  if (entry.kind === "monster") return <MonsterDetailPage entry={entry} system={system} />;
+  if (entry.kind === "monster") {
+    // Вызов Legend in the Mist — своя страница, не существо D&D (2026-11-06, Q2);
+    // систему ждём, чтобы не мелькнуть страницей бестиария.
+    if (!system && systemState.loading) return <p className="muted">Загрузка…</p>;
+    return system?.code === "litm" ? <LitmChallengePage entry={entry} system={system} /> : <MonsterDetailPage entry={entry} system={system} />;
+  }
   return <VehicleDetailPage entry={entry} system={system} />;
 }

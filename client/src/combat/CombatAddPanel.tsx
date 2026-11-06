@@ -81,7 +81,10 @@ export function AddToCombatPanel({
   const characters = useResource<Character[]>(campaignId ? sessionPaths.campaignCharacters(campaignId) : null).data;
   const beings = useResource<SettingBeing[]>(settingId ? `/setting-beings?setting_id=${settingId}` : null).data;
   const sections = useResource<{ id: number; kind: string }[]>(systemId ? compendiumPaths.sections(systemId) : null).data;
-  const bestiarySection = sections?.find((s) => s.kind === "monster")?.id ?? null;
+  // Вызовы Legend in the Mist — не существа D&D: инициативы, хитов и КЗ у них нет,
+  // в боевой режим они не подбираются (решение 2026-11-06, Q4; бой LitM — отдельная задача).
+  const systemCode = useResource<{ code: string | null }>(systemId ? `/systems/${systemId}` : null).data?.code ?? null;
+  const bestiarySection = systemCode === "litm" ? null : sections?.find((s) => s.kind === "monster")?.id ?? null;
   const bestiary =
     useResource<CompendiumEntry[]>(
       systemId && bestiarySection ? compendiumPaths.sectionEntries(systemId, bestiarySection) : null

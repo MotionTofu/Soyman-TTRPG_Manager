@@ -17,6 +17,7 @@ import type { Campaign, CompendiumEntry, System, SystemGroup, SystemSection } fr
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityPage } from "../components/EntityPage";
 import { ContextMenu } from "../components/ContextMenu";
+import { LitmSectionSwitch } from "../components/litm/LitmSectionSwitch";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
@@ -382,7 +383,8 @@ export function SystemDetailPage() {
 
       {activeTab !== "overview" &&
         (currentSection ? (
-          currentSection.kind === "monster" ? (
+          <LitmSectionSwitch systemCode={system.code} systemId={systemId} section={currentSection} focusEntryId={focusEntryId}>
+          {currentSection.kind === "monster" ? (
             <MonsterSection
               key={currentSection.id}
               systemId={systemId}
@@ -408,7 +410,8 @@ export function SystemDetailPage() {
               section={currentSection}
               focusEntryId={focusEntryId}
             />
-          )
+          )}
+          </LitmSectionSwitch>
         ) : (
           <p className="muted">Раздел не найден.</p>
         ))}

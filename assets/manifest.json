@@ -3584,6 +3584,177 @@
       "baselineSha256": "3e824d5099202de2c98cbd8e5ecba54da7d220c1ad851330726e65f3e60842d1"
     },
     {
+      "id": "fonts/alegreya/cyrillic-ext-italic.woff2",
+      "title": "cyrillic-ext-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/cyrillic-ext-italic.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/cyrillic-ext-italic.woff2"
+      ],
+      "baselineSha256": "421e9157530c934690d8e40883a5af876a399efa0dc3d252be83359d0af9f5d0"
+    },
+    {
+      "id": "fonts/alegreya/cyrillic-ext-normal.woff2",
+      "title": "cyrillic-ext-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/cyrillic-ext-normal.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/cyrillic-ext-normal.woff2"
+      ],
+      "baselineSha256": "9468d87825a21f26f30f58f542659c2b282963a6022f1e3fd6c0f4c36200f9cc"
+    },
+    {
+      "id": "fonts/alegreya/cyrillic-italic.woff2",
+      "title": "cyrillic-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/cyrillic-italic.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/cyrillic-italic.woff2"
+      ],
+      "baselineSha256": "25610370bbc6a43bbff772f02668ac8f271637091c50e5f90b6a0c790ff6888d"
+    },
+    {
+      "id": "fonts/alegreya/cyrillic-normal.woff2",
+      "title": "cyrillic-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/cyrillic-normal.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/cyrillic-normal.woff2"
+      ],
+      "baselineSha256": "40774c5b9e27d70acfdcd4f332012537415b1a04ff6496f1541806a0c0d3eaf0"
+    },
+    {
+      "id": "fonts/alegreya/latin-ext-italic.woff2",
+      "title": "latin-ext-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/latin-ext-italic.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/latin-ext-italic.woff2"
+      ],
+      "baselineSha256": "3b6ec2f8e48aff730aaebeb52423ba2f7967c5b80b1727907e4b1154786fd54c"
+    },
+    {
+      "id": "fonts/alegreya/latin-ext-normal.woff2",
+      "title": "latin-ext-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/latin-ext-normal.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/latin-ext-normal.woff2"
+      ],
+      "baselineSha256": "16b24f84da5ac12dc79ea1060e3fd4e299f19146f607021f81bcf0b8123fe5bd"
+    },
+    {
+      "id": "fonts/alegreya/latin-italic.woff2",
+      "title": "latin-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/latin-italic.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/latin-italic.woff2"
+      ],
+      "baselineSha256": "1846c307495f922d3fc00ce3c32aaaba8eefc7c348425a8244a7ffc63ddc0993"
+    },
+    {
+      "id": "fonts/alegreya/latin-normal.woff2",
+      "title": "latin-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/latin-normal.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya/latin-normal.woff2"
+      ],
+      "baselineSha256": "2431eca3ed8ed66e713cf7093d170d77a083a793a5f19a615506d63770abd973"
+    },
+    {
+      "id": "fonts/alegreya/OFL.txt",
+      "title": "OFL (Alegreya, Alegreya SC)",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya/OFL.txt",
+      "outputs": [
+        "client/public/fonts/alegreya/OFL.txt",
+        "client/public/fonts/alegreya-sc/OFL.txt"
+      ],
+      "baselineSha256": "f6f60d5d4cf4f4b1fc4e41353c897a2f5a16e6396c0cd8fa8bdfd2f4586a9a68"
+    },
+    {
+      "id": "fonts/alegreya-sc/cyrillic-500.woff2",
+      "title": "cyrillic-500",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/cyrillic-500.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/cyrillic-500.woff2"
+      ],
+      "baselineSha256": "b3eb342c63b399310fcb2008079e2213984f857d659af768057d02fc21cb74ad"
+    },
+    {
+      "id": "fonts/alegreya-sc/cyrillic-700.woff2",
+      "title": "cyrillic-700",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/cyrillic-700.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/cyrillic-700.woff2"
+      ],
+      "baselineSha256": "95dc6c1b95dfb560dedede7a3232bf5f67259b7c71d4829b1261d49c9d4742af"
+    },
+    {
+      "id": "fonts/alegreya-sc/cyrillic-ext-500.woff2",
+      "title": "cyrillic-ext-500",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/cyrillic-ext-500.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/cyrillic-ext-500.woff2"
+      ],
+      "baselineSha256": "ea5c1e6276dd4b295b402f9cfa0b6b2f4d1a5fba0e82638ade38a61105aacb30"
+    },
+    {
+      "id": "fonts/alegreya-sc/cyrillic-ext-700.woff2",
+      "title": "cyrillic-ext-700",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/cyrillic-ext-700.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/cyrillic-ext-700.woff2"
+      ],
+      "baselineSha256": "9b110385aeb9277fcd39a3e095012b4ec357c82cb880ca16b01ff64f27321ae7"
+    },
+    {
+      "id": "fonts/alegreya-sc/latin-500.woff2",
+      "title": "latin-500",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/latin-500.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/latin-500.woff2"
+      ],
+      "baselineSha256": "98b4a138b6117d621a122a7c8590aa945720e4953d926b921a61e0d3f96a02c9"
+    },
+    {
+      "id": "fonts/alegreya-sc/latin-700.woff2",
+      "title": "latin-700",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/latin-700.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/latin-700.woff2"
+      ],
+      "baselineSha256": "988821cdcc03a1c0f7587143e4d921582595c5bcd803061863f7c3be7dd0d4b8"
+    },
+    {
+      "id": "fonts/alegreya-sc/latin-ext-500.woff2",
+      "title": "latin-ext-500",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/latin-ext-500.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/latin-ext-500.woff2"
+      ],
+      "baselineSha256": "fae2927855146328875e379a3f0dcd5ab26629413347838b32190ea441b1a4b7"
+    },
+    {
+      "id": "fonts/alegreya-sc/latin-ext-700.woff2",
+      "title": "latin-ext-700",
+      "category": "fonts",
+      "source": "assets/library/fonts/alegreya-sc/latin-ext-700.woff2",
+      "outputs": [
+        "client/public/fonts/alegreya-sc/latin-ext-700.woff2"
+      ],
+      "baselineSha256": "42e3b3a35260c3626cb1e5fb71a134da3e856a8820d4ab757261fc383aa762f5"
+    },
+    {
       "id": "fonts/Steamy.otf",
       "title": "Steamy",
       "category": "fonts",
