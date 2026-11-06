@@ -2,15 +2,29 @@ import { write } from "../../../data/hooks";
 import { afterWriteAnywhere, readResource } from "../../../data/imperative";
 import { showSaveError } from "../../../data/notices";
 import { statblockAffects, statblockListPath } from "../../../data/statblocks";
-import type { LitMCharacterData, Statblock } from "../../../types";
+import type { LitMCharacterData, LitMThemeCard, Statblock } from "../../../types";
 import { normalizeCharacter } from "../LitMCharacterForm";
 
 /**
  * Правка листа героя LitM с пульта (Q5, Q10): статусы, вычеркнутые теги.
  * Поля считаются от свежего листа и пишутся патчем — игрок может держать
  * свой лист открытым и править его сам (как sheetWrite.ts боя D&D).
+ * Правки одного листа идут по очереди: две подряд («Смягчить» и следующее
+ * последствие) иначе читают лист до записи друг друга, и вторая затирает первую.
  */
-export async function patchLitmSheet(
+export function patchLitmSheet(
+  characterId: number,
+  label: string,
+  fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null
+): Promise<void> {
+  const run = (queue.get(characterId) ?? Promise.resolve()).then(() => patchNow(characterId, label, fields));
+  queue.set(characterId, run);
+  return run;
+}
+
+const queue = new Map<number, Promise<void>>();
+
+async function patchNow(
   characterId: number,
   label: string,
   fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null
@@ -40,4 +54,15 @@ export function restoreScratched(d: LitMCharacterData): Partial<LitMCharacterDat
   const any = [...d.themes, ...d.storyThemes, d.fellowshipTheme].some((t) => t.scratchedTags?.length);
   if (!any) return null;
   return { themes: d.themes.map(clear), storyThemes: d.storyThemes.map(clear), fellowshipTheme: clear(d.fellowshipTheme) };
+}
+
+/** Вычеркнуть или вернуть тег силы темы героя (Q10, «вычеркнуть тег» Q12). */
+export function toggleScratch(kind: "themes" | "storyThemes", index: number, tag: string) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> => {
+    const flip = (t: LitMThemeCard): LitMThemeCard => {
+      const s = t.scratchedTags ?? [];
+      return { ...t, scratchedTags: s.includes(tag) ? s.filter((x) => x !== tag) : [...s, tag] };
+    };
+    return { [kind]: d[kind].map((t, k) => (k === index ? flip(t) : t)) };
+  };
 }

@@ -31,6 +31,8 @@ export interface LitmChallengeState {
   statuses: LitmStatus[];
   /** Номер объявленной угрозы профиля (Q12), null — нет. */
   declaredThreat: number | null;
+  /** Зачин объявленной угрозы — для плашки «⚠» над лентой. */
+  declaredLead: string;
   /** Надстройки на гнезде — id записей «Надстройки» (Q17). */
   addons: number[];
 }
@@ -60,7 +62,7 @@ export function challengeStateFromProfile(p: LitmProfileSource): LitmChallengeSt
     const s = parseStatusTag(t.text);
     if (s) statuses = giveStatus(statuses, s.name, s.tier);
   }
-  return { limits, statuses, declaredThreat: null, addons: [] };
+  return { limits, statuses, declaredThreat: null, declaredLead: "", addons: [] };
 }
 
 export function limitTier(l: Pick<LitmLimitState, "marks">): number {
@@ -189,6 +191,7 @@ export function parseChallengeState(raw: string | null | undefined): LitmChallen
     })),
     statuses: normalizeStatuses(o.statuses),
     declaredThreat: typeof o.declaredThreat === "number" ? o.declaredThreat : null,
+    declaredLead: typeof o.declaredThreat === "number" ? String(o.declaredLead ?? "") : "",
     addons: arr<number>(o.addons).filter((n) => typeof n === "number"),
   };
 }

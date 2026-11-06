@@ -517,3 +517,117 @@
 .lp-quick p {
   grid-column: 1 / -1;
 }
+
+/* шаг 3: угрозы, последствия, «Дать статус», «Смягчить», надстройки */
+.lp-chip.is-on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--sheet);
+}
+.lp-inc {
+  flex-wrap: wrap;
+}
+.lp-inc .lb-st {
+  color: var(--sheet);
+}
+.lp-threats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.lp-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--lb-weak);
+  background: color-mix(in srgb, var(--lb-weak) 10%, var(--lb-sheet));
+  color: var(--lb-ink);
+  font-family: var(--lb-serif);
+  font-size: var(--fs-meta);
+}
+.lp-thr__h {
+  display: flex;
+  gap: var(--sp-5);
+  align-items: baseline;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.lp-thr__mk {
+  margin-left: auto;
+  font-style: normal;
+  color: var(--lb-muted);
+  opacity: 0.4;
+}
+.lp-thr.is-on {
+  background: color-mix(in srgb, var(--lb-weak) 8%, transparent);
+}
+.lp-thr.is-on .lp-thr__mk {
+  color: var(--lb-weak);
+  opacity: 1;
+}
+.lp-acts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-left: var(--sp-3);
+}
+.lp-act {
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width, 1px) solid var(--lb-line);
+  background: var(--lb-sheet);
+  color: var(--lb-ink);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.lp-act:hover {
+  border-color: var(--lb-ink);
+}
+.lp-act--own {
+  margin: var(--sp-3) 0 0 var(--sp-6);
+}
+.lp-addon {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: var(--edge-width) solid var(--lb-line);
+}
+.lp-give__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-5);
+}
+.lp-give__name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1 1 200px;
+}
+.lp-give__name input {
+  flex: 1;
+}
+.lp-give__tiers {
+  display: inline-flex;
+  border: var(--card-border-width, 1px) solid var(--edge);
+}
+.lp-give__tiers button {
+  min-width: 32px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.lp-give__tiers button.is-on {
+  background: var(--ink);
+  color: var(--sheet);
+}

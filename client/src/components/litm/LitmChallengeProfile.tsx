@@ -1,14 +1,23 @@
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import { MentionText } from "../mentions/MentionText";
 import { Consequence, LitmRich, MightMark } from "./LitmBook";
-import { mightOf, type LitmChallengeProfileData, type LitmChallengeTag } from "./litmChallenge";
+import { mightOf, type LitmChallengeProfileData, type LitmChallengeTag, type LitmThreat } from "./litmChallenge";
 
 /** Профиль вызова (доска Litm-Challenges): угрозы → последствия и особенности
  *  слева; пределы, теги и статусы, Могущество справа. На телефоне правая колонка
  *  встаёт над угрозами. */
 /** `hideLimits` — гнездо пульта «Вызовы»: пределы там живые, своим блоком над
- *  профилем, второй раз их не показывать. */
-export function LitmChallengeProfile({ profile, hideLimits }: { profile: LitmChallengeProfileData; hideLimits?: boolean }) {
+ *  профилем, второй раз их не показывать; `renderThreats` — там же угрозы с
+ *  кнопками последствий (Q12). */
+export function LitmChallengeProfile({
+  profile,
+  hideLimits,
+  renderThreats,
+}: {
+  profile: LitmChallengeProfileData;
+  hideLimits?: boolean;
+  renderThreats?: (threats: LitmThreat[]) => ReactNode;
+}) {
   const p = profile;
   if (p.legacy) return <LegacyProfile profile={p} />;
   return (
@@ -17,7 +26,7 @@ export function LitmChallengeProfile({ profile, hideLimits }: { profile: LitmCha
       <div className="lb-prof">
         <div className="lb-prof__main">
           {p.threatList.length > 0 && <div className="lb-lbl">Угрозы и последствия<small>Threats &amp; Consequences</small></div>}
-          {p.threatList.map((t, i) => (
+          {renderThreats ? renderThreats(p.threatList) : p.threatList.map((t, i) => (
             <div key={i} className="lb-thr">
               <h4>{t.name && <b>{t.name}</b>}<span><LitmRich text={t.lead} /></span></h4>
               <ul>

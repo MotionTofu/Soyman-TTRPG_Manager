@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useResource } from "../../../data/hooks";
-import { compendiumPaths } from "../../../data/compendiumEntries";
-import type { CompendiumEntry, SessionUnionRow, SettingBeing, Statblock } from "../../../types";
+import type { SessionUnionRow, SettingBeing } from "../../../types";
 import { DSeg } from "../../DSeg";
 import { Modal } from "../../Modal";
 import { Rating } from "../LitmBook";
 import { norm } from "../litmBookText";
-import { challengeProfile, LOCATION_ORDER, OWN_LOCATION, type LitmChallengeProfileData } from "../litmChallenge";
+import { LOCATION_ORDER, OWN_LOCATION, type LitmChallengeProfileData } from "../litmChallenge";
+import { useLitmBook } from "./useLitmBook";
 import type { LitmSource } from "./useLitmRibbon";
 
 type Tab = "scene" | "book" | "setting" | "quick";
@@ -18,8 +18,6 @@ interface Choice {
   group: string;
 }
 
-const NO_ENTRIES: CompendiumEntry[] = [];
-const NO_STATBLOCKS: Statblock[] = [];
 const NO_BEINGS: SettingBeing[] = [];
 
 function limitsLine(p: LitmChallengeProfileData | null): string {
@@ -50,24 +48,17 @@ export function LitmAddPanel({
   const [busy, setBusy] = useState(false);
   const [quick, setQuick] = useState({ name: "", limit: "Ранить", max: "3" });
 
-  const sections = useResource<{ id: number; kind: string }[]>(systemId ? compendiumPaths.sections(systemId) : null).data;
-  const sectionId = sections?.find((s) => s.kind === "monster")?.id ?? null;
-  const entries = useResource<CompendiumEntry[]>(systemId && sectionId ? compendiumPaths.sectionEntries(systemId, sectionId) : null).data ?? NO_ENTRIES;
-  const ids = useMemo(() => entries.map((e) => e.id).sort((a, b) => a - b).join(","), [entries]);
-  const statblocks = useResource<Statblock[]>(ids ? `/statblocks?owner_type=compendium_entry&owner_ids=${ids}` : null).data ?? NO_STATBLOCKS;
+  const bookEntries = useLitmBook(systemId);
   const beings = useResource<SettingBeing[]>(settingId ? `/setting-beings?setting_id=${settingId}` : null).data ?? NO_BEINGS;
 
   const book = useMemo<Choice[]>(() => {
-    const byOwner = new Map<number, Statblock>();
-    for (const s of statblocks) if (s.format === "litm_challenge" && !byOwner.has(s.owner_id)) byOwner.set(s.owner_id, s);
-    return entries
-      .map((entry) => {
-        const p = challengeProfile(entry, byOwner.get(entry.id));
+    return bookEntries
+      .map(({ entry, profile: p }) => {
         return { key: `c:${entry.id}`, src: { type: "compendium_entry" as const, id: entry.id, name: entry.name }, limits: limitsLine(p), rating: p.rating, group: p.addon ? "" : p.location };
       })
       .filter((x) => x.group)
       .sort((a, b) => LOCATION_ORDER.indexOf(a.group) - LOCATION_ORDER.indexOf(b.group) || a.src.name.localeCompare(b.src.name, "ru"));
-  }, [entries, statblocks]);
+  }, [bookEntries]);
 
   const scene = useMemo<Choice[]>(
     () => inScene.map((u) => ({ key: `${u.to_type}:${u.to_id}`, src: { type: u.to_type as "compendium_entry" | "being", id: u.to_id, name: u.name }, limits: "", rating: null, group: "В текущей сцене" })),

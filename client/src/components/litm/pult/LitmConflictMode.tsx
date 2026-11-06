@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   campScene,
+  challengeStateFromProfile,
   giveToLimit,
   limitReached,
   overcomeBy,
@@ -11,20 +12,25 @@ import {
   type LitmChallengeState,
   type LitmSceneState,
 } from "@shared/litm/conflict";
-import { giveStatus, heroCondition, parseStatusTag, reduceStatus, statusTier, type LitmStatus } from "@shared/litm/status";
+import { giveStatus, heroCondition, parseStatusTag, reduceStatus, sameStatus, statusTier, type LitmStatus } from "@shared/litm/status";
 import { useResource } from "../../../data/hooks";
+import { readResource } from "../../../data/imperative";
 import { sessionPaths } from "../../../data/sessions";
 import { statblockListPath } from "../../../data/statblocks";
 import { useConfirm, usePrompt } from "../../../hooks/useConfirm";
 import { Ribbon } from "../../../combat/CombatMode";
 import { ContextMenu, type ContextMenuItem } from "../../ContextMenu";
-import type { Character, InitiativeEntry, LitMCharacterData, LitMThemeCard, SessionStage, SessionUnionRow, Statblock } from "../../../types";
+import type { Character, InitiativeEntry, LitMCharacterData, SessionStage, SessionUnionRow, Statblock } from "../../../types";
 import { normalizeCharacter } from "../LitMCharacterForm";
 import { LitmStatusCards } from "../LitmStatusCards";
 import { LitmChallengeProfile } from "../LitmChallengeProfile";
 import { LitmRich, MightMark, Rating, Status } from "../LitmBook";
-import { challengeProfile, mightOf } from "../litmChallenge";
-import { patchLitmSheet, restoreScratched } from "./litmSheetWrite";
+import { challengeProfile, mightOf, type LitmChallengeProfileData } from "../litmChallenge";
+import { patchLitmSheet, restoreScratched, toggleScratch } from "./litmSheetWrite";
+import { limitFor, type ConsequenceAction } from "./consequence";
+import { LitmThreats } from "./LitmThreats";
+import { LitmGiveStatus, type GiveInitial, type GiveRequest, type GiveTarget } from "./LitmGiveStatus";
+import { useLitmBook, type LitmBookEntry } from "./useLitmBook";
 import { LITM_RIBBON_TARGET, useLitmRibbon, type LitmRibbon, type LitmSource } from "./useLitmRibbon";
 import { useUnloadTarget } from "../../../unloadTargets";
 import { LitmAddPanel } from "./LitmAddPanel";
@@ -49,12 +55,6 @@ function nameAndNumber(text: string): { name: string; n: number } | null {
 }
 
 /**
- * Режим «Вызовы» пульта Legend in the Mist (Backlog Д33, доска Litm-Pult):
- * сверху полоса «Сцена», под ней герои со статусами и спотлайтом, ниже лента
- * вызовов с полным профилем. Инициативы, хитов и раундов нет — спотлайт
- * передаётся пробелом следующему, кто в круге не ходил (Q4).
- */
-/**
  * «На ленту» (Q16) для строк панелей пульта и «Мешка»: вызов книги или
  * существо сеттинга встаёт на ленту, даже когда режим закрыт. Ставится
  * страницей пульта в кампании LitM вместо трекера инициативы.
@@ -69,6 +69,38 @@ export function LitmRibbonTarget({ sessionId }: { sessionId: number }) {
   return null;
 }
 
+/** Статус, только что полученный героем: «Смягчить» уменьшает входящий
+ *  уровень до сложения (Q14); плашка гаснет с передачей спотлайта. */
+interface Incoming {
+  id: number;
+  heroId: number;
+  heroName: string;
+  name: string;
+  into?: string;
+  tier: number;
+  /** Отметки статуса до получения; null — статуса не было. */
+  prev: number[] | null;
+}
+
+/** Что гнездо берёт у режима: запись, меню, окно статуса, последствия, надстройки. */
+interface NestCtx {
+  ribbon: LitmRibbon;
+  onMenu: OpenMenu;
+  confirm: Confirm;
+  openGive: (initial: GiveInitial) => void;
+  runAction: (row: InitiativeEntry, action: ConsequenceAction, e: { clientX: number; clientY: number }, threat: number, edit: boolean) => void;
+  addonMenu: (row: InitiativeEntry) => ContextMenuItem[];
+  book: Map<number, LitmBookEntry>;
+}
+
+let incomingSeq = 0;
+
+/**
+ * Режим «Вызовы» пульта Legend in the Mist (Backlog Д33, доска Litm-Pult):
+ * сверху полоса «Сцена», под ней герои со статусами и спотлайтом, ниже лента
+ * вызовов с полным профилем. Инициативы, хитов и раундов нет — спотлайт
+ * передаётся пробелом следующему, кто в круге не ходил (Q4).
+ */
 export function LitmConflictMode({
   sessionId,
   systemId,
@@ -90,6 +122,11 @@ export function LitmConflictMode({
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, prompt] = usePrompt();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[]; title?: string } | null>(null);
+  const [give, setGive] = useState<GiveInitial | null>(null);
+  const [incoming, setIncoming] = useState<Incoming[]>([]);
+  const bookList = useLitmBook(systemId);
+  const book = useMemo(() => new Map(bookList.map((b) => [b.entry.id, b])), [bookList]);
+  const addonBook = useMemo(() => bookList.filter((b) => b.profile.addon), [bookList]);
   // Кто из героев повержен (статус 5+) — спотлайт его пропускает. Карточки
   // читают свои листы сами и сообщают сюда.
   const [down, setDown] = useState<Record<number, boolean>>({});
@@ -101,8 +138,149 @@ export function LitmConflictMode({
 
   function spotlight(to?: number) {
     const name = characters.find((c) => c.id === (to ?? next))?.character_name ?? "";
+    setIncoming([]);
     void ribbon.setScene(`Спотлайт: ${name}`, { ...scene, spotlight: passSpotlight(sp, order, out, to) });
   }
+
+  const heroName = (id: number) => characters.find((c) => c.id === id)?.character_name ?? "Герой";
+
+  async function giveHero(id: number, req: Pick<GiveRequest, "name" | "tier" | "mode" | "into">) {
+    const seen: { prev?: number[] | null } = {};
+    const target = req.into ?? req.name;
+    await patchLitmSheet(id, `${heroName(id)}: ${req.name}`, (d) => {
+      const list = d.statuses ?? [];
+      seen.prev = list.find((s) => sameStatus(s.name, target))?.marks ?? null;
+      return { statuses: req.mode === "give" ? giveStatus(list, req.name, req.tier, req.into) : reduceStatus(list, target, req.tier) };
+    });
+    if (req.mode === "give" && seen.prev !== undefined) {
+      const inc: Incoming = { id: ++incomingSeq, heroId: id, heroName: heroName(id), name: req.name, into: req.into, tier: req.tier, prev: seen.prev };
+      setIncoming((list) => [...list, inc]);
+    }
+  }
+
+  /** «Смягчить» (Q14): вернуть статус к прежним отметкам и дать заново на `by` слабее. */
+  async function mitigate(inc: Incoming, by: number) {
+    const tier = inc.tier - by;
+    const target = inc.into ?? inc.name;
+    await patchLitmSheet(inc.heroId, `${inc.heroName}: смягчить ${inc.name}`, (d) => {
+      const restored = (d.statuses ?? []).flatMap((s) => (!sameStatus(s.name, target) ? [s] : inc.prev?.length ? [{ ...s, marks: inc.prev }] : []));
+      return { statuses: tier > 0 ? giveStatus(restored, inc.name, tier, inc.into) : restored };
+    });
+    setIncoming((list) => (tier > 0 ? list.map((x) => (x.id === inc.id ? { ...x, tier } : x)) : list.filter((x) => x.id !== inc.id)));
+  }
+
+  function challengeNext(st: LitmChallengeState, req: Pick<GiveRequest, "name" | "tier" | "mode" | "limit">): LitmChallengeState {
+    if (req.limit != null) return req.mode === "give" ? giveToLimit(st, req.limit, req.name, req.tier) : reduceLimit(st, req.limit, req.tier);
+    return { ...st, statuses: req.mode === "give" ? giveStatus(st.statuses, req.name, req.tier) : reduceStatus(st.statuses, req.name, req.tier) };
+  }
+
+  async function applyGive(req: GiveRequest) {
+    const label = `${req.name}-${req.tier}`;
+    for (const key of req.keys) {
+      const [kind, raw] = key.split(":");
+      if (kind === "hero") await giveHero(Number(raw), req);
+      else if (kind === "row") {
+        const row = ribbon.challenges.find((r) => r.id === Number(raw));
+        if (row) await ribbon.setChallenge(row, `${row.name}: ${label}`, challengeNext(ribbon.stateOf(row), req));
+      } else {
+        const statuses = req.mode === "give" ? giveStatus(scene.statuses, req.name, req.tier, req.into) : reduceStatus(scene.statuses, req.into ?? req.name, req.tier);
+        await ribbon.setScene(`Сцена: ${label}`, { ...scene, statuses });
+      }
+    }
+  }
+
+  const giveTargets: GiveTarget[] = [
+    ...characters.map((c) => ({ key: `hero:${c.id}`, label: c.character_name, kind: "hero" as const, heroId: c.id })),
+    ...ribbon.challenges.map((r) => {
+      const st = ribbon.stateOf(r);
+      return { key: `row:${r.id}`, label: r.name, kind: "challenge" as const, limits: st.limits.map((l) => ({ name: l.name, status: l.status, max: l.max })), statuses: st.statuses };
+    }),
+    { key: "scene", label: "Сцена", kind: "scene" as const, statuses: scene.statuses },
+  ];
+
+  /** «вычеркнуть тег» (Q12): теги силы героя в спотлайте — меню по темам. */
+  async function scratchMenu(x: number, y: number) {
+    const id = sp.current;
+    if (id == null) return setMenu({ x, y, title: "Вычеркнуть тег", items: [{ label: "Сначала дайте спотлайт герою" }] });
+    const rows = await readResource<Statblock[]>(statblockListPath("character", id), { fresh: true });
+    const sb = rows.find((s) => s.format === "litm_character");
+    let d: LitMCharacterData;
+    try {
+      d = normalizeCharacter(JSON.parse(sb?.content || "{}"));
+    } catch {
+      d = normalizeCharacter({});
+    }
+    const groups = [...d.themes.map((t, i) => ({ t, kind: "themes" as const, i })), ...d.storyThemes.map((t, i) => ({ t, kind: "storyThemes" as const, i }))]
+      .map(({ t, kind, i }) => ({
+        label: t.name || "Без названия",
+        children: [t.name, ...t.powerTags]
+          .filter((tag) => tag && !(t.scratchedTags ?? []).includes(tag))
+          .map((tag) => ({ label: tag, onClick: () => void patchLitmSheet(id, `${heroName(id)}: тег «${tag}»`, toggleScratch(kind, i, tag)) })),
+      }))
+      .filter((g) => g.children.length);
+    setMenu({ x, y, title: `${heroName(id)}: вычеркнуть тег`, items: groups.length ? groups : [{ label: "Нечего вычёркивать" }] });
+  }
+
+  /** Последствие по разметке (Q12); `edit` — открыть «Дать статус» с подставленным. */
+  function runAction(row: InitiativeEntry, a: ConsequenceAction, e: { clientX: number; clientY: number }, threat: number, edit: boolean) {
+    const st = ribbon.stateOf(row);
+    const settle = (next: LitmChallengeState) => (next.declaredThreat === threat ? { ...next, declaredThreat: null, declaredLead: "" } : next);
+    if (a.kind === "scratch") {
+      void scratchMenu(e.clientX, e.clientY);
+      if (st.declaredThreat === threat) void ribbon.setChallenge(row, `${row.name}: угроза разрешена`, settle(st));
+      return;
+    }
+    if (a.kind === "reduce") {
+      const limit = limitFor(st.limits, a.name);
+      const has = st.statuses.some((s) => sameStatus(s.name, a.name));
+      if (edit || (limit == null && !has)) return setGive({ keys: [`row:${row.id}`], name: a.name, tier: a.by, mode: "reduce" });
+      void ribbon.setChallenge(row, `${row.name}: −${a.by} ${a.name}`, settle(challengeNext(st, { name: a.name, tier: a.by, mode: "reduce", limit })));
+      return;
+    }
+    if (a.self) {
+      if (edit) return setGive({ keys: [`row:${row.id}`], name: a.name, tier: a.tier });
+      void ribbon.setChallenge(row, `${row.name}: ${a.name}-${a.tier}`, settle(challengeNext(st, { name: a.name, tier: a.tier, mode: "give", limit: null })));
+      return;
+    }
+    const heroes = a.all ? characters.map((c) => c.id) : sp.current != null ? [sp.current] : [];
+    if (edit || !heroes.length) return setGive({ keys: heroes.map((id) => `hero:${id}`), name: a.name, tier: a.tier });
+    void (async () => {
+      for (const id of heroes) await giveHero(id, { name: a.name, tier: a.tier, mode: "give" });
+      if (st.declaredThreat === threat) await ribbon.setChallenge(row, `${row.name}: угроза разрешена`, settle(st));
+    })();
+  }
+
+  /** «⋯ → Надстройка» (Q17): пределы и стартовые статусы надстройки — в строку гнезда. */
+  function addonMenu(row: InitiativeEntry): ContextMenuItem[] {
+    if (!addonBook.length) return [];
+    const st = ribbon.stateOf(row);
+    const on = addonBook.filter((b) => st.addons.includes(b.entry.id));
+    const off = addonBook.filter((b) => !st.addons.includes(b.entry.id));
+    const add = (b: LitmBookEntry) => {
+      const extra = challengeStateFromProfile(b.profile);
+      let statuses = st.statuses;
+      for (const s of extra.statuses) statuses = giveStatus(statuses, s.name, statusTier(s.marks));
+      const limits = [...st.limits, ...extra.limits.filter((l) => !st.limits.some((x) => sameStatus(x.name, l.name)))];
+      void ribbon.setChallenge(row, `${row.name}: надстройка «${b.entry.name}»`, { ...st, limits, statuses, addons: [...st.addons, b.entry.id] });
+    };
+    const drop = (b: LitmBookEntry) => {
+      const names = b.profile.limitList.map((l) => l.name);
+      const limits = st.limits.filter((l) => !(names.some((n) => sameStatus(n, l.name)) && !l.marks.length));
+      void ribbon.setChallenge(row, `${row.name}: снята надстройка «${b.entry.name}»`, { ...st, limits, addons: st.addons.filter((id) => id !== b.entry.id) });
+    };
+    return [
+      {
+        label: "Надстройка",
+        children: [
+          ...off.map((b) => ({ label: `${b.entry.name}${b.profile.rating ? ` · +${b.profile.rating}` : ""}`, onClick: () => add(b) })),
+          ...on.map((b, i) => ({ label: `Снять «${b.entry.name}»`, danger: true, dividerBefore: i === 0 && off.length > 0, onClick: () => drop(b) })),
+        ],
+      },
+    ];
+  }
+
+  const ctx: NestCtx = { ribbon, onMenu: setMenu, confirm, openGive: setGive, runAction, addonMenu, book };
+  const declared = ribbon.challenges.filter((r) => ribbon.stateOf(r).declaredThreat != null);
 
   // Пробел — спотлайт следующему (Q4). Перехват на захвате, как в бою D&D:
   // плеер приложения тоже слушает пробел.
@@ -167,6 +345,9 @@ export function LitmConflictMode({
         )}
         <span className="lp-end">
           {next != null && <span className="lp-mono">Пробел → {characters.find((c) => c.id === next)?.character_name}</span>}
+          <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => setGive({ keys: sp.current != null ? [`hero:${sp.current}`] : [] })}>
+            Дать статус
+          </button>
           <button type="button" className="d-btn d-btn--sm" onClick={() => setAdding(true)}>
             + Вызов
           </button>
@@ -187,6 +368,22 @@ export function LitmConflictMode({
           </button>
         </div>
       )}
+
+      {incoming.map((inc) => (
+        <div key={inc.id} className="lp-plk lp-inc" role="status">
+          <b>{inc.heroName}</b> получает <Status name={inc.into ?? inc.name} tier={inc.tier} />
+          {inc.into && <small>сложено с «{inc.into}»</small>}
+          <button type="button" className="d-btn d-btn--sm" disabled={inc.tier <= 1} onClick={() => void mitigate(inc, 1)}>
+            Смягчить −1
+          </button>
+          <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => void mitigate(inc, inc.tier)}>
+            Смягчить полностью
+          </button>
+          <button type="button" className="lp-x" aria-label="Скрыть плашку" onClick={() => setIncoming((l) => l.filter((x) => x.id !== inc.id))}>
+            ✕
+          </button>
+        </div>
+      ))}
 
       <SceneStrip
         scene={scene}
@@ -212,18 +409,45 @@ export function LitmConflictMode({
         ))}
       </div>
 
+      {declared.length > 0 && (
+        <div className="lp-threats" role="status">
+          {declared.map((r) => {
+            const st = ribbon.stateOf(r);
+            return (
+              <span key={r.id} className="lp-pill">
+                ⚠ <b>{r.name}</b>
+                {st.declaredLead && (
+                  <>
+                    : <LitmRich text={st.declaredLead} />
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="lp-x"
+                  aria-label={`Развязка: ${r.name}`}
+                  title="Угроза разрешена"
+                  onClick={() => void ribbon.setChallenge(r, `${r.name}: угроза разрешена`, { ...st, declaredThreat: null, declaredLead: "" })}
+                >
+                  ✕
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       <Ribbon
         currentId={null}
         hint="Пробел — спотлайт следующему · колесо — масштаб · средняя кнопка — сдвиг · ПКМ по пустому — добавить вызов"
         onContext={(x, y, nestId) => {
           if (nestId == null) return setAdding(true);
           const row = ribbon.challenges.find((e) => e.id === nestId);
-          if (row) setMenu({ x, y, title: row.name, items: nestItems(row, ribbon, confirm) });
+          if (row) setMenu({ x, y, title: row.name, items: nestItems(row, ctx) });
         }}
       >
         <div className="lp-track">
           {ribbon.challenges.map((row) => (
-            <ChallengeNest key={row.id} row={row} ribbon={ribbon} onMenu={setMenu} confirm={confirm} />
+            <ChallengeNest key={row.id} row={row} ctx={ctx} />
           ))}
           <button type="button" className="lp-nest lp-nest--new" onClick={() => setAdding(true)}>
             + Вызов
@@ -243,6 +467,7 @@ export function LitmConflictMode({
           }}
         />
       )}
+      {give && <LitmGiveStatus targets={giveTargets} initial={give} onClose={() => setGive(null)} onApply={applyGive} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />}
     </div>
   );
@@ -251,8 +476,8 @@ export function LitmConflictMode({
 type Confirm = ReturnType<typeof useConfirm>[1];
 type OpenMenu = (m: { x: number; y: number; items: ContextMenuItem[]; title?: string }) => void;
 
-function nestItems(row: InitiativeEntry, ribbon: LitmRibbon, confirm: Confirm): ContextMenuItem[] {
-  const items: ContextMenuItem[] = [];
+function nestItems(row: InitiativeEntry, { ribbon, confirm, openGive, addonMenu }: NestCtx): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [{ label: "Дать статус…", onClick: () => openGive({ keys: [`row:${row.id}`] }) }, ...addonMenu(row)];
   if (row.entity_type === "compendium_entry" && row.entity_id != null) {
     items.push({ label: "Открыть профиль", onClick: () => window.open(`/compendium/${row.entity_id}`, "_blank") });
   }
@@ -464,13 +689,7 @@ function HeroCard({
   const name = character.character_name;
 
   function toggle(kind: "themes" | "storyThemes", index: number, tag: string) {
-    void patchLitmSheet(character.id, `${name}: тег «${tag}»`, (d) => {
-      const flip = (t: LitMThemeCard): LitMThemeCard => {
-        const s = t.scratchedTags ?? [];
-        return { ...t, scratchedTags: s.includes(tag) ? s.filter((x) => x !== tag) : [...s, tag] };
-      };
-      return { [kind]: d[kind].map((t, k) => (k === index ? flip(t) : t)) };
-    });
+    void patchLitmSheet(character.id, `${name}: тег «${tag}»`, toggleScratch(kind, index, tag));
   }
 
   const themes = sheet ? [...sheet.themes.map((t, i) => ({ t, kind: "themes" as const, i })), ...sheet.storyThemes.filter((t) => t.name).map((t, i) => ({ t, kind: "storyThemes" as const, i }))] : [];
@@ -562,12 +781,26 @@ function HeroCard({
 }
 
 /** Гнездо вызова: живые пределы и статусы сверху, под ними профиль книги. */
-function ChallengeNest({ row, ribbon, onMenu, confirm }: { row: InitiativeEntry; ribbon: LitmRibbon; onMenu: OpenMenu; confirm: Confirm }) {
+function ChallengeNest({ row, ctx }: { row: InitiativeEntry; ctx: NestCtx }) {
+  const { ribbon, onMenu } = ctx;
   const state = ribbon.stateOf(row);
   const hasProfile = (row.entity_type === "compendium_entry" || row.entity_type === "being") && row.entity_id != null;
   const rows = useResource<Statblock[]>(hasProfile ? statblockListPath(row.entity_type!, row.entity_id!) : null).data ?? NO_STATBLOCKS;
   const sb = rows.find((s) => s.format === "litm_challenge");
   const profile = useMemo(() => (sb ? challengeProfile({ name: row.name, name_original: "", description: "", data: {} }, sb) : null), [sb, row.name]);
+  const addons = state.addons.flatMap((id) => ctx.book.get(id) ?? []);
+  const rating = Math.min(5, (profile?.rating ?? 0) + addons.reduce((n, a) => n + a.profile.rating, 0));
+  const threats = (offset: number) => (list: LitmChallengeProfileData["threatList"]) => (
+    <LitmThreats
+      threats={list}
+      offset={offset}
+      declared={state.declaredThreat}
+      onDeclare={(n, lead) => set(n == null ? "угроза снята" : "угроза объявлена", { ...state, declaredThreat: n, declaredLead: n == null ? "" : lead })}
+      onAction={(a, e, n, edit) => ctx.runAction(row, a, e, n, edit)}
+      onOwn={() => ctx.openGive({ keys: [] })}
+    />
+  );
+  let offset = profile?.threatList.length ?? 0;
   const beaten = overcomeBy(state);
   const turned = turnedLimits(state);
   const [draft, setDraft] = useState("");
@@ -594,7 +827,7 @@ function ChallengeNest({ row, ribbon, onMenu, confirm }: { row: InitiativeEntry;
             type="button"
             className="lp-ib"
             aria-label={`Действия: ${row.name}`}
-            onClick={(e) => onMenu({ x: e.clientX, y: e.clientY, title: row.name, items: nestItems(row, ribbon, confirm) })}
+            onClick={(e) => onMenu({ x: e.clientX, y: e.clientY, title: row.name, items: nestItems(row, ctx) })}
           >
             ⋯
           </button>
@@ -602,7 +835,7 @@ function ChallengeNest({ row, ribbon, onMenu, confirm }: { row: InitiativeEntry;
       </div>
       {profile && (
         <div className="lp-meta">
-          <Rating value={profile.rating} />
+          <Rating value={rating} />
           {profile.mightList.map((m, i) => {
             const might = mightOf(m);
             return might ? <MightMark key={i} might={might} label={m.name} /> : null;
@@ -661,11 +894,23 @@ function ChallengeNest({ row, ribbon, onMenu, confirm }: { row: InitiativeEntry;
       </div>
       {profile ? (
         <div className="lp-profile">
-          <LitmChallengeProfile profile={profile} hideLimits />
+          <LitmChallengeProfile profile={profile} hideLimits renderThreats={threats(0)} />
         </div>
       ) : hasProfile ? (
         <p className="lb-empty">Профиль не найден.</p>
       ) : null}
+      {addons.map((a) => {
+        const from = offset;
+        offset += a.profile.threatList.length;
+        return (
+          <div key={a.entry.id} className="lp-profile lp-addon">
+            <div className="lb-lbl">
+              Надстройка<small>{a.entry.name}</small>
+            </div>
+            <LitmChallengeProfile profile={a.profile} hideLimits renderThreats={threats(from)} />
+          </div>
+        );
+      })}
     </article>
   );
 }
