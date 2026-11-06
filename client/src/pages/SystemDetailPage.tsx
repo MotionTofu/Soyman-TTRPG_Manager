@@ -22,6 +22,12 @@ import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { readOnce } from "../data/imperative";
 
+// У классов и видов в разделе лежат и их умения/черты: в оглавлении считаем
+// сами классы и виды, общий итог «с вложенными» остаётся полным.
+function topLevelCount(kind: string | undefined, r: { count: number; class_count?: number; species_count?: number }): number {
+  return kind === "class" ? r.class_count ?? r.count : kind === "species" ? r.species_count ?? r.count : r.count;
+}
+
 function entriesLabel(n: number): string {
   const tail = n % 100;
   const word = tail >= 11 && tail <= 14 ? "записей" : n % 10 === 1 ? "запись" : n % 10 >= 2 && n % 10 <= 4 ? "записи" : "записей";
@@ -59,11 +65,11 @@ export function SystemDetailPage() {
   // Сколько записей в каждом разделе — строка «Классы: 13» в хиро-карточке
   // «Обзора» и счётчики на ярлыках. Считает сервер одним запросом, без
   // вытягивания самих записей.
-  const countRows = useResource<{ section_id: number; count: number; class_count?: number }[]>(
+  const countRows = useResource<{ section_id: number; count: number; class_count?: number; species_count?: number }[]>(
     sections.length > 0 ? systemPaths.entryCounts(systemId) : null
   ).data;
   const sectionCounts = useMemo<Record<number, number>>(
-    () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, sections.find((s) => s.id === r.section_id)?.kind === "class" ? r.class_count ?? r.count : r.count])),
+    () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, topLevelCount(sections.find((s) => s.id === r.section_id)?.kind, r)])),
     [countRows, sections]
   );
   const fieldsAffects = systemFieldsAffects(systemId);

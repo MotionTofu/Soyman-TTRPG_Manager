@@ -2,9 +2,9 @@ import { Fragment, useState, type ReactNode } from "react";
 import { stripMentions } from "../mentions";
 import { extractEnglishName } from "../compendium";
 import type { CompendiumEntry } from "../types";
-import { entryValue, featBenefitSummary } from "./CompendiumArticle";
+import { entryValue, featBenefitSummary } from "./compendiumArticleData";
 
-export function registerColumns(kind:string) {
+function registerColumns(kind:string) {
   if (kind === "equipment") return ["Урон / КЗ","Свойства","Мастерство","Цена","Вес"];
   if (kind === "feat") return ["Категория","Требование","Даёт"];
   if (kind === "magic_item") return ["Тип","Редкость","Настройка","Цена"];
@@ -13,7 +13,7 @@ export function registerColumns(kind:string) {
   return ["Категория","Кратко"];
 }
 function names(value:unknown) { return Array.isArray(value) ? value.map((item)=>extractEnglishName(typeof item === "string" ? item : item?.name ?? "").name).filter(Boolean).join(", ") : ""; }
-export function registerValues(entry:CompendiumEntry) {
+function registerValues(entry:CompendiumEntry) {
   const str = (key:string)=>entryValue(entry,key);
   if(entry.kind === "equipment") return [str("damage") || str("ac"),names(entry.data.weapon_properties),names([entry.data.weapon_mastery]),str("cost"),str("weight")];
   if(entry.kind === "feat") return [str("category"),str("prerequisite"),featBenefitSummary(entry) || names(entry.data.abilities) || stripMentions(entry.description).split("\n")[0]];

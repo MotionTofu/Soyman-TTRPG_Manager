@@ -14,13 +14,15 @@ vi.mock("../components/mentions/MentionText", () => ({ MentionText: ({ text }: {
 vi.mock("../components/EntityPreviewModal", () => ({ EntityPreviewModal: () => null }));
 vi.mock("../components/EntityFieldsCard", () => ({ EntityFieldsCard: () => <p>Прежняя правка полей</p>, EntityFieldInputs: () => null, toFieldValues: () => ({}) }));
 afterEach(cleanup);
-const entry = { id: 5, system_id: 1, section_id: 2, kind: "vehicle", name: "Воздушный корабль", description: "Описание судна", parent_id: null, level: null, position: 0, aliases: [], name_original: "Airship", short_name: null, created_at: "2026-11-06", data: { size: "Большой", category: "Воздушный", ac: "13", hp: "300", crew: "10", passengers: "20", cargo: "1 тонна", speed: "8 миль/ч" } } as CompendiumEntry;
+const entry = { id: 5, system_id: 1, section_id: 2, kind: "vehicle", name: "Воздушный корабль", description: "Описание судна", parent_id: null, level: null, position: 0, aliases: [], name_original: "Airship", short_name: null, created_at: "2026-11-06", data: { size: "Большой", category: "Воздушный", ac: "13", hp: "300", crew: "10", passengers: "20", cargo: "1 тонна", speed: "8 миль/ч", cost: "40000 зм" } } as CompendiumEntry;
 function show(value = entry) { return render(<MemoryRouter><VehicleDetailPage entry={value} system={{ id: 1, name: "D&D 5.5" } as System} /></MemoryRouter>); }
 it("судно использует профиль, реальные факты и прежние вкладки", () => {
   const { container } = show();
   expect(container.querySelector(".entity-page--profile")).toBeTruthy();
   expect(screen.getByRole("heading", { name: "Воздушный корабль", level: 1 })).toBeTruthy();
   expect(screen.getByText("300")).toBeTruthy();
+  expect(screen.getByText((_, el) => el?.textContent === "40 000 зм")).toBeTruthy();
+  expect(screen.queryByText(/· стоимость/)).toBeNull();
   expect(screen.getByText("Постов экипажа пока нет.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Чертёж судна" }));
   expect(screen.getByText("Прежний чертёж")).toBeTruthy();

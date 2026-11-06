@@ -5,7 +5,7 @@ import { EntryImagesTab } from "../components/EntryImagesTab";
 import { MentionsTab } from "../components/MentionsTab";
 import { ProfileBlock, ProfileHero, ProfileText } from "../components/profiles/ProfileParts";
 import { ProfileFacts, ProfileField } from "../components/profiles/DndProfileParts";
-import { entryValue } from "../components/CompendiumArticle";
+import { entryValue } from "../components/compendiumArticleData";
 import { openEntityMenu } from "../pageMenu";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
@@ -52,7 +52,7 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
   const def = KIND_DEFS[entry.kind];
   const str = (key: string) => entryValue(entry, key);
   // Под именем — категория и размер метками (гриллинг 2026-10-02, Q7).
-  const identTags = [str("size"), str("category"), str("cost")].filter(Boolean);
+  const identTags = [str("size"), str("category"), groupDigits(str("cost"))].filter(Boolean);
   const peers = (sectionEntries ?? []).filter((candidate) => candidate.kind === entry.kind && candidate.parent_id === entry.parent_id).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   const peerIndex = peers.findIndex((candidate) => candidate.id === entryId);
   const neighbour = (delta: number) => peerIndex >= 0 && peers.length > 1 ? { href: `/compendium/${peers[(peerIndex + delta + peers.length) % peers.length].id}`, name: peers[(peerIndex + delta + peers.length) % peers.length].name } : undefined;
@@ -203,12 +203,11 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
               emptyLabel={isPost ? "Добавьте описание поста." : "Добавьте описание судна."}
             />
 
-            {/* Справка: все поля записи, стоимость и пассажиры — тут, а не в
-                шапке: при покупке, а не в бою (Q7). */}
+            {/* Справка: все поля записи. Стоимость уже стоит меткой в шапке,
+                повтор в заголовке складки убран (приёмка «Д», Ж2). */}
             <details className="paper-fold" ref={referenceRef}>
               <summary>
                 Справка
-                {!isPost && str("cost") && <span className="paper-fold__count"> · стоимость {str("cost")}</span>}
               </summary>
               <div className="paper-fold__body">
                 <EntityFieldsCard
@@ -265,4 +264,9 @@ function VehicleHead({ entry, isPost, onEdit }: { entry: CompendiumEntry; isPost
     <ProfileFacts facts={facts} />
     <dl className="dnd-profile-fields">{fields.filter(([key]) => str(key)).map(([key, label]) => <ProfileField key={key} label={label}>{str(key)}</ProfileField>)}</dl>
   </ProfileBlock>;
+}
+
+/** «40000 зм» → «40 000 зм»: разряды от пяти цифр, как в русском наборе. */
+function groupDigits(text: string): string {
+  return text.replace(/\d{5,}/g, (digits) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0"));
 }

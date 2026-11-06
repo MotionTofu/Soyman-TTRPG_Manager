@@ -32,7 +32,7 @@ describe("Обзор системы «Д»", () => {
   it("считает классы отдельно от вложенных умений", async () => {
     const response = await request(app).get(`/systems/${systemId}/entry-counts`);
     expect(response.status).toBe(200);
-    expect(response.body).toContainEqual({ section_id: sectionId, count: 2, class_count: 1 });
+    expect(response.body).toContainEqual({ section_id: sectionId, count: 2, class_count: 1, species_count: 0 });
   });
   it("читает только избранное пользователя внутри системы и ничего не пишет", async () => {
     const before = db.prepare("SELECT total_changes() AS n").get();

@@ -51,7 +51,7 @@ export function VehicleSection({ systemId, section }: Props) {
   const [expanded,setExpanded] = useState(new Set<number>());
   const [menuAt,setMenuAt] = useState<{x:number;y:number}|null>(null);
   const [tidying,setTidying] = useState(false);
-  const toggle = (id:number)=>setExpanded((previous)=>{const next=new Set(previous);next.has(id) ? next.delete(id) : next.add(id);return next;});
+  const toggle = (id:number)=>setExpanded((previous)=>{const next=new Set(previous);if(next.has(id)) next.delete(id); else next.add(id);return next;});
   const setEntries = useCallback(
     (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
       client.setQueryData<CompendiumEntry[]>(dataKeys.resource(entriesPath), (prev) => update(prev ?? [])),

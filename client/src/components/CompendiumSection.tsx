@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { DSeg } from "./DSeg";
-import { CompendiumArticle, CompendiumGrantFields, CompendiumRefs, compendiumFacts, entryValue } from "./CompendiumArticle";
+import { CompendiumArticle, CompendiumGrantFields, CompendiumRefs } from "./CompendiumArticle";
+import { compendiumFacts, entryValue } from "./compendiumArticleData";
 import { DndGroupIndex, DndRegister } from "./DndCompendiumViews";
 import { ContextMenu } from "./ContextMenu";
 import { TidyCompendiumDialog } from "./TidyCompendiumDialog";

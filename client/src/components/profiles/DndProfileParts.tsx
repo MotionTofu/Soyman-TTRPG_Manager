@@ -3,27 +3,17 @@ import { Link } from "react-router-dom";
 import type { CompendiumEntry } from "../../types";
 import { extractEnglishName } from "../../compendium";
 import { stripMentions } from "../../mentions";
-import { CompendiumArticle, CompendiumRefs, entryValue } from "../CompendiumArticle";
+import { CompendiumArticle, CompendiumRefs } from "../CompendiumArticle";
+import { entryValue } from "../compendiumArticleData";
 import { EntityPreviewModal } from "../EntityPreviewModal";
 import { MentionText } from "../mentions/MentionText";
 import { CardPicture } from "../dnd/DndCards";
 import { ASI_NAMES } from "../dnd/DndLevelUpWizard";
-import { columnRecharge, progressionRowForLevel, type ClassProgression } from "../dnd/progression";
+import { columnRecharge, progressionRowForLevel } from "../dnd/progression";
 import type { DndEffect } from "../dnd/effects";
 import { ProfileBlock } from "./ProfileParts";
+import { profileNames, profileProgression, profileRefs, type Ref } from "./dndProfileData";
 
-type Ref = { id: number; name: string; distance?: string };
-export function profileRefs(value: unknown): Ref[] {
-  const list = Array.isArray(value) ? value : value ? [value] : [];
-  return list.filter((item): item is Ref => !!item && typeof item === "object" && typeof item.id === "number" && typeof item.name === "string");
-}
-export function profileNames(value: unknown): string {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string").join(" · ") : typeof value === "string" ? value : "";
-}
-export function profileProgression(entry: CompendiumEntry): ClassProgression | null {
-  const value = entry.data.progression as ClassProgression | undefined;
-  return value && Array.isArray(value.columns) && value.columns.length && Array.isArray(value.rows) && value.rows.length ? value : null;
-}
 export function ProfileFacts({ facts }: { facts: { label: string; value: string }[] }) {
   return <dl className="dnd-facts">{facts.filter((fact) => fact.value).map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>;
 }

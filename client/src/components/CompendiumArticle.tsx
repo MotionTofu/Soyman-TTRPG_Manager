@@ -5,32 +5,16 @@ import { openEntityMenu } from "../pageMenu";
 import type { CompendiumEntry } from "../types";
 import { MentionText } from "./mentions/MentionText";
 import { EffectList } from "./dnd/EffectList";
-import { grantsFromEntry } from "./dnd/dndGrants";
-import { ABILITY_LABELS } from "./dnd/AbilityScores";
 import type { ContextMenuItem } from "./ContextMenu";
 import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/effects";
+import { grantsFromEntry } from "./dnd/dndGrants";
+import { abilityLabel, compendiumFacts, entryValue } from "./compendiumArticleData";
 import "./compendium-d.css";
 
-export function entryValue(entry: CompendiumEntry, key: string): string {
-  const value = entry.data[key];
-  return typeof value === "string" || typeof value === "number" ? String(value) : "";
-}
-
-const FACTS = [["damage", "Урон"], ["ac", "КЗ"], ["cost", "Цена"], ["weight", "Вес"], ["casting_time", "Время"], ["casting_timing", "Время"], ["range", "Дистанция"], ["duration", "Длительность"], ["uses", "Использования"], ["recharge", "Восстановление"]] as const;
-export function compendiumFacts(entry: CompendiumEntry) {
-  const facts = FACTS.map(([key, label]) => ({key, label, value:entryValue(entry,key)})).filter((fact) => fact.value);
-  const attack = [entry.data.attack_melee && "рукопашная", entry.data.attack_ranged && "дальнобойная"].filter(Boolean).join(" · ");
-  return { facts, attack };
-}
 export function CompendiumRefs({ refs }: {refs: {id:number;name:string;distance?:string}[]}) {
   return <MentionText text={refs.map((ref) => `[[compendium_entry:${ref.id}|${extractEnglishName(ref.name).name}]]${ref.distance ? ` ${ref.distance}` : ""}`).join(", ")} />;
 }
 
-const abilityLabel = (key:string)=>ABILITY_LABELS.find((ability)=>ability.key===key)?.label ?? key;
-export function featBenefitSummary(entry:CompendiumEntry) {
-  const grants=grantsFromEntry(entry,()=>null);
-  return [grants.abilityIncrease ? `+${grants.abilityIncrease.amount} ${grants.abilityIncrease.options.map(abilityLabel).join("/")}` : "",grants.spells.length ? `${grants.spells.length} закл.` : "",grants.skills.join(", ")].filter(Boolean).join(" · ");
-}
 export function CompendiumGrantFields({entry}:{entry:CompendiumEntry}) {
   const grants=grantsFromEntry(entry,()=>null), increase=grants.abilityIncrease;
   if(!increase && !grants.spells.length && !grants.skills.length)return null;

@@ -7,8 +7,8 @@ import { SystemDetailPage } from "./SystemDetailPage";
 const data = vi.hoisted(() => ({ favourites: [] as {id:number;name:string;kind:string;section_id:number}[] }));
 vi.mock("../data/hooks", () => ({ useAction: () => vi.fn(), write: {}, useResource: (path: string) => ({ data:
   path === "/systems/5" ? {id:5,name:"ДнД",code:"phb",description:"Описание"} :
-  path === "/systems/5/sections" ? [{id:8,name:"Снаряжение",kind:"equipment"},{id:9,name:"Классы",kind:"class"}] :
-  path === "/systems/5/entry-counts" ? [{section_id:8,count:30,class_count:0},{section_id:9,count:715,class_count:14}] :
+  path === "/systems/5/sections" ? [{id:8,name:"Снаряжение",kind:"equipment"},{id:9,name:"Классы",kind:"class"},{id:10,name:"Виды",kind:"species"}] :
+  path === "/systems/5/entry-counts" ? [{section_id:8,count:30,class_count:0},{section_id:9,count:715,class_count:14},{section_id:10,count:123,class_count:0,species_count:24}] :
   path === "/systems/5/entries/favourites" ? data.favourites : [] }) }));
 vi.mock("../components/Breadcrumbs", () => ({ Breadcrumbs: () => null }));
 vi.mock("../components/SectionBackground", () => ({ SectionBackground: () => null }));
@@ -22,6 +22,7 @@ it("сохраняет section/entry и показывает число клас
   expect(screen.getByText("Запись 12045")).toBeTruthy();
   const toc = screen.getByRole("navigation", {name:"Разделы системы"});
   expect(within(toc).getByRole("button", {name:"Классы 14"})).toBeTruthy();
+  expect(within(toc).getByRole("button", {name:"Виды 24"})).toBeTruthy();
   expect(screen.queryByRole("tablist")).toBeNull();
 });
 it("закрывает шторку при выборе раздела", () => {
