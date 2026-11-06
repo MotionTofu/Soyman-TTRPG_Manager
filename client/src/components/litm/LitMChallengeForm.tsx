@@ -1,6 +1,9 @@
 import type { LitMChallengeData } from "../../types";
 import { useEffect, useState } from "react";
 import { PipTrack } from "./PipTrack";
+import { LitmChallengeProfile } from "./LitmChallengeProfile";
+import { Rating, Roles } from "./LitmBook";
+import { profileFromContent } from "./litmChallenge";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import {
@@ -103,6 +106,24 @@ export function LitMChallengeView({
 }: {
   value: LitMChallengeData;
 }) {
+  // Вызов, размеченный по книге (установщик пачки «Вызовы»), — профилем доски
+  // Litm-Challenges; свои вызовы Мастера в прежнем текстовом виде — как были.
+  const marked = value as LitMChallengeData & Record<string, unknown>;
+  if (Array.isArray(marked.threatList)) {
+    const profile = profileFromContent({ name: value.title, name_original: String(marked.titleEn ?? ""), description: "", data: {} }, marked);
+    return (
+      <div className="litm-book litm-book--inline">
+        <div className="lb-file">
+          <span className="lb-kind">Профиль вызова</span>
+          {profile.location && <span>{profile.location}</span>}
+          {profile.roles.length > 0 && <Roles roles={profile.roles} />}
+          {profile.rating > 0 && <span>рейтинг <Rating value={profile.rating} /></span>}
+        </div>
+        <LitmChallengeProfile profile={profile} />
+        {profile.page && <div className="lb-src">Legend in the Mist · том II · с. {profile.page}</div>}
+      </div>
+    );
+  }
   return (
     <div className="stack sb-scope">
       <div className="row" style={{ justifyContent: "space-between" }}>
