@@ -4,7 +4,8 @@
 .sys-layout { --acc: var(--acid); display: grid; grid-template-columns: 212px minmax(0, 1fr); align-items: start; gap: 0; }
 .sys-toc { min-width: 0; padding-top: var(--sp-2); }
 .sys-toc__head { padding: 0 var(--sp-5) var(--sp-5) 0; }
-.sys-toc__name { font-family: var(--font-ui); font-size: var(--fs-h3); margin-bottom: var(--sp-3); }
+/* кегль мимо шкалы намеренно — имя оглавления Sys-DnD v84: Oswald 20px. */
+.sys-toc__name { font-family: var(--font-ui); font-size: 20px; margin-bottom: var(--sp-3); }
 .sys-toc__more { margin-left: auto; }
 .sys-toc__items { display: flex; flex-direction: column; min-width: 0; }
 .sys-toc__items > button { display: flex; align-items: baseline; gap: var(--sp-3); width: 100%; min-height: 36px; padding: var(--sp-3) var(--sp-4); border: 0; border-left: 6px solid transparent; border-radius: 0; background: transparent; color: var(--ink); text-align: left; }

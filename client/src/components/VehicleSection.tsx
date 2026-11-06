@@ -13,6 +13,11 @@ import { EmptyState } from "./EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 import { useCompendiumViewMode } from "../hooks/useCompendiumViewMode";
 import { addToBag } from "../bag";
+import { CompendiumArticle } from "./CompendiumArticle";
+import { DndRegister } from "./DndCompendiumViews";
+import { DSeg } from "./DSeg";
+import { ContextMenu } from "./ContextMenu";
+import { TidyCompendiumDialog } from "./TidyCompendiumDialog";
 import { Link } from "react-router-dom";
 import type { CompendiumEntry, SystemSection } from "../types";
 
@@ -41,6 +46,12 @@ export function VehicleSection({ systemId, section }: Props) {
   const entriesPath = compendiumPaths.sectionEntries(systemId, section.id);
   const entriesState = useResource<CompendiumEntry[]>(entriesPath);
   const entries = entriesState.data ?? NO_ENTRIES;
+  const code = useResource<{code:string}>(`/systems/${systemId}`).data?.code;
+  const isDnd = code === "phb" || code === "dnd55";
+  const [expanded,setExpanded] = useState(new Set<number>());
+  const [menuAt,setMenuAt] = useState<{x:number;y:number}|null>(null);
+  const [tidying,setTidying] = useState(false);
+  const toggle = (id:number)=>setExpanded((previous)=>{const next=new Set(previous);next.has(id) ? next.delete(id) : next.add(id);return next;});
   const setEntries = useCallback(
     (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
       client.setQueryData<CompendiumEntry[]>(dataKeys.resource(entriesPath), (prev) => update(prev ?? [])),
@@ -172,8 +183,11 @@ export function VehicleSection({ systemId, section }: Props) {
   }
 
   return (
-    <div className="card stack">
-      <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
+    <div className={isDnd ? "stack comp-dnd" : "card stack"}>
+      {isDnd && <div className="dnd-section__head"><h2>{section.name}</h2><span className="d-note">{entries.length}</span><div className="d-bar"><DSeg label="Сортировка" value={sortMode} onChange={changeSortMode} items={[{id:"alpha",label:"А–Я"},{id:"category",label:"Категория"},{id:"size",label:"Размер"}]} /><DSeg label="Вид" value={viewMode} onChange={setViewMode} items={[{id:"grid",label:"Плитки"},{id:"list",label:"Список"}]} /><button type="button" className="d-btn d-btn--sm" onClick={addVehicle}>+ Транспорт</button><button type="button" className="d-btn d-btn--sm" aria-label="Действия раздела" onClick={(event)=>{const r=event.currentTarget.getBoundingClientRect();setMenuAt({x:r.left,y:r.bottom});}}>⋯</button></div></div>}
+      {menuAt && <ContextMenu {...menuAt} onClose={()=>setMenuAt(null)} items={[{label:"А–Я",onClick:()=>changeSortMode("alpha")},{label:"По категории",onClick:()=>changeSortMode("category")},{label:"По размеру",onClick:()=>changeSortMode("size")},{label:"Плитки",onClick:()=>setViewMode("grid")},{label:"Список",onClick:()=>setViewMode("list")},{label:"+ Транспорт",onClick:addVehicle},{label:"Свернуть всё",onClick:()=>setExpanded(new Set())},{label:"Привести в порядок",onClick:()=>setTidying(true)}]} />}
+      {tidying && <TidyCompendiumDialog systemId={systemId} onClose={()=>setTidying(false)} />}
+      {!isDnd && <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
         <span className="row" style={{ gap: 4, alignItems: "center" }}>
           <span className="muted">Сортировка:</span>
           <button
@@ -200,7 +214,7 @@ export function VehicleSection({ systemId, section }: Props) {
           <button type="button" className={viewMode === "grid" ? "active-sort" : ""} onClick={() => setViewMode("grid")} title="Плитками">▦ Плитки</button>
           <button type="button" className={viewMode === "list" ? "active-sort" : ""} onClick={() => setViewMode("list")} title="Списком">☰ Список</button>
         </span>
-      </div>
+      </div>}
       <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
         <input
           type="text"
@@ -260,6 +274,8 @@ export function VehicleSection({ systemId, section }: Props) {
             searchActive={searchQuery.trim() !== ""}
             onToggleFavourite={toggleFavourite}
           />
+        ) : isDnd ? (
+          <DndRegister entries={[...filteredTopLevel].sort((a,b)=>sortDir === "asc" ? a.name.localeCompare(b.name,"ru") : b.name.localeCompare(a.name,"ru"))} kind="vehicle" grouping={sortMode === "alpha" ? "alpha" : "category"} groupField={sortMode === "size" ? "size" : "category"} expanded={expanded} manual={false} onToggle={toggle} renderArticle={(entry)=><CompendiumArticle entry={entry} onEdit={()=>navigate(`/compendium/${entry.id}`)} onCollapse={()=>toggle(entry.id)} onFavourite={()=>toggleFavourite(entry,!entry.favourite)} />} />
         ) : (
           <div className="stack" style={{ gap: 4 }}>
             {filteredTopLevel.map((e) => (

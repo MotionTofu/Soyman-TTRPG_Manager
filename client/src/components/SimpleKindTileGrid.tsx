@@ -54,10 +54,12 @@ interface Props {
   onToggleFavourite: (entry: CompendiumEntry, favourite: boolean) => void;
   categoryField: string | null;
   kindLabel: string;
+  onOpenEntry?: (entry:CompendiumEntry)=>void;
 }
 
-export function SimpleKindTileGrid({ entries, grouping, sortDir = "asc", sectionId, searchActive, onToggleFavourite, categoryField, kindLabel }: Props) {
+export function SimpleKindTileGrid({ entries, grouping, sortDir = "asc", sectionId, searchActive, onToggleFavourite, categoryField, kindLabel, onOpenEntry }: Props) {
   const [modal, setModal] = useState<CompendiumEntry | null>(null);
+  const openEntry = useCallback((entry:CompendiumEntry)=>onOpenEntry ? onOpenEntry(entry) : setModal(entry),[onOpenEntry]);
   const favourites = useMemo(() => entries.filter((e) => e.favourite).sort((a, b) => {
     const cmp = a.name.localeCompare(b.name, "ru");
     return sortDir === "asc" ? cmp : -cmp;
@@ -65,8 +67,8 @@ export function SimpleKindTileGrid({ entries, grouping, sortDir = "asc", section
   const groups = useMemo(() => groupSimple(entries.filter((e) => !e.favourite), categoryField, grouping, sortDir), [entries, grouping, sortDir, categoryField]);
   return (
     <div className="stack" style={{ gap: 10 }}>
-      {favourites.length > 0 && <SimpleGroup label="Избранное" sectionId={sectionId} list={favourites} forceOpen={searchActive} onOpenModal={setModal} onToggleFavourite={onToggleFavourite} kindLabel={kindLabel} categoryField={categoryField} />}
-      {groups.map(([label, list]) => <SimpleGroup key={label} label={label} sectionId={sectionId} list={list} forceOpen={searchActive} onOpenModal={setModal} onToggleFavourite={onToggleFavourite} kindLabel={kindLabel} categoryField={categoryField} />)}
+      {favourites.length > 0 && <SimpleGroup label="Избранное" sectionId={sectionId} list={favourites} forceOpen={searchActive} onOpenModal={openEntry} onToggleFavourite={onToggleFavourite} kindLabel={kindLabel} categoryField={categoryField} />}
+      {groups.map(([label, list]) => <SimpleGroup key={label} label={label} sectionId={sectionId} list={list} forceOpen={searchActive} onOpenModal={openEntry} onToggleFavourite={onToggleFavourite} kindLabel={kindLabel} categoryField={categoryField} />)}
       {modal && (
         <Modal onClose={() => setModal(null)}>
           <div className="stack">
