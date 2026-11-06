@@ -1,5 +1,6 @@
 import type { DndCheck, DndCost, DndEffect } from "./components/dnd/effects";
 import type { PresentationData, ShowDisplay } from "@shared/presentation";
+import type { LitmStatus } from "@shared/litm/status";
 export type { PresentationData, PresentationLayer, ShowDisplay } from "@shared/presentation";
 
 export interface System {
@@ -639,6 +640,9 @@ export interface LitMThemeCard {
   abandon: number;
   milestone: number;
   specialImprovements: LitMImprovement[];
+  /** Вычеркнутые теги силы (и имя темы как её главный тег) — по тексту тега.
+   *  Возвращаются на Привале (Q10–Q11 пульта LitM, Backlog Д33). */
+  scratchedTags?: string[];
 }
 
 export interface LitMCharacterData {
@@ -658,6 +662,8 @@ export interface LitMCharacterData {
   themes: LitMThemeCard[];
   storyThemes: LitMThemeCard[];
   fellowshipTheme: LitMThemeCard;
+  /** Статусы героя — карточки учёта 1–6 (Q5): пишет пульт, правит игрок. */
+  statuses?: LitmStatus[];
 }
 
 export interface LitMChallengeData {
@@ -1801,7 +1807,7 @@ export interface InitiativeEntry {
   state: string;
 }
 
-export type InitiativeKind = "creature" | "lair" | "environment" | "custom";
+export type InitiativeKind = "creature" | "lair" | "environment" | "custom" | "litm_challenge" | "litm_scene";
 
 /** Лёгкая запись «Мира» (Q3/Q10). `notes` — «Задумки», только для Мастера. */
 export interface SettingEntry {

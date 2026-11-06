@@ -1756,6 +1756,8 @@ CREATE TABLE IF NOT EXISTS initiative_entries (
   -- custom — своё событие Мастера. У трёх последних нет хитов и нечему
   -- умирать, поэтому и колонка своя: пустой entity_type уже занят другим
   -- смыслом — «существо, вбитое руками», а это обычный боец.
+  -- litm_challenge, litm_scene — расклад режима «Вызовы» Legend in the Mist:
+  -- инициативы и хитов нет, всё в state (shared/src/litm/conflict.ts).
   kind TEXT NOT NULL DEFAULT 'creature',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   -- Состояние гнезда боевого режима (JSON): реакция, запасы, легендарное,

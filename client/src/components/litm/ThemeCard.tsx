@@ -394,6 +394,14 @@ export const ThemeCardView = memo(function ThemeCardView({
   headerColorClass?: string;
   onMakeGroupTheme?: () => void;
 }) {
+  // Вычеркнуть тег силы за +3 к Силе — главный размен конфликта LitM (Q10).
+  // Имя темы — её главный тег силы, вычёркивается так же.
+  const scratched = value.scratchedTags ?? [];
+  const toggleScratch = (tag: string) =>
+    onQuickUpdate({
+      ...value,
+      scratchedTags: scratched.includes(tag) ? scratched.filter((t) => t !== tag) : [...scratched, tag],
+    });
   return (
     <div className="card stack litm-theme-card">
       <div className={`litm-theme-header ${headerColorClass ?? POWER_CLASS[value.power]}`}>
@@ -414,6 +422,8 @@ export const ThemeCardView = memo(function ThemeCardView({
           variant="power"
           leadingChip={value.name || undefined}
           onChange={(tags) => onQuickUpdate({ ...value, powerTags: tags })}
+          scratched={scratched}
+          onToggleScratch={toggleScratch}
         />
       </div>
       <div>

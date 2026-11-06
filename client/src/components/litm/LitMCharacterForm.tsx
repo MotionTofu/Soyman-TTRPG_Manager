@@ -14,6 +14,8 @@ import {
 } from "./litmCompendium";
 import { TropePickerModal } from "./TropePickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
+import { normalizeStatuses } from "@shared/litm/status";
+import { LitmStatusCards } from "./LitmStatusCards";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -56,11 +58,17 @@ export function normalizeTheme(raw: unknown): LitMThemeCard {
       ? s.split("\n").map((line) => line.trim()).filter(Boolean)
       : [];
   const power = t.power;
+  const name = (t.name as string) ?? "";
+  const powerTags = Array.isArray(t.powerTags) ? (t.powerTags as string[]) : splitLines(t.powerTags);
+  // Вычеркнутое держится только у тегов, которые на карте есть.
+  const scratchedTags = Array.isArray(t.scratchedTags)
+    ? (t.scratchedTags as unknown[]).filter((x): x is string => typeof x === "string" && (x === name || powerTags.includes(x)))
+    : [];
   return {
     power: power === "origin" || power === "adventure" || power === "greatness" || power === "variable" ? power : "",
     themeType: (t.themeType as string) ?? (t.type as string) ?? "",
-    name: (t.name as string) ?? "",
-    powerTags: Array.isArray(t.powerTags) ? (t.powerTags as string[]) : splitLines(t.powerTags),
+    name,
+    powerTags,
     weaknessTags: Array.isArray(t.weaknessTags)
       ? (t.weaknessTags as string[])
       : splitLines(t.weaknessTag),
@@ -69,6 +77,7 @@ export function normalizeTheme(raw: unknown): LitMThemeCard {
     abandon: typeof t.abandon === "number" ? t.abandon : t.abandoned === true ? 3 : 0,
     milestone: typeof t.milestone === "number" ? t.milestone : t.milestone === true ? 3 : 0,
     specialImprovements: normalizeImprovements(t.specialImprovements),
+    ...(scratchedTags.length ? { scratchedTags } : {}),
   };
 }
 
@@ -139,6 +148,7 @@ export function normalizeCharacter(raw: unknown): LitMCharacterData {
       isThemeEmpty(fellowshipTheme) && legacyGroupTheme && !isThemeEmpty(legacyGroupTheme)
         ? legacyGroupTheme
         : fellowshipTheme,
+    statuses: normalizeStatuses(d.statuses),
   };
 }
 
@@ -529,6 +539,8 @@ export function LitMCharacterView({
           </div>
         </div>
       )}
+
+      <LitmStatusCards statuses={value.statuses ?? []} onChange={(statuses) => onQuickUpdate({ ...value, statuses })} />
 
       {value.themes.length > 0 && <strong>Карты Тем</strong>}
       <div className="litm-theme-row">

@@ -13,9 +13,12 @@ initiativeEntriesRouter.get("/", (req, res) => {
   res.json(rows);
 });
 
-// Что за строка. 'creature' — боец, в том числе вбитый руками; остальные три
-// хитов не имеют и умирать им нечем.
-const KINDS = ["creature", "lair", "environment", "custom"];
+// Что за строка. 'creature' — боец, в том числе вбитый руками; lair,
+// environment, custom хитов не имеют и умирать им нечем. Расклад режима
+// «Вызовы» LitM (Backlog Д33): litm_challenge — вызов на ленте, litm_scene —
+// полоса «Сцена» со спотлайтом; их состояние целиком в `state`
+// (shared/src/litm/conflict.ts), бою D&D они не видны.
+const KINDS = ["creature", "lair", "environment", "custom", "litm_challenge", "litm_scene"];
 
 initiativeEntriesRouter.post("/", (req, res) => {
   const { session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative, state } =

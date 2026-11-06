@@ -185,3 +185,19 @@ describe("состояние гнезда боевого режима", () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe("расклад режима «Вызовы» LitM", () => {
+  it("вызов и сцена встают своими видами со state, неизвестный вид — боец", async () => {
+    const state = { limits: [{ name: "Ранить", max: 3, turns: false, note: "", status: "", marks: [] }], statuses: [], declaredThreat: null, addons: [] };
+    const id = await addEntry({ name: "Подосланный убийца", kind: "litm_challenge", entity_type: "compendium_entry", entity_id: 5, state });
+    const row = await request(app).put(`/api/initiative-entries/${id}`).send({});
+    expect(row.body.kind).toBe("litm_challenge");
+    expect(JSON.parse(row.body.state)).toEqual(state);
+
+    const scene = await addEntry({ name: "Сцена", kind: "litm_scene" });
+    expect((await request(app).put(`/api/initiative-entries/${scene}`).send({})).body.kind).toBe("litm_scene");
+
+    const other = await addEntry({ kind: "litm_whatever" });
+    expect((await request(app).put(`/api/initiative-entries/${other}`).send({})).body.kind).toBe("creature");
+  });
+});
