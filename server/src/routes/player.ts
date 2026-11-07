@@ -22,7 +22,7 @@ import { ensurePlayerFolder } from "../services/folderRepair";
 import { entityNames, refKey } from "../services/entityNames";
 import { mergeContentPatch } from "../db/statblockContent";
 import { logSheetEdit, sheetEditAuthor } from "../services/battles";
-import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
+import { normalizeDndCharacter, deriveSheet, parseSceneState } from "@soyman/shared";
 import { matchSystemId, parsePortableImport, portableHttpError, type PortableImportData } from "../services/portableImport";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
 import { noteSessionFor } from "../services/sheetNotes";
@@ -1110,6 +1110,24 @@ playerRouter.get("/campaigns/:id/party", (req: AuthedRequest, res) => {
     )
     .all(campaignId, playerId) as { id: number; character_name: string; player_name: string; avatar_image_path: string | null }[];
   res.json(party.map((m) => ({ ...m, avatar_image_url: m.avatar_image_path ? toFileUrl(m.avatar_image_path) : null })));
+});
+
+// Стол LitM для листа игрока (Д33, Q19): кто в спотлайте и сюжетные теги
+// сцены идущей сессии. Вызовы игрокам не уходят; прогон Мастера — тоже.
+playerRouter.get("/campaigns/:id/litm-table", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  if (!myCampaignIds(req.user!.playerId!).includes(campaignId)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const row = db
+    .prepare(
+      `SELECT ie.state FROM sessions s JOIN initiative_entries ie ON ie.session_id = s.id AND ie.kind = 'litm_scene'
+       WHERE s.campaign_id = ? AND s.live_mode = 'live' AND s.archived_at IS NULL ORDER BY s.id DESC LIMIT 1`
+    )
+    .get(campaignId) as { state: string } | undefined;
+  if (!row) return res.json(null);
+  const scene = parseSceneState(row.state);
+  res.json({ spotlight: scene.spotlight.current, tags: scene.tags, statuses: scene.statuses });
 });
 
 // Корабли кампании (спека profiles-paper-2, «Корабль кампании»): вкладка

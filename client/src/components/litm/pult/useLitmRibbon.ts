@@ -15,6 +15,8 @@ import { useAction, useEntity, useResource, write } from "../../../data/hooks";
 import { readResource } from "../../../data/imperative";
 import { labelled } from "../../../data/notices";
 import { initiativePath, patchRow } from "../../../combat/useCombat";
+import { recordNote } from "../../../combat/battleLog";
+import { logLitm, rowChange } from "./litmLog";
 import type { CampaignDetail, InitiativeEntry, SessionDetail, Statblock } from "../../../types";
 import { challengeProfile } from "../litmChallenge";
 
@@ -95,16 +97,27 @@ export function useLitmRibbon(sessionId: number) {
     return done === true;
   }
 
-  function setChallenge(row: InitiativeEntry, label: string, state: LitmChallengeState) {
-    return change(label, () => write.put(`/initiative-entries/${row.id}`, { state }), patchRow(row.id, { state: JSON.stringify(state) }));
+  /** Правка строки — на экран сразу, в лог конфликта (Q15) — когда записалась. */
+  async function setRow(row: InitiativeEntry, label: string, state: unknown, turn = false) {
+    const changes = rowChange(row, state);
+    const ok = await change(label, () => write.put(`/initiative-entries/${row.id}`, { state }), patchRow(row.id, { state: JSON.stringify(state) }));
+    if (ok) logLitm(sessionId, label, changes, turn);
+    return ok;
   }
 
-  /** Полоса «Сцена» — одна строка на сессию, заводится первой правкой. */
-  function setScene(label: string, state: LitmSceneState) {
-    if (sceneRow) {
-      return change(label, () => write.put(`/initiative-entries/${sceneRow.id}`, { state }), patchRow(sceneRow.id, { state: JSON.stringify(state) }));
-    }
-    return change(label, () => write.post("/initiative-entries", { session_id: sessionId, name: "Сцена", kind: LITM_SCENE_KIND, state }));
+  function setChallenge(row: InitiativeEntry, label: string, state: LitmChallengeState) {
+    return setRow(row, label, state);
+  }
+
+  /** Полоса «Сцена» — одна строка на сессию, заводится первой правкой. `turn` — передача спотлайта. */
+  async function setScene(label: string, state: LitmSceneState, turn = false) {
+    if (sceneRow) return setRow(sceneRow, label, state, turn);
+    const made: { row?: InitiativeEntry } = {};
+    const ok = await change(label, async () => {
+      made.row = await write.post<InitiativeEntry>("/initiative-entries", { session_id: sessionId, name: "Сцена", kind: LITM_SCENE_KIND, state });
+    });
+    if (ok && made.row) logLitm(sessionId, label, rowChange({ ...made.row, state: "{}" }, state), turn);
+    return ok;
   }
 
   async function add(src: LitmSource, count = 1) {
@@ -113,7 +126,7 @@ export function useLitmRibbon(sessionId: number) {
       const state = await sourceState(src);
       const name = numbered(src.name, names);
       names.push(name);
-      await change(`«${name}» не встал на ленту`, () =>
+      const ok = await change(`«${name}» не встал на ленту`, () =>
         write.post("/initiative-entries", {
           session_id: sessionId,
           name,
@@ -123,11 +136,14 @@ export function useLitmRibbon(sessionId: number) {
           state,
         })
       );
+      if (ok) recordNote(sessionId, `«${name}» на ленте`);
     }
   }
 
-  function remove(row: InitiativeEntry) {
-    return change(`«${row.name}» не убран с ленты`, () => write.del(`/initiative-entries/${row.id}`), (rows) => rows.filter((e) => e.id !== row.id));
+  async function remove(row: InitiativeEntry) {
+    const ok = await change(`«${row.name}» не убран с ленты`, () => write.del(`/initiative-entries/${row.id}`), (rows) => rows.filter((e) => e.id !== row.id));
+    if (ok) recordNote(sessionId, `«${row.name}» убран с ленты`);
+    return ok;
   }
 
   return { challenges, scene, sceneRow, setChallenge, setScene, add, remove, stateOf: (row: InitiativeEntry) => parseChallengeState(row.state) };

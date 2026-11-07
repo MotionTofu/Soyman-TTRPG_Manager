@@ -9,6 +9,7 @@ import { Modal } from "./Modal";
 import { useCombat } from "../combat/useCombat";
 import { setCombatModeOpen } from "../combat/combatModeStore";
 import { useSoundEngineOptional } from "../sound/engine";
+import { useSessionSystemCode } from "./litm/pult/useLitmRibbon";
 
 // «Начать» / «Завершить» (гриллинг 2026-09-28, Q38, Q45, Q46). Идёт одна
 // сессия на всё приложение: по ней правая панель знает, куда писать ленту.
@@ -32,6 +33,8 @@ export function SessionLiveControls({
   const sound = useSoundEngineOptional();
   // «Завершить» посреди боя (Q24, Q74): закончить бой или продолжить его в следующей сессии.
   const [battleAsk, setBattleAsk] = useState(false);
+  // В LitM бой — конфликт «Вызовов» (Д33): переезжают лента, сцена и спотлайт.
+  const litm = useSessionSystemCode(session.id) === "litm";
   const affects = [...sessionMoneyAffects(session.id, session.campaign_id), { path: sessionPaths.live() }];
 
   async function start(mode: SessionLiveMode) {
@@ -107,22 +110,22 @@ export function SessionLiveControls({
       {battleAsk && (
         <Modal onClose={() => setBattleAsk(false)}>
           <div className="stack">
-            <h3 style={{ margin: 0 }}>Бой не закончен</h3>
+            <h3 style={{ margin: 0 }}>{litm ? "Вызовы не закончены" : "Бой не закончен"}</h3>
             <p style={{ margin: 0 }}>
-              Идёт {combat.battle ? <b>«{combat.battle.name}»</b> : "бой"}: раунд {session.combat_round || 1}, в строю{" "}
-              {combat.aliveSorted.filter((e) => e.kind === "creature").length}.
+              Идёт {combat.battle ? <b>«{combat.battle.name}»</b> : litm ? "конфликт" : "бой"}
+              {litm ? "." : `: раунд ${session.combat_round || 1}, в строю ${combat.aliveSorted.filter((e) => e.kind === "creature").length}.`}
             </p>
             <p style={{ margin: 0 }}>
               {combat.battle?.carry_target
-                ? `Продолжить — бойцы со всеми хитами, эффектами и счётчиками переедут в сессию ${combat.battle.carry_target.number} (${new Date(`${combat.battle.carry_target.date}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}); её пульт откроется в боевом режиме.`
-                : "Следующей сессии кампании ещё нет — бой встанет в первую, которую заведёте, и её пульт откроется в боевом режиме."}
+                ? `Продолжить — ${litm ? "лента вызовов с пределами и статусами, сцена и спотлайт" : "бойцы со всеми хитами, эффектами и счётчиками"} переедут в сессию ${combat.battle.carry_target.number} (${new Date(`${combat.battle.carry_target.date}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}); её пульт откроется в ${litm ? "«Вызовах»" : "боевом режиме"}.`
+                : `Следующей сессии кампании ещё нет — ${litm ? "конфликт" : "бой"} встанет в первую, которую заведёте, и её пульт откроется в ${litm ? "«Вызовах»" : "боевом режиме"}.`}
             </p>
             <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button type="button" onClick={() => setBattleAsk(false)}>
                 Отмена
               </button>
               <button type="button" onClick={() => void endBattleThenFinish()}>
-                Завершить бой
+                {litm ? "Закончить вызовы" : "Завершить бой"}
               </button>
               <button type="button" className="primary" autoFocus onClick={() => void carryThenFinish()}>
                 {combat.battle?.carry_target ? `Продолжить в сессии ${combat.battle.carry_target.number}` : "Продолжить в следующей"}

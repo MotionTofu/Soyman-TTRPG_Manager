@@ -18,8 +18,8 @@ describe("consequenceActions", () => {
     expect(labels("вычеркнуть тег или дать *загнан-в-угол-2*")).toEqual(["загнан-в-угол-2", "вычеркнуть тег"]);
   });
 
-  it("теги и именованные — без действий", () => {
-    expect(labels("**Разоблачение**")).toEqual([]);
+  it("именованное — строкой в лог, теги — без действий", () => {
+    expect(labels("**Разоблачение**")).toEqual(["Разоблачение"]);
     expect(labels("добавить тег *указ*")).toEqual([]);
     expect(consequenceActions(null)).toEqual([]);
   });

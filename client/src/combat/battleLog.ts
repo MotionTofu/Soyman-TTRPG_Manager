@@ -58,6 +58,12 @@ export interface BattleSummary {
   dealt: number;
   taken: number;
   defeated: string[];
+  /** «Вызовы вечера» LitM (Д33, Q15): кто чем преодолён, полученные статусы, спотлайт сессии. */
+  litm?: {
+    overcome: { name: string; by: string }[];
+    statuses: { cid: number; name: string; list: string[] }[];
+    spotlight: { id: number; name: string; n: number }[];
+  };
 }
 
 export const battlePath = (sessionId: number) => `/sessions/${sessionId}/battle`;
@@ -152,20 +158,31 @@ export function setBattleContext(sessionId: number, ctx: { battleId: number; rou
   else contexts.delete(sessionId);
 }
 
+export function hasBattleContext(sessionId: number): boolean {
+  return contexts.has(sessionId);
+}
+
+/** Строка не боя D&D (режим «Вызовы» LitM): свой текст и «ход» = передача спотлайта. */
+export interface RecordOptions {
+  turn?: boolean;
+  describe?: (changes: LogChange[]) => string;
+}
+
 interface Pending {
   battleId: number;
   round: number;
   label: string;
   changes: LogChange[];
   timer: ReturnType<typeof setTimeout>;
+  options: RecordOptions;
 }
 const pending = new Map<number, Pending>();
 
-export function recordChanges(sessionId: number, label: string, changes: LogChange[]): void {
+export function recordChanges(sessionId: number, label: string, changes: LogChange[], options: RecordOptions = {}): void {
   const ctx = contexts.get(sessionId);
   if (!ctx || !changes.length) return;
   let p = pending.get(sessionId);
-  if (p && p.battleId !== ctx.battleId) {
+  if (p && (p.battleId !== ctx.battleId || !!p.options.turn !== !!options.turn)) {
     void flushBattleLog(sessionId);
     p = undefined;
   }
@@ -176,6 +193,7 @@ export function recordChanges(sessionId: number, label: string, changes: LogChan
       label,
       changes: [],
       timer: setTimeout(() => void flushBattleLog(sessionId), GROUP_MS),
+      options,
     };
     pending.set(sessionId, p);
   }
@@ -203,6 +221,12 @@ export async function flushBattleLog(sessionId: number): Promise<void> {
   pending.delete(sessionId);
   clearTimeout(p.timer);
   const d = describeChanges(p.changes, p.label);
+  if (p.options.turn || p.options.describe) {
+    const own = p.options.describe?.(p.changes) ?? "";
+    const text = p.options.turn ? p.label : own || p.label;
+    await post(sessionId, p.battleId, { round: p.round, kind: p.options.turn ? "turn" : "event", text, sub: p.options.turn ? own : "", changes: p.changes });
+    return;
+  }
   // Одна копия хитов персонажа в строке (её запись отстала от листа) — не событие.
   const mirrorOnly = p.changes.every((c) => c.target.t === "row" && c.target.mirror);
   if (d.kind === "event" && d.text === p.label && mirrorOnly) return;

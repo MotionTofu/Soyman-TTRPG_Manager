@@ -4,12 +4,13 @@ import { parseStatusTag } from "@shared/litm/status";
  * Что пульт умеет выполнить из скобок последствия (Q12): статус — герою в
  * спотлайте (`self` — самому вызову: «получить *спрятан-2*»; `all` — всем
  * героям), «снять N уровня с *X*» — со своего предела или статуса,
- * «вычеркнуть тег» — у героя. Именованные (**Разоблачение**) — только текст.
+ * «вычеркнуть тег» — у героя. Именованное (**Разоблачение**) — строкой в лог.
  */
 export type ConsequenceAction =
   | { kind: "status"; name: string; tier: number; self: boolean; all: boolean }
   | { kind: "reduce"; name: string; by: number }
-  | { kind: "scratch" };
+  | { kind: "scratch" }
+  | { kind: "named"; name: string };
 
 const COUNT: Record<string, number> = { один: 1, одна: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5 };
 
@@ -33,12 +34,14 @@ export function consequenceActions(effect: string | null): ConsequenceAction[] {
     out.push({ kind: "status", name: s.name, tier: s.tier, self: /получить\s*$/i.test(before), all });
   }
   if (/вычеркнуть\s+тег/i.test(effect)) out.push({ kind: "scratch" });
+  for (const m of effect.matchAll(/\*\*([^*]+)\*\*/g)) out.push({ kind: "named", name: m[1].trim() });
   return out;
 }
 
 export function actionLabel(a: ConsequenceAction): string {
   if (a.kind === "status") return `${a.name}-${a.tier}${a.self ? " себе" : a.all ? " всем" : ""}`;
   if (a.kind === "reduce") return `−${a.by} ${a.name}`;
+  if (a.kind === "named") return a.name;
   return "вычеркнуть тег";
 }
 

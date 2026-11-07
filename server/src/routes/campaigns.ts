@@ -31,6 +31,7 @@ import { requireAuth } from "../services/auth";
 import { broadcastCharacterUpdate, broadcastToCampaign } from "../services/realtime";
 import { parseCampaignPassport, serializeCampaignPassport } from "../services/settingWorld";
 import { parseDueSession, withDue } from "../services/reminderDue";
+import { campaignSpotlight } from "../services/battles";
 
 export const campaignsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -558,6 +559,11 @@ campaignsRouter.get("/:id/finance", (req, res) => {
 
 // Кто должен по этой кампании. Смотрят сюда перед игрой, поэтому долг стоит
 // рядом с составом, а не только в профиле игрока.
+// Спотлайт за кампанию по героям LitM (Д33, Q15): из логов «Вызовов вечера».
+campaignsRouter.get("/:id/litm-spotlight", (req, res) => {
+  res.json(campaignSpotlight(Number(req.params.id)));
+});
+
 campaignsRouter.get("/:id/debts", (req, res) => {
   const campaignId = Number(req.params.id);
   if (!Number.isFinite(campaignId)) return res.status(400).json({ error: "bad id" });

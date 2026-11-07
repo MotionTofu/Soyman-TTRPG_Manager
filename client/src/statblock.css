@@ -1061,6 +1061,26 @@ summary.sb-section {
   text-decoration: line-through;
 }
 
+/* Стол на листе игрока (Д33, Q19): «Вы в спотлайте» и сюжетные теги сцены. */
+.litm-table {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--line);
+}
+.litm-table__spot {
+  padding: var(--sp-1) var(--sp-4);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+}
+.litm-table__status {
+  font-style: italic;
+}
+
 /* Статусы героя — карточки учёта 1–6 (доска Litm-Sheet-Status). Пятая клетка —
    предел героя, обведена; шестая — необратимое, рамкой тревоги. */
 .litm-status-block {

@@ -16,6 +16,7 @@ import { TropePickerModal } from "./TropePickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { normalizeStatuses } from "@shared/litm/status";
 import { LitmStatusCards } from "./LitmStatusCards";
+import { LitmTableStrip } from "./LitmTableStrip";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -476,10 +477,13 @@ export function LitMCharacterView({
   value,
   onQuickUpdate,
   campaignId,
+  characterId,
 }: {
   value: LitMCharacterData;
   onQuickUpdate: (v: LitMCharacterData) => void;
   campaignId?: number;
+  /** Персонаж листа — для плашки «Вы в спотлайте» у игрока (Д33, Q19). */
+  characterId?: number;
 }) {
   function updateTheme(i: number, patch: LitMThemeCard) {
     const themes = value.themes.slice();
@@ -540,6 +544,7 @@ export function LitMCharacterView({
         </div>
       )}
 
+      <LitmTableStrip campaignId={campaignId} characterId={characterId} />
       <LitmStatusCards statuses={value.statuses ?? []} onChange={(update) => onQuickUpdate({ ...value, statuses: update(value.statuses ?? []) })} />
 
       {value.themes.length > 0 && <strong>Карты Тем</strong>}

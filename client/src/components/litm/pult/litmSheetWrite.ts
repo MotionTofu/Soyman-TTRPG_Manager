@@ -4,6 +4,13 @@ import { showSaveError } from "../../../data/notices";
 import { statblockAffects, statblockListPath } from "../../../data/statblocks";
 import type { LitMCharacterData, LitMThemeCard, Statblock } from "../../../types";
 import { normalizeCharacter } from "../LitMCharacterForm";
+import { logLitm, sheetChange } from "./litmLog";
+
+/** С пульта правка идёт ещё и в лог конфликта (Q15): сессия и имя героя для строки. */
+export interface SheetLog {
+  sessionId: number;
+  name: string;
+}
 
 /**
  * Правка листа героя LitM с пульта (Q5, Q10): статусы, вычеркнутые теги.
@@ -15,9 +22,10 @@ import { normalizeCharacter } from "../LitMCharacterForm";
 export function patchLitmSheet(
   characterId: number,
   label: string,
-  fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null
+  fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null,
+  log?: SheetLog
 ): Promise<void> {
-  const run = (queue.get(characterId) ?? Promise.resolve()).then(() => patchNow(characterId, label, fields));
+  const run = (queue.get(characterId) ?? Promise.resolve()).then(() => patchNow(characterId, label, fields, log));
   queue.set(characterId, run);
   return run;
 }
@@ -27,7 +35,8 @@ const queue = new Map<number, Promise<void>>();
 async function patchNow(
   characterId: number,
   label: string,
-  fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null
+  fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null,
+  log?: SheetLog
 ): Promise<void> {
   try {
     const rows = await readResource<Statblock[]>(statblockListPath("character", characterId), { fresh: true });
@@ -39,12 +48,14 @@ async function patchNow(
     } catch {
       /* битый лист — считаем от пустого, как нормализатор */
     }
-    const patch = fields(normalizeCharacter(raw));
+    const data = normalizeCharacter(raw);
+    const patch = fields(data);
     if (!patch) return;
     await write.put(`/statblocks/${sb.id}`, { contentPatch: patch });
     afterWriteAnywhere(statblockAffects("character", characterId));
+    if (log) logLitm(log.sessionId, label, sheetChange(characterId, log.name, data, { ...data, ...patch }));
   } catch (error) {
-    showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`, () => patchLitmSheet(characterId, label, fields));
+    showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`, () => patchLitmSheet(characterId, label, fields, log));
   }
 }
 

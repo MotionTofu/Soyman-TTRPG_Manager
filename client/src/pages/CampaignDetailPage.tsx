@@ -947,6 +947,8 @@ function PlayersAndCharactersTab({
   // Персонажи кампании — тот же ключ, что у пульта.
   const characters = useResource<Character[]>(campaignPaths.characters(campaignId)).data ?? NO_CHARACTERS;
   const sheets = useCharacterSheets(characters);
+  // Спотлайт за кампанию LitM (Д33, Q15) — из «Вызовов вечера»; в других системах пусто.
+  const spotlight = useResource<Record<string, number>>(`/campaigns/${campaignId}/litm-spotlight`).data;
   const settle = useSettleDebt(campaignId);
   const setStatus = useSetCharacterStatus();
   const [addingFor, setAddingFor] = useState<number | null>(null);
@@ -1076,7 +1078,7 @@ function PlayersAndCharactersTab({
         />
       ) : (
         <CampaignDossierFiles
-          roster={roster} characters={characters} sheets={sheets} debts={debts} currency={currency} hideFinance={hideFinance}
+          roster={roster} characters={characters} sheets={sheets} spotlight={spotlight} debts={debts} currency={currency} hideFinance={hideFinance}
           addingFor={addingFor} drafts={drafts}
           onDraft={(playerId, name) => setDrafts((d) => ({ ...d, [playerId]: name }))}
           onStartAdding={setAddingFor}

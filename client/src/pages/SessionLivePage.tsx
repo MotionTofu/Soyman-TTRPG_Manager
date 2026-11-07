@@ -101,7 +101,10 @@ export function SessionLivePage() {
   // (пометка «в сцене»): запуск задевает сессию, и оно перечитывается само.
   const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;
   // Кампания LitM: вместо боя D&D — режим «Вызовы» (Д33, Q1).
-  const litm = useSessionSystemCode(sessionId) === "litm";
+  const systemCode = useSessionSystemCode(sessionId);
+  const litm = systemCode === "litm";
+  // Пока система кампании читается, режим не выбирается: иначе на миг встал бы бой D&D.
+  const systemKnown = systemCode !== undefined;
 
   const { save } = useSaveEntity<SessionDetail>("session", sessionId, {
     affects: session ? [{ path: sessionPaths.campaignSessions(session.campaign_id) }] : [],
@@ -179,6 +182,7 @@ export function SessionLivePage() {
             type="button"
             className={`d-btn d-btn--sm${combatMode ? " is-on" : ""}`}
             aria-pressed={combatMode}
+            disabled={!systemKnown}
             onClick={() => setCombatModeOpen(sessionId, !combatMode)}
           >
             {litm ? "Вызовы" : "Бой"}
@@ -211,7 +215,7 @@ export function SessionLivePage() {
       {/* Боевой режим (Q1) занимает основную область пульта: сцены, показ и
           сетку панелей. Полоса времени и управление сессией остаются. */}
       {litm && <LitmRibbonTarget sessionId={sessionId} />}
-      {combatMode && litm ? (
+      {combatMode && !systemKnown ? null : combatMode && litm ? (
         <LitmConflictMode sessionId={sessionId} systemId={campaign.system_id} settingId={campaign.setting_id} characters={characters} union={union} />
       ) : combatMode ? (
         <CombatMode sessionId={sessionId} />

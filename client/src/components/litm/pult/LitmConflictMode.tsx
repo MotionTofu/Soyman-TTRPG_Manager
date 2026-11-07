@@ -27,6 +27,8 @@ import { LitmChallengeProfile } from "../LitmChallengeProfile";
 import { LitmRich, MightMark, Rating, Status } from "../LitmBook";
 import { challengeProfile, mightOf, type LitmChallengeProfileData } from "../litmChallenge";
 import { patchLitmSheet, restoreScratched, toggleScratch } from "./litmSheetWrite";
+import { noteLitm, useLitmBattle } from "./litmLog";
+import { lastLiveTurn, undoableIds, type BattleLogLine } from "../../../combat/battleLog";
 import { limitFor, type ConsequenceAction } from "./consequence";
 import { LitmThreats } from "./LitmThreats";
 import { LitmGiveStatus, type GiveInitial, type GiveRequest, type GiveTarget } from "./LitmGiveStatus";
@@ -115,6 +117,7 @@ export function LitmConflictMode({
   union: SessionUnionRow[];
 }) {
   const ribbon = useLitmRibbon(sessionId);
+  const fight = useLitmBattle(sessionId);
   const { scene } = ribbon;
   const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data ?? null;
   const current = stage?.current ?? null;
@@ -139,15 +142,26 @@ export function LitmConflictMode({
   function spotlight(to?: number) {
     const name = characters.find((c) => c.id === (to ?? next))?.character_name ?? "";
     setIncoming([]);
-    void ribbon.setScene(`Спотлайт: ${name}`, { ...scene, spotlight: passSpotlight(sp, order, out, to) });
+    void ribbon.setScene(`Спотлайт · ${name}`, { ...scene, spotlight: passSpotlight(sp, order, out, to) }, true);
+  }
+
+  /** «Назад» (Q15): отменить последнюю передачу спотлайта и всё, что склеилось с ней. */
+  function back() {
+    const turn = lastLiveTurn(fight.log);
+    if (!turn || !undoableIds(fight.log).has(turn.id)) return;
+    setIncoming([]);
+    void fight.undo(turn);
   }
 
   const heroName = (id: number) => characters.find((c) => c.id === id)?.character_name ?? "Герой";
+  /** Правка листа героя с пульта — с записью в лог конфликта. */
+  const sheet = (id: number, label: string, fields: Parameters<typeof patchLitmSheet>[2]) =>
+    patchLitmSheet(id, label, fields, { sessionId, name: heroName(id) });
 
   async function giveHero(id: number, req: Pick<GiveRequest, "name" | "tier" | "mode" | "into">) {
     const seen: { prev?: number[] | null } = {};
     const target = req.into ?? req.name;
-    await patchLitmSheet(id, `${heroName(id)}: ${req.name}`, (d) => {
+    await sheet(id, `${heroName(id)}: ${req.name}-${req.tier}`, (d) => {
       const list = d.statuses ?? [];
       seen.prev = list.find((s) => sameStatus(s.name, target))?.marks ?? null;
       return { statuses: req.mode === "give" ? giveStatus(list, req.name, req.tier, req.into) : reduceStatus(list, target, req.tier) };
@@ -162,7 +176,7 @@ export function LitmConflictMode({
   async function mitigate(inc: Incoming, by: number) {
     const tier = inc.tier - by;
     const target = inc.into ?? inc.name;
-    await patchLitmSheet(inc.heroId, `${inc.heroName}: смягчить ${inc.name}`, (d) => {
+    await sheet(inc.heroId, `${inc.heroName}: смягчить ${inc.name}`, (d) => {
       const restored = (d.statuses ?? []).flatMap((s) => (!sameStatus(s.name, target) ? [s] : inc.prev?.length ? [{ ...s, marks: inc.prev }] : []));
       return { statuses: tier > 0 ? giveStatus(restored, inc.name, tier, inc.into) : restored };
     });
@@ -215,7 +229,7 @@ export function LitmConflictMode({
         label: t.name || "Без названия",
         children: [t.name, ...t.powerTags]
           .filter((tag) => tag && !(t.scratchedTags ?? []).includes(tag))
-          .map((tag) => ({ label: tag, onClick: () => void patchLitmSheet(id, `${heroName(id)}: тег «${tag}»`, toggleScratch(kind, i, tag)) })),
+          .map((tag) => ({ label: tag, onClick: () => void sheet(id, `${heroName(id)}: тег «${tag}»`, toggleScratch(kind, i, tag)) })),
       }))
       .filter((g) => g.children.length);
     setMenu({ x, y, title: `${heroName(id)}: вычеркнуть тег`, items: groups.length ? groups : [{ label: "Нечего вычёркивать" }] });
@@ -225,6 +239,11 @@ export function LitmConflictMode({
   function runAction(row: InitiativeEntry, a: ConsequenceAction, e: { clientX: number; clientY: number }, threat: number, edit: boolean) {
     const st = ribbon.stateOf(row);
     const settle = (next: LitmChallengeState) => (next.declaredThreat === threat ? { ...next, declaredThreat: null, declaredLead: "" } : next);
+    if (a.kind === "named") {
+      noteLitm(sessionId, `${row.name}: ${a.name}`);
+      if (st.declaredThreat === threat) void ribbon.setChallenge(row, `${row.name}: угроза разрешена`, settle(st));
+      return;
+    }
     if (a.kind === "scratch") {
       void scratchMenu(e.clientX, e.clientY);
       if (st.declaredThreat === threat) void ribbon.setChallenge(row, `${row.name}: угроза разрешена`, settle(st));
@@ -284,14 +303,16 @@ export function LitmConflictMode({
 
   // Пробел — спотлайт следующему (Q4). Перехват на захвате, как в бою D&D:
   // плеер приложения тоже слушает пробел.
-  const spotRef = useRef(spotlight);
-  spotRef.current = spotlight;
+  const spotRef = useRef({ spotlight, back });
+  spotRef.current = { spotlight, back };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.code !== "Space" || keysBlocked(e.target)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (!e.repeat) spotRef.current();
+      if (e.repeat) return;
+      if (e.shiftKey) spotRef.current.back();
+      else spotRef.current.spotlight();
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
@@ -308,7 +329,17 @@ export function LitmConflictMode({
   async function camp() {
     if (!(await confirm({ message: "Привал: снять сюжетные теги сцены и вернуть героям вычеркнутые теги силы?", confirmLabel: "Привал" }))) return;
     await ribbon.setScene("Привал", campScene(scene));
-    for (const c of characters) await patchLitmSheet(c.id, `${c.character_name}: вычеркнутое не вернулось`, restoreScratched);
+    for (const c of characters) await sheet(c.id, `${c.character_name}: вычеркнутое не вернулось`, restoreScratched);
+  }
+
+  async function endConflict() {
+    const b = fight.battle;
+    if (!b) return;
+    const ok = await confirm({
+      message: `Закончить «${b.name}»? Лог закроется, конфликт встанет в «Вызовы вечера» в «Итогах». Лента, статусы и теги остаются.`,
+      confirmLabel: "Конец",
+    });
+    if (ok) await fight.end();
   }
 
   async function addOwn() {
@@ -354,8 +385,15 @@ export function LitmConflictMode({
           <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => void addOwn()}>
             + Свой
           </button>
+          {fight.battle && (
+            <button type="button" className="d-btn d-btn--sm" onClick={() => void endConflict()}>
+              Конец
+            </button>
+          )}
         </span>
       </div>
+
+      <LitmLogStrip fight={fight} onBack={back} />
 
       {stale && (
         <div className="lp-plk" role="status">
@@ -404,6 +442,7 @@ export function LitmConflictMode({
             isNext={next === c.id && sp.current !== c.id}
             count={sp.counts[c.id] ?? 0}
             onSpotlight={() => spotlight(c.id)}
+            patch={(label, fields) => sheet(c.id, label, fields)}
             onDown={(v) => setDown((d) => (d[c.id] === v ? d : { ...d, [c.id]: v }))}
           />
         ))}
@@ -438,7 +477,7 @@ export function LitmConflictMode({
 
       <Ribbon
         currentId={null}
-        hint="Пробел — спотлайт следующему · колесо — масштаб · средняя кнопка — сдвиг · ПКМ по пустому — добавить вызов"
+        hint="Пробел — спотлайт следующему · Shift+пробел — назад · колесо — масштаб · средняя кнопка — сдвиг · ПКМ по пустому — добавить вызов"
         onContext={(x, y, nestId) => {
           if (nestId == null) return setAdding(true);
           const row = ribbon.challenges.find((e) => e.id === nestId);
@@ -469,6 +508,73 @@ export function LitmConflictMode({
       )}
       {give && <LitmGiveStatus targets={giveTargets} initial={give} onClose={() => setGive(null)} onApply={applyGive} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Лог конфликта (Q15) под полосой: свёрнут — последнее действие и «Отменить»,
+ * раскрыт — всё, новое сверху; «Назад» — последняя передача спотлайта.
+ */
+function LitmLogStrip({ fight, onBack }: { fight: ReturnType<typeof useLitmBattle>; onBack: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<number | null>(null);
+  const { battle, log } = fight;
+  if (!battle) {
+    return (
+      <div className="lp-log">
+        <span className="lp-mono">Лог</span>
+        <span className="lp-log__last">{fight.live ? "конфликт начнётся с первого действия" : "лог и «Вызовы вечера» ведутся, когда сессия идёт"}</span>
+      </div>
+    );
+  }
+  const can = undoableIds(log);
+  const turn = lastLiveTurn(log);
+  const last = [...log].reverse().find((l) => l.kind !== "turn" && !l.undone) ?? null;
+  async function undo(line: BattleLogLine) {
+    setBusy(line.id);
+    try {
+      await fight.undo(line);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="lp-log">
+      <span className="lp-mono">
+        {battle.name} · {log.length}
+      </span>
+      <span className="lp-log__last">{last ? last.text : "пока пусто"}</span>
+      {last && can.has(last.id) && (
+        <button type="button" className="d-btn d-btn--sm d-btn--ghost" disabled={busy === last.id} onClick={() => void undo(last)}>
+          Отменить
+        </button>
+      )}
+      <button type="button" className="d-btn d-btn--sm d-btn--ghost" disabled={!turn || !can.has(turn.id)} title="Shift+пробел" onClick={onBack}>
+        Назад
+      </button>
+      <button type="button" className="d-btn d-btn--sm d-btn--ghost" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "Свернуть" : "Раскрыть"}
+      </button>
+      {open && (
+        <ol className="lp-log__list" aria-label="Лог конфликта, новое сверху">
+          {[...log].reverse().map((l) => (
+            <li key={l.id} className={`lp-log__row is-${l.kind}${l.undone ? " is-undone" : ""}`}>
+              <span>
+                {l.text}
+                {l.sub && <small> — {l.sub}</small>}
+              </span>
+              {can.has(l.id) && (
+                <button type="button" className="d-btn d-btn--sm d-btn--ghost" disabled={busy === l.id} onClick={() => void undo(l)}>
+                  Отменить
+                </button>
+              )}
+              {l.undone && <small className="lp-mono">отменено</small>}
+              {!l.undone && l.blocked && <small>{l.blocked}</small>}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
@@ -662,6 +768,7 @@ function HeroCard({
   isNext,
   count,
   onSpotlight,
+  patch,
   onDown,
 }: {
   character: Character;
@@ -670,6 +777,7 @@ function HeroCard({
   isNext: boolean;
   count: number;
   onSpotlight: () => void;
+  patch: (label: string, fields: Parameters<typeof patchLitmSheet>[2]) => Promise<void>;
   onDown: (down: boolean) => void;
 }) {
   const rows = useResource<Statblock[]>(statblockListPath("character", character.id)).data ?? NO_STATBLOCKS;
@@ -689,7 +797,7 @@ function HeroCard({
   const name = character.character_name;
 
   function toggle(kind: "themes" | "storyThemes", index: number, tag: string) {
-    void patchLitmSheet(character.id, `${name}: тег «${tag}»`, toggleScratch(kind, index, tag));
+    void patch(`${name}: тег «${tag}»`, toggleScratch(kind, index, tag));
   }
 
   const themes = sheet ? [...sheet.themes.map((t, i) => ({ t, kind: "themes" as const, i })), ...sheet.storyThemes.filter((t) => t.name).map((t, i) => ({ t, kind: "storyThemes" as const, i }))] : [];
@@ -722,7 +830,7 @@ function HeroCard({
           <LitmStatusCards
             compact
             statuses={statuses}
-            onChange={(update) => void patchLitmSheet(character.id, `${name}: статусы`, (d) => ({ statuses: update(d.statuses ?? []) }))}
+            onChange={(update) => void patch(`${name}: статусы`, (d) => ({ statuses: update(d.statuses ?? []) }))}
           />
           {sheet!.backpack.length > 0 && (
             <div className="lp-sub">
