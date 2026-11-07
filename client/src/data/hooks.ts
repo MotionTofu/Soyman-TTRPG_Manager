@@ -87,10 +87,10 @@ export function useResource<T>(
  * `useResource`: составы групп, миниатюры, карточки ресурсов сессии. Страница
  * передаёт путь, а не свой `queryFn` с прямым вызовом мимо слоя.
  */
-export function resourceQuery<T>(path: string, options?: { staleMs?: number; gcMs?: number }) {
+export function resourceQuery<T>(path: string, options?: { staleMs?: number; gcMs?: number; headers?: Record<string, string> }) {
   return {
     queryKey: dataKeys.resource(path),
-    queryFn: ({ signal }: { signal: AbortSignal }) => api.get<T>(path, { signal }),
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.get<T>(path, { signal, headers: options?.headers }),
     ...(options?.staleMs !== undefined ? { staleTime: options.staleMs } : {}),
     ...(options?.gcMs !== undefined ? { gcTime: options.gcMs } : {}),
   };

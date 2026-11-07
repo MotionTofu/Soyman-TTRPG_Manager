@@ -1,3 +1,4 @@
+import "./maps-d.css";
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useAction, write } from "../data/hooks";
 import { labelled } from "../data/notices";
@@ -121,16 +122,18 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
 
   const single = target !== "object", tooMany = single && kept.length > 12;
   const percent = (value: number, side: number) => `${value / side * 100}%`;
-  return <Modal onClose={onClose} wide className="map-sheet-modal" closeOnBackdropClick={false} ariaLabel="Нарезка листа">
+  return <Modal onClose={onClose} wide className="map-sheet-modal maps-win maps-win--wide" closeOnBackdropClick={false} ariaLabel="Нарезка листа">
     <style>{".modal.modal-wide.map-sheet-modal{width:min(1500px,96vw);max-width:96vw}"}</style>
-    <h2>Лист ассетов · {step === 1 ? "шаг 1: нарезка" : "шаг 2: разбор"}</h2>
-    {step === 1 ? <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div className="stack" style={{ flex: "3 1 520px", minWidth: 300 }}>
+    <h2>Лист ассетов</h2>
+    {/* Доска Map-Win-Sheet: шаги полосой, слева лист, справа колонка 300. */}
+    <div className="maps-steps" aria-label="Шаги"><span className={step === 1 ? "is-on" : undefined} aria-current={step === 1 ? "step" : undefined}>1 · Нарезка</span><span className={step === 2 ? "is-on" : undefined} aria-current={step === 2 ? "step" : undefined}>2 · Разбор</span></div>
+    {step === 1 ? <div className="maps-win__cols maps-sheet__cols">
+      <div className="maps-win__col">
         {sheet ? <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gridTemplateRows: "18px auto" }}>
           <span />
-          <div role="button" aria-label="Поставить вертикальную линию" title="Щелчок — поставить вертикальную линию" style={{ background: "rgba(0,0,0,.15)", cursor: "col-resize" }}
+          <div role="button" aria-label="Поставить вертикальную линию" title="Щелчок — поставить вертикальную линию" style={{ background: "color-mix(in srgb, var(--ink) 15%, transparent)", cursor: "col-resize" }}
             onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); lines({ xs: [...xs, (event.clientX - box.left) / box.width * sheet.pixels.width] }); }} />
-          <div role="button" aria-label="Поставить горизонтальную линию" title="Щелчок — поставить горизонтальную линию" style={{ background: "rgba(0,0,0,.15)", cursor: "row-resize" }}
+          <div role="button" aria-label="Поставить горизонтальную линию" title="Щелчок — поставить горизонтальную линию" style={{ background: "color-mix(in srgb, var(--ink) 15%, transparent)", cursor: "row-resize" }}
             onClick={(event) => { const box = event.currentTarget.getBoundingClientRect(); lines({ ys: [...ys, (event.clientY - box.top) / box.height * sheet.pixels.height] }); }} />
           <div ref={board} style={{ position: "relative", userSelect: "none", background: "repeating-conic-gradient(#bbb 0 25%, #ddd 0 50%) 0 0 / 16px 16px" }}>
             <img src={sheet.url} alt="Лист" draggable={false} style={{ display: "block", width: "100%" }} />
@@ -149,11 +152,11 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
           </div>
         </div> : <p className="muted">Выберите картинку листа: несколько вещей на одном фоне. Фон может быть прозрачным или одноцветным.</p>}
       </div>
-      <div className="stack" style={{ flex: "1 1 260px", minWidth: 240 }}>
+      <div className="maps-win__col maps-sheet__side">
         <label>Картинка листа<input type="file" aria-label="Картинка листа" accept={IMAGES} onChange={(event) => { choose(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
         {sheet && <>
-          <small className="muted">Линии ставятся щелчком по серой полосе сверху и слева, двигаются мышью, убираются двойным щелчком. Куски обрезаются по рисунку сами; пустые отбрасываются.</small>
-          <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+          <small>Линии ставятся щелчком по серой полосе сверху и слева, двигаются мышью, убираются двойным щелчком. Куски обрезаются по рисунку сами; пустые отбрасываются.</small>
+          <div className="maps-win__pair">
             <label>Столбцов<input type="number" aria-label="Столбцов" min={1} max={40} value={cols} onChange={(event) => setCols(Math.max(1, Math.min(40, Math.round(Number(event.target.value)) || 1)))} /></label>
             <label>Строк<input type="number" aria-label="Строк" min={1} max={40} value={rows} onChange={(event) => setRows(Math.max(1, Math.min(40, Math.round(Number(event.target.value)) || 1)))} /></label>
           </div>
@@ -161,25 +164,25 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
           <button type="button" onClick={() => { setXs([]); setYs([]); setGlued([]); setPicked([]); setFound(findPieces(sheet.pixels, background, tolerance)); }}>Найти рисунки сами</button>
           <button type="button" disabled={!xs.length && !ys.length && !found} onClick={() => { lines({ xs: [], ys: [] }); setOff([]); }}>Убрать все линии</button>
           <label>Допуск фона: {tolerance}<input type="range" aria-label="Допуск фона" min={0} max={96} step={2} value={tolerance} onChange={(event) => { setTolerance(Number(event.target.value)); setFound(null); }} />
-            <small className="muted">{background ? "Фон — цвет углов листа. Больше допуск — смелее убирается фон вокруг рисунка." : "У листа прозрачный фон: убирать нечего."}</small></label>
+            <small>{background ? "Фон — цвет углов листа. Больше допуск — смелее убирается фон вокруг рисунка." : "У листа прозрачный фон: убирать нечего."}</small></label>
           <button type="button" disabled={picked.length < 2} onClick={glue}>Склеить отмеченные ({picked.length})</button>
           {glued.length > 0 && <button type="button" onClick={() => setGlued([])}>Расклеить всё</button>}
-          <small className="muted">Щелчок по куску выключает его. Shift+щелчок отмечает куски для склейки — для предмета, который линия разрезала.</small>
-          {sheet.shrunk && <small className="muted">Лист крупнее {SHEET_SIDE} точек — ужат до {sheet.pixels.width}×{sheet.pixels.height}.</small>}
-          <p role="status">Кусков: {kept.length}{pieces.length > kept.length ? `, выключено ${pieces.length - kept.length}` : ""}</p>
+          <small>Щелчок по куску выключает его. Shift+щелчок отмечает куски для склейки — для предмета, который линия разрезала.</small>
+          {sheet.shrunk && <small>Лист крупнее {SHEET_SIDE} точек — ужат до {sheet.pixels.width}×{sheet.pixels.height}.</small>}
+          <p role="status" className="maps-sheet__count">Кусков: {kept.length}{pieces.length > kept.length ? `, выключено ${pieces.length - kept.length}` : ""}</p>
         </>}
       </div>
     </div> : <div className="stack">
-      <div className="row" style={{ gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+      <div className="maps-win__row">
         <label>Во что превратить<select aria-label="Во что превратить куски" value={target} onChange={(event) => setTarget(event.target.value as Target)}>{TARGETS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>{single ? "Название вещи" : "Имя листа"}<input aria-label="Имя листа" value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} /></label>
         <label>Раздел<input aria-label="Раздел" value={section} maxLength={40} onChange={(event) => setSection(event.target.value)} /></label>
         <label>Теги через запятую<input aria-label="Теги" value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
       </div>
-      {target === "scatter" ? <div className="row" style={{ gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+      {target === "scatter" ? <div className="maps-win__row">
         <label>Размер знака, клеток<input type="number" min={0.25} max={8} step={0.25} value={size} onChange={(event) => setSize(Math.max(0.25, Math.min(8, Number(event.target.value) || 1)))} /></label>
         <label>Густота, знаков на клетку<input type="number" min={0.05} max={4} step={0.05} value={density} onChange={(event) => setDensity(Math.max(0.05, Math.min(4, Number(event.target.value) || 0.8)))} /></label>
-      </div> : <div className="row" style={{ gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+      </div> : <div className="maps-win__row">
         <label>Ширина, клеток<input type="number" aria-label="Ширина для всех" min={0.5} max={16} step={0.5} value={bulkW} onChange={(event) => setBulkW(cellsOf(Number(event.target.value)))} /></label>
         <label>Высота, клеток<input type="number" aria-label="Высота для всех" min={0.5} max={16} step={0.5} value={bulkH} onChange={(event) => setBulkH(cellsOf(Number(event.target.value)))} /></label>
         {!single && <>
@@ -188,9 +191,9 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
         </>}
       </div>}
       {tooMany && <p role="alert">У одной вещи не больше 12 картинок, а кусков {kept.length}. Вернитесь к нарезке и выключите лишние.</p>}
-      <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-start", maxHeight: "58vh", overflow: "auto" }}>
-        {kept.map((piece, index) => { const own = meta[piece.key] ?? {}, src = thumbs.get(piece.key) ?? null; return <div key={piece.key} className="stack" style={{ width: single ? 96 : 200, gap: 4, padding: 6, border: "1px solid var(--line, currentColor)" }}>
-          {single ? <div style={{ height: 84, background: "var(--paper, #f4efe2)" }}>{src && <img src={src} alt={`Кусок ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</div> : <>
+      <div className="maps-sheet__pieces">
+        {kept.map((piece, index) => { const own = meta[piece.key] ?? {}, src = thumbs.get(piece.key) ?? null; return <div key={piece.key} className={`maps-sheet__piece${single ? " is-single" : ""}`}>
+          {single ? <div className="maps-sheet__art">{src && <img src={src} alt={`Кусок ${index + 1}`} />}</div> : <>
             {sizeGrid(src, own.w ?? 1, own.h ?? 1, reference)}
             <label className="row" style={{ gap: 6 }}><input type="checkbox" aria-label={`Отметить кусок ${index + 1}`} checked={!!own.checked} onChange={(event) => patch(piece.key, { checked: event.target.checked })} />
               <input aria-label={`Имя куска ${index + 1}`} value={nameOf(piece, index)} maxLength={80} style={{ minWidth: 0, flex: 1 }} onChange={(event) => patch(piece.key, { name: event.target.value })} /></label>
@@ -204,7 +207,7 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
       </div>
     </div>}
     <div className="modal-footer row">
-      {progress && <span role="status" className="muted">{progress}</span>}
+      {progress && <span role="status" className="maps-win__left maps-win__note">{progress}</span>}
       <button onClick={onClose}>Отмена</button>
       {step === 2 && <button onClick={() => setStep(1)}>← К нарезке</button>}
       {step === 1 ? <button className="primary" disabled={!kept.length} onClick={() => setStep(2)}>Дальше: разбор ({kept.length})</button>

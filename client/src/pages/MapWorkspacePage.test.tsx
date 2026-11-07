@@ -36,7 +36,7 @@ describe("MapWorkspacePage boundaries", () => {
   it("a server without revisions cannot enable the new writer", async () => {
     mocks.read.mockResolvedValue(record({ revision: undefined })); show();
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("безопасное сохранение"));
-    fireEvent.click(screen.getByTitle("Карта"));
+    fireEvent.click(screen.getByTitle("Действия карты"));
     expect((screen.getByRole("button", { name: "Сохранить сейчас" }) as HTMLButtonElement).disabled).toBe(true);
     expect(mocks.save).not.toHaveBeenCalled();
   });

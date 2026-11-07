@@ -1,3 +1,4 @@
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { randomUUID } from "../utils/uuid";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -70,6 +71,9 @@ const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки"
 const LAYER_CREATORS = { mask: createTerrainMaskLayer, path: createPathLayer, scatter: createScatterLayer, terrain: createTerrainLayer,
   gameplay: createGameplayLayer, label: createLabelLayer, object: createObjectLayer, reference: createReferenceLayer };
 
+/** Узкий экран — телефон: рабочее место только показывает карту (гриллинг «Д» 2026-11-06, Q6). */
+const VIEW_ONLY_QUERY = "(max-width: 700px)";
+
 export function MapWorkspacePage() {
   const { id } = useParams(), mapId = Number(id);
   const { user } = useCurrentUser();
@@ -108,7 +112,8 @@ export function MapWorkspacePage() {
   const workspace = useMapWorkspace();
   const [confirmDialog, confirm] = useConfirm();
 
-  const doc = useWorkspaceDocument({ mapId, isGm: user?.role === "gm", leaving,
+  const viewOnly = useMediaQuery(VIEW_ONLY_QUERY);
+  const doc = useWorkspaceDocument({ mapId, isGm: user?.role === "gm", viewOnly, leaving,
     isEditing: () => !!gesture.current && gesture.current.type !== "pan",
     onReset: () => { gesture.current = null; setSelection(null); setLabel(null); setEntityPreview(null); setDragGhost(null); setGeneratorOpen(false); },
     onLoaded: (record, loaded) => {
@@ -499,7 +504,7 @@ export function MapWorkspacePage() {
     : autosave.status.kind === "conflict" ? "Карта изменена в другом окне. Сохранение остановлено; скачайте свои правки перед повторным открытием."
       : autosave.status.kind === "error" ? "Не удалось сохранить карту. Правки остаются в редакторе." : null);
 
-  return <div className="workspace-editor" aria-busy={leaving} data-catalog={CATALOG_TOOLS.includes(tool) || undefined}>
+  return <div className="workspace-editor" aria-busy={leaving} data-catalog={CATALOG_TOOLS.includes(tool) || undefined} data-view-only={viewOnly || undefined}>
     <WorkspaceToolRail kind={mapKind(map.scale)} tool={tool} locked={toolsLocked} onChoose={onChooseTool} />
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
@@ -525,6 +530,7 @@ export function MapWorkspacePage() {
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active, mapKind(map.scale))}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}{tool === "ruler" && <span>Тяните — замер</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
           offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
+        {viewOnly && <div className="workspace-view-only" role="status"><div><b>Только просмотр</b><span>Правка — на компьютере</span></div>{map.cell_lore && <span className="d-mono">1 клетка = {map.cell_lore}</span>}</div>}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>

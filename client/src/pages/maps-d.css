@@ -1,0 +1,177 @@
+/* Блок «Редактор карт» в «Д» (гриллинг 2026-11-06, Q1–Q18; доски Map-* на
+   странице холста «Редактор карт»). Списки и окна; рамка рабочего места —
+   в maps/workspace/map-workspace.css. */
+
+/* Строка фильтров списка: метки машинописью, выбранная — заливка чернилами. */
+.maps-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-6); }
+.maps-filters > .d-mono { margin: 0 var(--sp-2) 0 var(--sp-4); font-size: var(--fs-micro); text-transform: uppercase; }
+.maps-filters > .d-mono:first-child { margin-left: 0; }
+.maps-gch {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-1) var(--sp-4);
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+button.maps-gch { cursor: pointer; }
+button.maps-gch:hover { background: var(--tab); }
+.maps-gch.is-on,
+.maps-gch.is-on:hover { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+/* Пустая обложка карты — знак раздела крупно. */
+.reg-tile__cover.is-empty > .nav-icon { width: 40px; height: 40px; }
+
+/* ── Наборы ассетов: список (доска Map-Packs) ── */
+/* Обложка — четыре первые вещи на светлой подложке: рисунок вещей вне тем (Q3). */
+.reg-tile__cover.is-empty.maps-pack-tile__cover { background: #EEE6DE; }
+.maps-pack-cover { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; padding: var(--sp-4); }
+.maps-pack-cover img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.maps-pack-tile__cover > .nav-icon { width: 40px; height: 40px; color: #5A5650; }
+/* «⋯» набора — своё меню без метки сущности: показываем по наведению сами. */
+:is(.maps-pack-tile, .maps-pack-row):is(:hover, :focus-within) .entity-dots { opacity: 1; }
+
+/* ── Открытый набор (доска Map-Pack) ── */
+.maps-pack-page__head { align-items: flex-end; gap: var(--sp-6); }
+.maps-pack-page__title { margin: 0; font-family: var(--font-title); font-size: var(--fs-h1); font-weight: 400; line-height: 1; }
+.maps-pack-page__sub { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--fs-data); }
+.maps-pack-page__head > .page-head__actions { margin-left: auto; align-items: center; gap: var(--sp-4); }
+.maps-pack-page__tabs { margin-top: var(--sp-6); }
+.maps-pack-page__tabs > button.is-soon { opacity: .55; cursor: default; }
+.maps-pack-page__sheet { display: grid; gap: var(--sp-7); }
+.maps-pack-page__empty { margin: 0; color: var(--muted); font-size: var(--fs-data); line-height: 1.45; }
+.maps-pack-section > .d-gh { margin-bottom: var(--sp-5); }
+.maps-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--sp-5); }
+.maps-item { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: 0; background: var(--sheet); color: var(--ink); text-align: left; }
+button.maps-item { cursor: pointer; }
+button.maps-item:hover { border-color: var(--edge); }
+/* Подложка картинки вещи — светлая в обеих темах: вещи нарисованы на бумаге. */
+.maps-item__art { position: relative; display: grid; place-items: center; aspect-ratio: 1; border-bottom: 1px solid var(--line); background: #EEE6DE; }
+.maps-item__art > img { position: absolute; inset: 9%; width: 82%; height: 82%; object-fit: contain; }
+.maps-item__art.is-surface > img { inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.maps-item__name { display: grid; gap: 2px; padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.maps-item__name b { font-size: var(--fs-data); font-weight: 600; overflow-wrap: anywhere; }
+.maps-item__name small { color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: .04em; }
+.maps-item__variants { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; padding: 0 var(--sp-2); background: var(--surface); color: var(--on-surface); font-family: var(--font-mono); font-size: var(--fs-micro); }
+
+/* «⋯» и «+ Добавить ▾» шапки набора — меню на <details>. */
+.maps-head-menu { position: relative; }
+.maps-head-menu > summary { list-style: none; cursor: pointer; }
+.maps-head-menu > summary::-webkit-details-marker { display: none; }
+.maps-head-menu__popup { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; display: grid; min-width: 260px; padding: var(--sp-3) 0; border: var(--edge-width) solid var(--edge); background: var(--sheet); box-shadow: 6px 6px 0 color-mix(in srgb, var(--scrim) 25%, transparent); }
+.maps-head-menu__popup > button { display: grid; gap: 1px; padding: var(--sp-3) var(--sp-5); border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ink); font-size: var(--fs-data); text-align: left; cursor: pointer; }
+.maps-head-menu__popup > button:hover { background: var(--tab); box-shadow: inset 3px 0 0 var(--ink); }
+.maps-head-menu__popup > button b { font-weight: 500; }
+.maps-head-menu__popup > button small { color: var(--muted); font-size: var(--fs-meta); }
+.maps-head-menu__popup > button.is-danger { color: var(--danger); }
+.maps-head-menu__popup > hr { width: 100%; margin: var(--sp-2) 0; border: 0; border-top: 1px solid var(--line); }
+@media (max-width: 700px) {
+  .maps-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+  .maps-pack-page__head > .page-head__actions { margin-left: 0; width: 100%; }
+  .maps-pack-page__tabs { overflow-x: auto; flex-wrap: nowrap; }
+}
+
+/* ── Окна блока (пачка 3, доски Map-Win-*): каркас — общий Modal, внутри —
+   подписи машинописью над полем, поля с кромкой, переключатели строкой. ── */
+.modal.maps-win { display: flex; flex-direction: column; gap: var(--sp-5); }
+.modal.maps-win--wide { width: min(900px, calc(100vw - 32px)); max-width: 900px; }
+.maps-win .stack { gap: var(--sp-5); }
+.maps-lbl,
+.maps-win fieldset > legend,
+.maps-win label:not(.maps-check, .maps-kind, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.maps-lbl { display: block; margin-bottom: var(--sp-3); }
+.maps-win label:not(.maps-check, .maps-kind, :has(> input[type="checkbox"]), :has(> input[type="radio"])) { display: grid; gap: var(--sp-3); min-width: 0; }
+.maps-win label > :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 var(--sp-5);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--ink);
+  font: 400 var(--fs-data) var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.maps-win label > textarea { height: auto; padding: var(--sp-3) var(--sp-5); }
+.maps-win label > input[type="range"] { width: 100%; accent-color: var(--ink); }
+.maps-win label:has(> input[type="checkbox"]),
+.maps-win label:has(> input[type="radio"]):not(.maps-kind) { display: flex; align-items: center; gap: var(--sp-4); color: var(--ink); font-size: var(--fs-data); }
+.maps-win fieldset { display: grid; gap: var(--sp-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.maps-win fieldset > legend { margin-bottom: var(--sp-3); padding: 0; }
+.maps-win small { color: var(--muted); }
+.maps-win .modal-footer { justify-content: flex-end; gap: var(--sp-4); margin-top: var(--sp-2); padding-top: var(--sp-5); border-top: 1px solid var(--line); }
+.maps-win__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-8); }
+.maps-win__col { display: grid; align-content: start; gap: var(--sp-5); min-width: 0; }
+.maps-win__pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: end; }
+.maps-win__presets { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.maps-win__seg { display: flex; }
+.maps-win__seg > button { flex: 1; }
+.maps-win__note { margin: 0; color: var(--muted); font-size: var(--fs-meta); line-height: 1.4; }
+.maps-win__error { margin: 0; color: var(--danger); font-size: var(--fs-data); }
+.maps-gch--add { border-style: dashed; color: var(--muted); }
+/* Вид карты — карточкой с пояснением; выбранная — кислотный край (доска Map-Win-New). */
+.maps-kind { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--sp-4); align-items: start; padding: var(--sp-4) var(--sp-5); border: 1.5px solid var(--line); cursor: pointer; }
+.maps-kind.is-on { border-color: var(--edge); box-shadow: inset 4px 0 0 var(--acid); }
+.maps-kind > input { margin: 2px 0 0; accent-color: var(--ink); }
+.maps-kind b { display: block; color: var(--ink); font-size: var(--fs-data); font-weight: 600; }
+.maps-kind small { display: block; margin-top: 2px; font-size: var(--fs-meta); line-height: 1.35; }
+.maps-check--row { padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.maps-check--row > span { display: grid; }
+.maps-check--row small { font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: .04em; text-transform: uppercase; }
+.maps-win__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-4); }
+.maps-win__row > label { flex: 1 1 160px; }
+/* Действие слева в подвале окна: «Убрать из набора», ход сохранения. */
+.maps-win .modal-footer > .maps-win__left { margin-right: auto; }
+.maps-win .modal-footer > button.is-danger:not(.primary) { color: var(--danger); }
+/* Кнопки внутри колонки окна — во всю ширину, вид вторичной кнопки «Д». */
+.maps-win .maps-win__col > button:not(.primary) { width: 100%; }
+
+/* Окно объекта (доска Map-Win-Object): варианты и виды по сторонам плитками. */
+.maps-thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.maps-thumb { position: relative; display: grid; place-items: center; width: 64px; height: 64px; border: 1.5px solid var(--edge); background: #EEE6DE; color: #5A5650; }
+.maps-thumb { overflow: hidden; }
+.maps-thumb img { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); object-fit: contain; }
+.maps-thumb__x { position: absolute; top: 0; right: 0; width: 20px; height: 20px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--ink); box-shadow: none; color: var(--sheet); font-size: var(--fs-meta); line-height: 1; cursor: pointer; }
+.maps-thumb__x:disabled { display: none; }
+.maps-thumb--add { border-style: dashed; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
+.maps-thumb--add:hover { background: var(--tab); }
+.maps-thumb--side { width: 78px; border-style: dashed; }
+.maps-thumb--side.is-filled { border-style: solid; }
+.maps-thumb--side > label { display: grid; place-items: center; width: 100%; height: 100%; cursor: pointer; }
+.maps-thumb--side > label > span { padding: 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: .04em; text-align: center; text-transform: uppercase; }
+
+/* Окно листа (доска Map-Win-Sheet): шаги полосой, лист слева, колонка 300 справа. */
+.maps-steps { display: flex; border-bottom: 1px solid var(--line); }
+.maps-steps > span { padding: var(--sp-3) var(--sp-5); color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: .08em; text-transform: uppercase; }
+.maps-steps > span.is-on { color: var(--ink); box-shadow: inset 0 -3px 0 var(--acid); }
+.maps-win__cols.maps-sheet__cols { grid-template-columns: minmax(0, 1fr) 300px; }
+.maps-sheet__count { margin: 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; }
+.maps-sheet__pieces { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-4); max-height: 58vh; overflow: auto; }
+.maps-sheet__piece { display: grid; gap: var(--sp-2); width: 200px; padding: var(--sp-3); border: 1px solid var(--line); background: var(--sheet); }
+.maps-sheet__piece.is-single { width: 96px; }
+.maps-sheet__piece input:not([type="checkbox"]) { height: 30px; min-width: 0; padding: 0 var(--sp-3); border: 1px solid var(--edge); border-radius: 0; background: var(--field); color: var(--ink); }
+.maps-sheet__art { height: 84px; background: #EEE6DE; }
+.maps-sheet__art > img { width: 100%; height: 100%; object-fit: contain; }
+@media (max-width: 700px) {
+  .maps-win__cols, .maps-win__cols.maps-sheet__cols { grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
+}
+.maps-win :is(.modal-footer, .workspace-generator-actions, .maps-win__col, .maps-win__row) > button:not(.primary, .maps-thumb__x) { height: 40px; padding: 0 var(--sp-6); border: var(--edge-width) solid var(--edge); border-radius: 0; background: var(--sheet); box-shadow: none; color: var(--ink); font-family: var(--font-display); font-size: var(--fs-meta); letter-spacing: .08em; text-transform: uppercase; }
+.maps-win :is(.modal-footer, .workspace-generator-actions, .maps-win__col, .maps-win__row) > button:not(.primary, .maps-thumb__x):hover:not(:disabled) { background: var(--tab); }
+.maps-win .workspace-generator-settings button { height: 30px; padding: 0 var(--sp-4); border: 1.5px solid var(--edge); border-radius: 0; background: var(--sheet); box-shadow: none; color: var(--ink); font-size: var(--fs-meta); }
+.maps-win .workspace-generator-settings button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+.maps-win .workspace-generator-preview canvas { border: 1.5px solid var(--edge); }
+.maps-win .workspace-generator-preview p { color: var(--ink-2); }

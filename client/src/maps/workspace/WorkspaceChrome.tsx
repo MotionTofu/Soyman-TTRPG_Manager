@@ -1,3 +1,4 @@
+import { setPerformanceMeter, usePerformanceMeter } from "./performanceSwitch";
 import { Fragment, memo } from "react";
 import { Link } from "react-router-dom";
 import type { MapDocumentV6, MapDrawingStyle, MapWaterLook } from "@shared/maps/core";
@@ -56,8 +57,9 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   /** Сеттинг карты: по его жанрам каталог подбирает наборы. */
   setting: number | null; settings: readonly { id: number; name: string }[]; settingLocked: boolean; onSetting: (id: number | null) => void;
 }) {
+  const perf = usePerformanceMeter();
   return <header className="workspace-editor-header">
-    <Link to="/maps" className="workspace-back">← Все карты</Link>
+    <Link to="/maps" className="workspace-back">← Карты</Link>
     <div className="workspace-title"><h1 title={mapName}>{mapName}</h1><span aria-live="polite">{status}</span></div>
     {/* Оформление — как карта нарисована; что на неё можно поставить, решают наборы в каталоге. */}
     <nav className="workspace-seg" aria-label="Оформление карты">
@@ -80,7 +82,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         </fieldset>
       </WorkspaceMenu>
       <WorkspaceMenu label="Эффекты ▾" title="Эффекты" className="workspace-effects-menu">
-        {!gl && <p>Эффекты работают в новой отрисовке: «Карта ▾ → Новая отрисовка».</p>}
+        {!gl && <p>Эффекты видны в новой отрисовке: «⋯ → Новая отрисовка».</p>}
         {["Печать", "Погода"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
           {EFFECT_NAMES.filter((name) => EFFECTS[name].group === group).map((name) => { const state = effects[name]; return <Fragment key={name}>
             <label><input type="checkbox" checked={state.on} onChange={event => onEffect(name, { ...state, on: event.target.checked })} />{EFFECTS[name].label}</label>
@@ -91,7 +93,12 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         </fieldset>)}
         <button type="button" disabled={!gl} onClick={onEffectsReset}>Вернуть как было</button>
       </WorkspaceMenu>
-      <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
+      <WorkspaceMenu label="⋯" title="Действия карты" className="workspace-map-menu">
+        <button type="button" data-close disabled={generatorLocked} onClick={onGenerator}>Быстрое подземелье…</button>
+        <button type="button" data-close disabled={saveLocked} onClick={onSave}>Сохранить сейчас</button>
+        <button type="button" data-close onClick={onBackup}>Скачать копию</button>
+        <button type="button" data-close onClick={onPicture}>Скачать картинку</button>
+        {classicLink && <Link to={classicLink} data-close>Классический редактор</Link>}
         <fieldset disabled={styleLocked}><legend>Вода</legend>
           <label>Вид воды<select aria-label="Вид воды" value={water ?? ""} onChange={(event) => onWater((event.target.value || undefined) as MapWaterLook | undefined)}>
             <option value="">Картинкой, без движения</option>
@@ -122,12 +129,8 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
           </select></label>
           <small>По жанрам сеттинга каталог подбирает близкие наборы.</small>
         </fieldset>
-        <button type="button" data-close disabled={generatorLocked} onClick={onGenerator}>Быстрое подземелье…</button>
-        <button type="button" data-close disabled={saveLocked} onClick={onSave}>Сохранить сейчас</button>
-        <button type="button" data-close onClick={onBackup}>Скачать копию</button>
-        <button type="button" data-close onClick={onPicture}>Скачать картинку</button>
         <label><input type="checkbox" checked={gl} onChange={event => onGl(event.target.checked)} />Новая отрисовка (проба)</label>
-        {classicLink && <Link to={classicLink} data-close>Классический редактор</Link>}
+        <label title="Частота кадров и время отрисовки — для проверки скорости"><input type="checkbox" checked={perf} onChange={event => setPerformanceMeter(event.target.checked)} />Замер скорости</label>
       </WorkspaceMenu>
     </div>
   </header>;

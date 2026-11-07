@@ -267,6 +267,8 @@ function App() {
               <Route path="/graph/:view" element={<GraphPage />} />
               <Route path="/maps" element={<MapsListPage />} />
               <Route path="/maps/packs" element={<MapPacksPage />} />
+              <Route path="/maps/packs/builtin/:builtinId" element={<MapPacksPage />} />
+              <Route path="/maps/packs/:packId" element={<MapPacksPage />} />
               <Route path="/maps/:id" element={<MapEditorPage />} />
               <Route path="/maps/:id/workspace" element={<MapWorkspacePage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />

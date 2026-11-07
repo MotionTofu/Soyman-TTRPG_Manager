@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import "./maps-d.css";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { NavIcon } from "../components/NavIcons";
+import { ListPage } from "../components/ListPage";
+import { RegMeta, RegTable, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
+import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
+import { EmptyState } from "../components/EmptyState";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
@@ -97,7 +104,7 @@ function PackDialog({ pack, onClose }: { pack: OwnPack | null; onClose: (saved?:
   }
   if (picking) return <GenrePicker selected={genres} title="Жанры набора" hint="До трёх жанров: по ним набор находится при создании карты и в каталоге."
     onSave={(next) => { setGenres(next); setPicking(false); }} onClose={() => setPicking(false)} />;
-  return <Modal onClose={() => onClose()} ariaLabel={pack ? "Набор ассетов" : "Новый набор ассетов"}>
+  return <Modal onClose={() => onClose()} className="maps-win" ariaLabel={pack ? "Набор ассетов" : "Новый набор ассетов"}>
     <h2>{pack ? "Набор ассетов" : "Новый набор ассетов"}</h2>
     <div className="stack">
       <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Например, Порт Оскольд" /></label>
@@ -178,59 +185,62 @@ function ObjectDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
     if (await run(labelled("Объект не убран", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
   }
 
-  return <Modal onClose={onClose} wide ariaLabel={item ? `Объект «${item.name}»` : "Новый объект"}>
-    <h2>{item ? "Объект набора" : "Новый объект"}</h2>
-    <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
-        <SizeGrid src={shown} w={w} h={h} reference={REFERENCE[pack.kinds[0] ?? "tactical"]} />
-        <div className="row" style={{ gap: 8 }}>
+  return <Modal onClose={onClose} wide className="maps-win maps-win--wide" ariaLabel={item ? `Объект «${item.name}»` : "Новый объект"}>
+    <h2>{item ? `Объект «${item.name}»` : "Новый объект"}</h2>
+    {/* Доска Map-Win-Object: слева — вещь на сетке рядом с меркой, справа — поля. */}
+    <div className="maps-win__cols">
+      <div className="maps-win__col">
+        <div><span className="maps-lbl">На сетке</span>
+          <SizeGrid src={shown} w={w} h={h} reference={REFERENCE[pack.kinds[0] ?? "tactical"]} /></div>
+        <p className="maps-win__note">Мерка «{REFERENCE[pack.kinds[0] ?? "tactical"]}» — одна клетка. Размер задаётся числом справа.</p>
+        {small && <p className="maps-win__note" role="status">Картинка мельче стандарта ({PACK_CELL_PX} точек на клетку): на крупном приближении будет мягкой.</p>}
+      </div>
+      <div className="maps-win__col">
+        {!item && <label>Картинка<input type="file" accept={IMAGES} onChange={(event) => choose(event.target.files?.[0] ?? null)} /></label>}
+        <div className="maps-win__pair">
+          <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
+          <label>Раздел<input value={section} maxLength={40} list="map-pack-sections" placeholder="Например, Мебель" onChange={(event) => setSection(event.target.value)} /></label>
+        </div>
+        <datalist id="map-pack-sections">{sections.map((entry) => <option key={entry} value={entry} />)}</datalist>
+        <label>Теги через запятую<input value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
+        <div className="maps-win__pair">
           <label>Ширина, клеток<input type="number" min={0.5} max={16} step={0.5} value={w} onChange={(event) => width(Number(event.target.value))} /></label>
           <label>Высота, клеток<input type="number" min={0.5} max={16} step={0.5} value={h} onChange={(event) => height(Number(event.target.value))} /></label>
         </div>
-        <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Держать пропорции картинки</label>
-        {small && <p className="muted" role="status">Картинка мельче стандарта ({PACK_CELL_PX} точек на клетку): на крупном приближении будет мягкой.</p>}
-      </div>
-      <div className="stack" style={{ flex: "1 1 280px", minWidth: 240 }}>
-        {!item && <label>Картинка<input type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => choose(event.target.files?.[0] ?? null)} /></label>}
-        <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
-        <label>Раздел<input value={section} maxLength={40} list="map-pack-sections" placeholder="Например, Мебель" onChange={(event) => setSection(event.target.value)} /></label>
-        <datalist id="map-pack-sections">{sections.map((entry) => <option key={entry} value={entry} />)}</datalist>
-        <label>Теги через запятую<input value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
+        <label><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Держать пропорции картинки</label>
         {item && <>
-          <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={blocks} onChange={(event) => setBlocks(event.target.checked)} />Преграждает обзор</label>
+          <label><input type="checkbox" checked={blocks} onChange={(event) => setBlocks(event.target.checked)} />Преграждает обзор</label>
           <label>Источник света, радиус в клетках<input type="number" min={0} max={60} step={0.5} value={light} placeholder="не светит" onChange={(event) => setLight(event.target.value)} /></label>
-          <small className="muted">Обзор и свет начнут работать вместе со светом и туманом.</small>
-          <div className="stack">
-            <strong>Варианты</strong>
-            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              {variants.map((image, index) => { const url = ownImageSrc(ownImageId(image)); return <span key={image.id} style={{ position: "relative", width: 64, height: 64, border: "2px solid currentColor" }}>
-                {url && <img src={url} alt={`Вариант ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
-                <button type="button" disabled={variants.length < 2} title="Убрать вариант" aria-label={`Убрать вариант ${index + 1}`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }}
+          <small>Обзор и свет начнут работать вместе со светом и туманом.</small>
+          <div>
+            <span className="maps-lbl">Варианты · {variants.length}</span>
+            <div className="maps-thumbs">
+              {variants.map((image, index) => { const url = ownImageSrc(ownImageId(image)); return <span key={image.id} className="maps-thumb">
+                {url && <img src={url} alt={`Вариант ${index + 1}`} />}
+                <button type="button" className="maps-thumb__x" disabled={variants.length < 2} title="Убрать вариант" aria-label={`Убрать вариант ${index + 1}`}
                   onClick={() => removeImage(image.id, "Вариант не убран")}>×</button>
               </span>; })}
+              <label className="maps-thumb maps-thumb--add" title="Добавить вариант">+<input type="file" hidden aria-label="Добавить вариант" accept={IMAGES} onChange={(event) => { void addVariant(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
             </div>
-            <label>Добавить вариант<input type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { void addVariant(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
-            <small className="muted">Каталог ставит случайный вариант; конкретный можно выбрать в полосе вариантов.</small>
+            <small>Каталог ставит случайный вариант; конкретный можно выбрать в полосе вариантов.</small>
           </div>
-          <div className="stack">
-            <strong>Виды по сторонам</strong>
-            <small className="muted">Для предметов, нарисованных «с лица»: трон, шкаф, стул. Основная картинка — предмет без поворота. Добавьте, каким он виден после поворота, — и вместо кручения картинки карта возьмёт нужный вид. Без вида картинка просто поворачивается.</small>
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {OWN_SIDES.map(([side, label]) => { const image = sideImage(item, side), url = image ? ownImageSrc(ownImageId(image)) : null; return <div key={side} className="stack" style={{ width: 96, gap: 4 }}>
-                <span style={{ position: "relative", width: 64, height: 64, border: "2px dashed currentColor", display: "block" }}>
-                  {url && <img src={url} alt={label} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
-                  {image && <button type="button" title="Убрать вид" aria-label={`Убрать вид «${label}»`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }} onClick={() => removeImage(image.id, "Вид не убран")}>×</button>}
-                </span>
-                <label style={{ fontSize: "var(--fs-meta)" }}>{label}<input type="file" aria-label={`Вид: ${label.toLocaleLowerCase("ru")}`} accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { void addSide(side, event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
-              </div>; })}
+          <div>
+            <span className="maps-lbl">Виды по сторонам — для вещей, которые смотрят в комнату</span>
+            <div className="maps-thumbs">
+              {OWN_SIDES.map(([side, label]) => { const image = sideImage(item, side), url = image ? ownImageSrc(ownImageId(image)) : null; return <span key={side} className={`maps-thumb maps-thumb--side${url ? " is-filled" : ""}`}>
+                <label title={`Вид: ${label.toLocaleLowerCase("ru")}`}>{url ? <img src={url} alt={label} /> : <span>{label}</span>}
+                  <input type="file" hidden aria-label={`Вид: ${label.toLocaleLowerCase("ru")}`} accept={IMAGES} onChange={(event) => { void addSide(side, event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
+                {image && <button type="button" className="maps-thumb__x" title="Убрать вид" aria-label={`Убрать вид «${label}»`} onClick={() => removeImage(image.id, "Вид не убран")}>×</button>}
+              </span>; })}
             </div>
+            <small>Для предметов, нарисованных «с лица»: трон, шкаф, стул. Основная картинка — без поворота; добавленный вид карта возьмёт вместо кручения картинки.</small>
           </div>
         </>}
-        {note && <p className="muted" role="status">{note}</p>}
+        {note && <p className="maps-win__note" role="status">{note}</p>}
       </div>
     </div>
     <div className="modal-footer row">
-      {item && <button onClick={remove}>Убрать из набора</button>}
+      {item && <button className="maps-win__left is-danger" onClick={remove}>Убрать из набора</button>}
       <button onClick={onClose}>{item ? "Закрыть" : "Отмена"}</button>
       <button className="primary" disabled={!name.trim() || (!item && !file)} onClick={save}>{item ? "Сохранить" : "Добавить"}</button>
     </div>
@@ -321,7 +331,7 @@ function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIt
   }
   const picker = <label>{item ? "Добавить вариант" : "Картинка"}<input type="file" aria-label={item ? "Картинка варианта" : "Картинка поверхности"} accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { choose(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>;
 
-  return <Modal onClose={onClose} wide ariaLabel={item ? `Поверхность «${item.name}»` : "Новая поверхность"}>
+  return <Modal onClose={onClose} wide className="maps-win maps-win--wide" ariaLabel={item ? `Поверхность «${item.name}»` : "Новая поверхность"}>
     <h2>{item ? "Поверхность набора" : "Новая поверхность"}</h2>
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
@@ -434,7 +444,7 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
     <button type="button" disabled={!removable} title="Убрать" aria-label={`Убрать: ${label}`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }} onClick={() => removeImage(image.id)}>×</button>
   </span>;
 
-  return <Modal onClose={onClose} wide ariaLabel={item ? `${title} «${item.name}»` : `Новая ${title.toLocaleLowerCase("ru")}`}>
+  return <Modal onClose={onClose} wide className="maps-win maps-win--wide" ariaLabel={item ? `${title} «${item.name}»` : `Новая ${title.toLocaleLowerCase("ru")}`}>
     <h2>{item ? `${title} набора` : door ? "Новый проём" : scatter ? "Новая россыпь" : "Новая линия или переправа"}</h2>
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
@@ -503,7 +513,7 @@ function LiquidDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
     if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В меню жидкостей её не будет. На картах, где она уже есть, она останется — такой, какой была.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
     if (await run(labelled("Не убрано", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
   }
-  return <Modal onClose={onClose} wide ariaLabel={item ? `Жидкость «${item.name}»` : "Новая жидкость"}>
+  return <Modal onClose={onClose} wide className="maps-win maps-win--wide" ariaLabel={item ? `Жидкость «${item.name}»` : "Новая жидкость"}>
     <h2>{item ? "Жидкость набора" : "Новая жидкость"}</h2>
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div className="stack" style={{ flex: "1 1 260px", minWidth: 240 }}>
@@ -533,31 +543,130 @@ function itemNote(item: OwnPackItem) {
     : item.kind === "line" ? `${{ road: "дорога", river: "река", wall: "ограда" }[item.use ?? "road"] ?? "линия"} · ${item.width ?? 1} кл.` : `${item.w}×${item.h} кл.`;
 }
 
+type ItemTab = "object" | "surface" | "line" | "scatter" | "door" | "liquid";
+// Язычки открытого набора — по видам вещей (гриллинг «Д» 2026-11-06, Q15; доска Map-Pack).
+const ITEM_TABS: readonly { id: ItemTab; label: string; kinds: readonly string[] }[] = [
+  { id: "object", label: "Объекты", kinds: ["object"] },
+  { id: "surface", label: "Поверхности", kinds: ["surface"] },
+  { id: "line", label: "Линии", kinds: ["line", "crossing"] },
+  { id: "scatter", label: "Россыпи", kinds: ["scatter"] },
+  { id: "door", label: "Проёмы", kinds: ["door"] },
+  { id: "liquid", label: "Жидкости", kinds: ["liquid"] },
+];
+type NewItem = "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | "new-liquid";
+// «+ Добавить ▾» вместо восьми кнопок (Q15): вид вещи и одна строка, что это.
+const ADD_ITEMS: readonly { value: NewItem; tab: ItemTab; label: string; hint: string }[] = [
+  { value: "new", tab: "object", label: "Объект", hint: "картинка и сколько клеток она занимает" },
+  { value: "new-surface", tab: "surface", label: "Поверхность", hint: "образец, которым красят землю и пол" },
+  { value: "new-line", tab: "line", label: "Линия", hint: "дорога, река, ограда или переправа" },
+  { value: "new-scatter", tab: "scatter", label: "Россыпь", hint: "кусты, камни, трава — ставятся вразнобой" },
+  { value: "new-door", tab: "door", label: "Проём", hint: "дверь, арка, ворота" },
+  { value: "new-liquid", tab: "liquid", label: "Жидкость", hint: "рецепт воды, лавы, болота для слота" },
+];
+const KIND_PLATE: Record<MapKind, string> = { tactical: "тактическая", city: "город", overview: "обзорная" };
+const plural = (n: number, one: string, few: string, many: string) => {
+  const mod10 = n % 10, mod100 = n % 100;
+  return mod10 === 1 && mod100 !== 11 ? one : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? few : many;
+};
+const things = (n: number) => `${n} ${plural(n, "вещь", "вещи", "вещей")}`;
+const liveItems = (pack: OwnPack) => pack.items.filter((item) => !item.archived);
+const firstImage = (item: OwnPackItem) => { const images = liveImages(item); return images[0] ? ownImageSrc(ownImageId(images[0])) : null; };
+
+/** Обложка набора — четыре первые вещи с картинкой (доска Map-Packs). */
+function PackCover({ urls }: { urls: (string | null)[] }) {
+  const shown = urls.filter((url): url is string => !!url).slice(0, 4);
+  if (!shown.length) return <NavIcon name="map" />;
+  return <span className="maps-pack-cover">{shown.map((url, i) => <img key={i} src={url} alt="" loading="lazy" />)}</span>;
+}
+
+interface PackEntry { key: string; to: string; name: string; own: OwnPack | null; kinds: readonly MapKind[]; note: string; meta: string; urls: (string | null)[] }
+type OpenMenu = (entry: PackEntry, x: number, y: number) => void;
+
+/** «⋯» набора. Общее меню сущности сюда не годится: у встроенного набора нет id,
+ *  а «В мешок» и упоминание набору ни к чему — меню своё, тем же видом. */
+function PackDots({ entry, onMenu }: { entry: PackEntry; onMenu: OpenMenu }) {
+  return <button type="button" className="entity-dots" aria-label={`Действия: ${entry.name}`} aria-haspopup="menu"
+    onClick={(event) => { event.stopPropagation(); const r = event.currentTarget.getBoundingClientRect(); onMenu(entry, r.left, r.bottom + 2); }}>⋯</button>;
+}
+
+function PackTile({ entry, onMenu }: { entry: PackEntry; onMenu: OpenMenu }) {
+  return <article className="reg-tile maps-pack-tile" onContextMenu={(event) => { event.preventDefault(); onMenu(entry, event.clientX, event.clientY); }}>
+    <span className="reg-tile__cover is-empty maps-pack-tile__cover" aria-hidden="true">
+      <PackCover urls={entry.urls} />
+      <span className="d-plate">{entry.own ? "свой" : "встроенный"}</span>
+    </span>
+    <div className="reg-tile__body">
+      <h3 className="reg-tile__name"><Link to={entry.to}>{entry.name}</Link></h3>
+      <div className="reg-tile__chips">{entry.kinds.map((kind) => <span key={kind} className="maps-gch">{KIND_PLATE[kind]}</span>)}</div>
+      <span className="reg-tile__text">{entry.note}</span>
+      <RegMeta>{entry.meta}</RegMeta>
+    </div>
+    <PackDots entry={entry} onMenu={onMenu} />
+  </article>;
+}
+
+// «Список» наборов: Название · Вид карты · Жанр · Вещей; на телефоне — вид.
+const PACK_COLUMNS: RegColumn[] = [
+  { label: "Название", width: "minmax(0, 1.6fr)" },
+  { label: "Вид карты", width: "minmax(120px, 1fr)", phone: true },
+  { label: "Жанр", width: "minmax(120px, 1fr)" },
+  { label: "Вещей", width: "130px" },
+];
+
+function PackRow({ entry, onMenu }: { entry: PackEntry; onMenu: OpenMenu }) {
+  const cells = [entry.kinds.map((kind) => KIND_PLATE[kind]).join(", "), entry.note, entry.meta];
+  return <div className="reg-row maps-pack-row" role="row" onContextMenu={(event) => { event.preventDefault(); onMenu(entry, event.clientX, event.clientY); }}>
+    <span role="cell" className="reg-row__name"><Link to={entry.to}>{entry.name}</Link></span>
+    {cells.map((cell, i) => <span key={PACK_COLUMNS[i + 1].label} role="cell" className={PACK_COLUMNS[i + 1].phone ? "reg-row__cell" : "reg-row__cell reg-wide"}><span className="d-mono">{cell}</span></span>)}
+    <span role="cell"><PackDots entry={entry} onMenu={onMenu} /></span>
+  </div>;
+}
+
+/** Жанры набора для фильтра: верхний жанр; без жанров — «любой». */
+const ANY_GENRE = "любой";
+const genresOf = (genres: readonly { genre: string }[]) => genres.length ? genres.map((entry) => entry.genre.toLocaleLowerCase("ru")) : [ANY_GENRE];
+
+/** Меню на <details>: «⋯» и «+ Добавить ▾» шапки набора. Пункт закрывает меню. */
+function HeadMenu({ label, title, primary, children }: { label: string; title: string; primary?: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  return <details className="maps-head-menu" ref={ref} onClick={(event) => { if ((event.target as HTMLElement).closest("[data-close]")) ref.current?.removeAttribute("open"); }}>
+    <summary className={primary ? "d-btn d-btn--primary" : "d-btn"} title={title} aria-label={title}>{label}</summary>
+    <div className="maps-head-menu__popup" role="menu">{children}</div>
+  </details>;
+}
+
 export function MapPacksPage() {
   const { user } = useCurrentUser();
   const run = useAction();
+  const navigate = useNavigate();
+  const { packId, builtinId } = useParams();
   const [dialog, confirm] = useConfirm();
   const state = useResource<OwnPack[]>("/map-packs");
   const packs = state.data ?? NO_PACKS;
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
-  const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | "new-liquid" | null>(null), [sheetDialog, setSheetDialog] = useState(false);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | NewItem | null>(null), [sheetDialog, setSheetDialog] = useState(false);
   // Загрузка набора из файла: при совпадении с уже имеющимся сервер ждёт выбора — заменить или копией.
   const [clash, setClash] = useState<{ file: File; name: string; archived: boolean } | null>(null), [importing, setImporting] = useState(false);
-  const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
-  const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
+  const [segment, setSegment] = useState<string | null>(null), [q, setQ] = useState(""), [kindFilter, setKindFilter] = useState<MapKind | null>(null);
+  const [archive, setArchive] = useState(false), [tab, setTab] = useState<ItemTab>("object");
+  const [genreFilter, setGenreFilter] = useState<string | null>(null), [view, setView] = useListView("map-packs");
+  const [menu, setMenu] = useState<{ entry: PackEntry; x: number; y: number } | null>(null);
+  const live = packs.filter((entry) => !entry.archived), archived = packs.filter((entry) => entry.archived);
+  const pack = packId ? packs.find((entry) => entry.id === Number(packId)) ?? null : null;
+  const builtin = builtinId ? MAP_PACKS.find((entry) => entry.id === builtinId) ?? null : null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
   const editing = objectDialog && typeof objectDialog === "object" ? pack?.items.find((entry) => entry.id === objectDialog.id) ?? null : null;
-  const items = pack?.items.filter((item) => !item.archived) ?? [];
-  const sections = [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru"));
+  const items = pack ? liveItems(pack) : [];
+  const tabItems = items.filter((item) => ITEM_TABS.find((entry) => entry.id === tab)!.kinds.includes(item.kind));
+  const sections = [...new Set(tabItems.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru"));
 
   if (user?.role === "player") return <div className="stack"><p>Наборы ассетов правит Мастер.</p></div>;
   async function setArchived(target: OwnPack, value: boolean) {
     if (value && !await confirm({ title: `Убрать набор «${target.name}» в архив?`, message: "На картах, где он использован, вместо его вещей будут заглушки — до восстановления набора.", confirmLabel: "В архив", cancelLabel: "Оставить", danger: true })) return;
-    await run(labelled(value ? "Набор не убран в архив" : "Набор не восстановлен", () => write.put(`/map-packs/${target.id}/archive`, { archived: value })), { affects: AFFECTS });
+    const done = await run(labelled(value ? "Набор не убран в архив" : "Набор не восстановлен", () => write.put(`/map-packs/${target.id}/archive`, { archived: value })), { affects: AFFECTS });
+    if (done && value) navigate("/maps/packs");
   }
-
   async function importPack(file: File, mode?: "replace" | "copy") {
     setClash(null); setImporting(true);
     const form = new FormData();
@@ -572,79 +681,16 @@ export function MapPacksPage() {
       }
     }), { affects: AFFECTS });
     setImporting(false);
-    if (saved) { setPicked(saved.id); setBuiltin(null); setArchive(false); }
+    if (saved) navigate(`/maps/packs/${saved.id}`);
+  }
+  function openNew(value: NewItem) {
+    setTab(ADD_ITEMS.find((entry) => entry.value === value)!.tab);
+    setObjectDialog(value);
   }
 
-  return <div className="stack" style={{ position: "relative" }}>
-    <SectionBackground />
-    <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-      {/* каркас в обход намеренно — экран наборов редактора карт, каркас ставится с блоком «Редактор карт» «Д» */}
-      <h1 style={{ margin: 0 }}>Наборы ассетов</h1>
-      <div className="row" style={{ gap: 8 }}><Link to="/maps">← К картам</Link>
-        <label className="button" title="Набор из файла, выгруженного в SoyMan" aria-disabled={importing}>{importing ? "Загружаю…" : "Загрузить набор…"}
-          <input type="file" accept=".zip,application/zip" hidden disabled={importing} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importPack(file); }} /></label>
-        <button className="primary" onClick={() => setPackDialog("new")}>+ Набор</button></div>
-    </div>
-    {state.error && <p role="alert">Не удалось загрузить наборы: {state.error}</p>}
-    <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <nav className="stack" aria-label="Наборы" style={{ flex: "0 0 260px" }}>
-        <strong>Свои</strong>
-        {live.map((entry) => <button key={entry.id} type="button" aria-pressed={!builtin && entry.id === pack?.id} onClick={() => { setPicked(entry.id); setBuiltin(null); }} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
-          <strong>{entry.name}</strong><br /><small>{entry.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")} · {genreLabel(entry.genres) || "без жанра"} · вещей: {entry.items.filter((item) => !item.archived).length}</small>
-        </button>)}
-        {!live.length && !state.loading && <p className="muted">Своих наборов пока нет. Создайте первый и добавьте в него картинки.</p>}
-        <strong>Встроенные — только чтение</strong>
-        {MAP_PACKS.map((entry) => <button key={entry.id} type="button" aria-pressed={builtin === entry.id} onClick={() => setBuiltin(entry.id)} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
-          <strong>{entry.name}</strong><br /><small>{entry.genre} · {entry.place}</small></button>)}
-        {archived.length > 0 && <button type="button" aria-expanded={archive} onClick={() => setArchive(!archive)}>Архив наборов: {archived.length}</button>}
-        {archive && archived.map((entry) => <div key={entry.id} className="card row" style={{ padding: "6px 10px", justifyContent: "space-between" }}>
-          <span>{entry.name}</span><button type="button" onClick={() => void setArchived(entry, false)}>Вернуть</button></div>)}
-      </nav>
-      {builtin && <section className="stack" style={{ flex: "1 1 520px", minWidth: 300 }} aria-label={`Встроенный набор «${MAP_PACKS.find((entry) => entry.id === builtin)?.name}»`}>
-        <h2 style={{ margin: 0 }}>{MAP_PACKS.find((entry) => entry.id === builtin)?.name}</h2>
-        <p className="muted">Встроенный набор: только посмотреть. Для карт: {MAP_PACKS.find((entry) => entry.id === builtin)?.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")}.</p>
-        {builtinSections(builtin).map((section) => <div key={section.name} className="stack">
-          <strong>{section.name}</strong>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            {section.tiles.map((tile) => <div key={tile.name} className="card" style={{ width: 132, padding: 8, textAlign: "center" }}>
-              <span style={{ display: "block", height: 96 }}>{tile.url && <img src={tile.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</span>
-              <strong>{tile.name}</strong>{tile.note && <><br /><small>{tile.note}</small></>}
-            </div>)}
-          </div>
-        </div>)}
-      </section>}
-      {pack && !builtin && <section className="stack" style={{ flex: "1 1 520px", minWidth: 300 }} aria-label={`Набор «${pack.name}»`}>
-        <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <h2 style={{ margin: 0 }}>{pack.name}</h2>
-          <div className="row" style={{ gap: 8 }}>
-            <button onClick={() => setPackDialog(pack)}>Название, жанры и виды карт</button>
-            <button title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(pack)), { affects: [] })}>Выгрузить</button>
-            <button onClick={() => void setArchived(pack, true)}>В архив</button>
-            <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
-            <button className="primary" title="Рецепт жидкости: цвета, рисунок, кромка — берётся в слот жидкостей на картах" onClick={() => setObjectDialog("new-liquid")}>+ Жидкость</button>
-            <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
-            <button className="primary" onClick={() => setObjectDialog("new-scatter")}>+ Россыпь</button>
-            <button className="primary" onClick={() => setObjectDialog("new-line")}>+ Линия</button>
-            <button className="primary" onClick={() => setObjectDialog("new-surface")}>+ Поверхность</button>
-            <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
-          </div>
-        </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота. «+ Жидкость» — рецепт воды, лавы, болота для слота жидкостей. «+ Лист» — картинка с несколькими вещами: разрезать и добавить разом.</p>}
-        {sections.map((section) => <div key={section} className="stack">
-          <strong>{section || "Без раздела"}</strong>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            {items.filter((item) => item.section === section).map((item) => { const images = liveImages(item), url = images[0] ? ownImageSrc(ownImageId(images[0])) : null;
-              return <button key={item.id} type="button" className="card" onClick={() => setObjectDialog(item)} style={{ width: 132, height: "auto", padding: 8, textAlign: "center" }}>
-                <span style={{ display: "grid", placeItems: "center", height: 96, background: item.kind === "surface" ? item.fill : undefined }}>
-                  {item.kind === "liquid" && <span className="liquid-swatch"><Swatch recipe={packLiquidRecipe(item, "")} /></span>}{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: item.kind === "surface" ? "cover" : "contain" }} />}</span>
-                <strong>{item.name}</strong><br /><small>{itemNote(item)}{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
-              </button>; })}
-          </div>
-        </div>)}
-      </section>}
-    </div>
-    {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
-    {clash && <Modal onClose={() => setClash(null)} ariaLabel="Набор уже есть">
+  const windows = <>
+    {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) navigate(`/maps/packs/${saved.id}`); }} />}
+    {clash && <Modal onClose={() => setClash(null)} className="maps-win" ariaLabel="Набор уже есть">
       <h2>Набор «{clash.name}» уже есть{clash.archived ? " в архиве" : ""}</h2>
       <div className="stack">
         <p><strong>Заменить</strong> — вещи из файла обновятся, карты продолжат их показывать; вещи, которых в файле нет, уйдут в архив{clash.archived ? ", а сам набор вернётся из архива" : ""}.</p>
@@ -665,5 +711,128 @@ export function MapPacksPage() {
         mode={objectDialog === "new-door" || editing?.kind === "door" ? "door" : objectDialog === "new-scatter" || editing?.kind === "scatter" ? "scatter" : "line"} />
       : (objectDialog === "new" || editing) && <ObjectDialog key={editing?.id ?? "new"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />)}
     {dialog}
+  </>;
+
+  // ── Открытый набор: своя страница (Q15) ──
+  if (packId || builtinId) {
+    if (!pack && !builtin) return <div className="stack maps-pack-page"><SectionBackground />
+      {state.loading ? <ListSkeleton variant="tiles" label="Загрузка набора" /> : <EmptyState title="Набора нет" hint="Он удалён или ссылка неверна." action={<Link className="d-btn" to="/maps/packs">Все наборы</Link>} />}</div>;
+    if (builtin) {
+      const parts = builtinSections(builtin.id);
+      return <div className="stack maps-pack-page"><SectionBackground />
+        <div className="row page-head maps-pack-page__head">
+          <div><h1 className="maps-pack-page__title">{builtin.name}</h1><p className="maps-pack-page__sub">Встроенный набор · только посмотреть · {builtin.kinds.map((kind) => KIND_PLATE[kind]).join(", ")} · {builtin.genre.toLocaleLowerCase("ru")}</p></div>
+        </div>
+        <section className="d-sheet maps-pack-page__sheet">
+          {parts.map((section) => <section key={section.name} className="maps-pack-section" aria-label={section.name}>
+            <div className="d-gh"><h2 className="d-plate">{section.name}</h2><span className="d-note">{section.tiles.length}</span></div>
+            <div className="maps-items">{section.tiles.map((tile) => <div key={tile.name} className="maps-item">
+              <span className="maps-item__art">{tile.url && <img src={tile.url} alt="" loading="lazy" />}</span>
+              <span className="maps-item__name"><b>{tile.name}</b>{tile.note && <small>{tile.note}</small>}</span>
+            </div>)}</div>
+          </section>)}
+        </section>
+      </div>;
+    }
+    const own = pack!;
+    const counts = Object.fromEntries(ITEM_TABS.map((entry) => [entry.id, items.filter((item) => entry.kinds.includes(item.kind)).length]));
+    const usedOn = own.kinds.map((kind) => KIND_PLATE[kind]).join(", ");
+    return <div className="stack maps-pack-page"><SectionBackground />
+      <div className="row page-head maps-pack-page__head">
+        <div><h1 className="maps-pack-page__title">{own.name}</h1>
+          <p className="maps-pack-page__sub">{own.archived ? "В архиве" : "Свой набор"} · {usedOn || "вид карты не задан"} · {genreLabel(own.genres)?.toLocaleLowerCase("ru") || "без жанра"} · {things(items.length)}</p></div>
+        <div className="row page-head__actions">
+          <button type="button" className="d-btn" title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(own)), { affects: [] })}>Выгрузить</button>
+          <HeadMenu label="⋯" title="Действия набора">
+            <button type="button" data-close onClick={() => setPackDialog(own)}>Название, жанры и виды карт</button>
+            {own.archived
+              ? <button type="button" data-close onClick={() => void setArchived(own, false)}>Вернуть из архива</button>
+              : <button type="button" data-close className="is-danger" onClick={() => void setArchived(own, true)}>В архив</button>}
+          </HeadMenu>
+          {!own.archived && <HeadMenu label="+ Добавить ▾" title="Добавить в набор" primary>
+            {ADD_ITEMS.map((entry) => <button key={entry.value} type="button" data-close onClick={() => openNew(entry.value)}><b>{entry.label}</b><small>{entry.hint}</small></button>)}
+            <hr />
+            <button type="button" data-close onClick={() => setSheetDialog(true)}><b>Лист — разрезать на вещи…</b><small>картинка с несколькими вещами разом</small></button>
+          </HeadMenu>}
+        </div>
+      </div>
+      <div className="tabs d-tabs maps-pack-page__tabs" role="tablist" aria-label="Вещи набора">
+        {ITEM_TABS.map((entry) => <button key={entry.id} type="button" role="tab" aria-selected={tab === entry.id} className={tab === entry.id ? "active" : undefined} onClick={() => setTab(entry.id)}>{entry.label}<b>{counts[entry.id]}</b></button>)}
+        <button type="button" role="tab" aria-disabled="true" className="is-soon" title="Придёт с этапом «Обставить»: что ставить в комнаты каждого назначения">Обстановка<b>этап 4</b></button>
+      </div>
+      <section className="d-sheet maps-pack-page__sheet" role="tabpanel">
+        {!tabItems.length && <p className="maps-pack-page__empty">{items.length
+          ? `${ITEM_TABS.find((entry) => entry.id === tab)!.label}: пока нет. «+ Добавить ▾» — добавить первую.`
+          : "В наборе пока пусто. «+ Добавить ▾» — объект, поверхность, линия, россыпь, проём или жидкость; «Лист» — картинка с несколькими вещами."}</p>}
+        {sections.map((section) => <section key={section} className="maps-pack-section" aria-label={section || "Без раздела"}>
+          <div className="d-gh"><h2 className="d-plate">{section || "Без раздела"}</h2><span className="d-note">{tabItems.filter((item) => item.section === section).length}</span></div>
+          <div className="maps-items">
+            {tabItems.filter((item) => item.section === section).map((item) => { const images = liveImages(item), url = firstImage(item);
+              return <button key={item.id} type="button" className="maps-item" onClick={() => setObjectDialog(item)}>
+                {images.length > 1 && <span className="maps-item__variants">×{images.length}</span>}
+                <span className={`maps-item__art${item.kind === "surface" ? " is-surface" : ""}`} style={item.kind === "surface" && item.fill ? { background: item.fill } : undefined}>
+                  {item.kind === "liquid" && <span className="liquid-swatch"><Swatch recipe={packLiquidRecipe(item, "")} /></span>}{url && <img src={url} alt="" />}
+                </span>
+                <span className="maps-item__name"><b>{item.name}</b><small>{itemNote(item)}</small></span>
+              </button>; })}
+          </div>
+        </section>)}
+      </section>
+      {windows}
+    </div>;
+  }
+
+  // ── Список наборов: «Реестр» (Q15; доска Map-Packs) ──
+  const qq = q.trim().toLowerCase();
+  const fits = (name: string, genre: string, kinds: readonly MapKind[], genres: readonly { genre: string }[]) => (!qq || `${name} ${genre}`.toLowerCase().includes(qq))
+    && (!kindFilter || kinds.includes(kindFilter)) && (!genreFilter || genresOf(genres).includes(genreFilter));
+  const ownShown = segment === "builtin" ? [] : live.filter((entry) => fits(entry.name, genreLabel(entry.genres) ?? "", entry.kinds, entry.genres));
+  const builtinShown = segment === "own" ? [] : MAP_PACKS.filter((entry) => fits(entry.name, `${entry.genre} ${entry.place}`, entry.kinds, entry.genres));
+  const shown = ownShown.length + builtinShown.length, total = live.length + MAP_PACKS.length;
+  const genreOptions = [...new Set([...live, ...MAP_PACKS].flatMap((entry) => genresOf(entry.genres)))]
+    .sort((a, b) => a === ANY_GENRE ? 1 : b === ANY_GENRE ? -1 : a.localeCompare(b, "ru"));
+  const entries: PackEntry[] = [
+    ...ownShown.map((entry) => ({ key: `own:${entry.id}`, to: `/maps/packs/${entry.id}`, name: entry.name, own: entry, kinds: entry.kinds,
+      note: genreLabel(entry.genres) || "Свой, без жанра", meta: things(liveItems(entry).length), urls: liveItems(entry).slice(0, 8).map(firstImage) })),
+    ...builtinShown.map((entry) => ({ key: entry.id, to: `/maps/packs/builtin/${entry.id}`, name: entry.name, own: null, kinds: entry.kinds,
+      note: `${entry.genre} · ${entry.place.toLocaleLowerCase("ru")}`, meta: "только посмотреть", urls: builtinSections(entry.id).flatMap((section) => section.tiles.map((tile) => tile.url)).slice(0, 8) })),
+  ];
+  const openMenu: OpenMenu = (entry, x, y) => setMenu({ entry, x, y });
+  const menuItems = (entry: PackEntry): ContextMenuItem[] => entry.own ? [
+    { label: "Открыть", onClick: () => navigate(entry.to) },
+    { label: "Выгрузить", onClick: () => void run(labelled("Набор не выгружен", () => exportPack(entry.own!)), { affects: [] }) },
+    { label: "Название, жанры и виды карт", onClick: () => setPackDialog(entry.own) },
+    { label: "В архив", danger: true, dividerBefore: true, onClick: () => void setArchived(entry.own!, true) },
+  ] : [{ label: "Открыть", onClick: () => navigate(entry.to) }];
+  const resetFilters = () => { setQ(""); setKindFilter(null); setGenreFilter(null); };
+  const chip = (kind: MapKind) => <button key={kind} type="button" className={`maps-gch${kindFilter === kind ? " is-on" : ""}`} aria-pressed={kindFilter === kind} onClick={() => setKindFilter(kindFilter === kind ? null : kind)}>{KIND_PLATE[kind]}</button>;
+  const genreChip = (genre: string) => <button key={genre} type="button" className={`maps-gch${genreFilter === genre ? " is-on" : ""}`} aria-pressed={genreFilter === genre} onClick={() => setGenreFilter(genreFilter === genre ? null : genre)}>{genre}</button>;
+  return <div className="stack" style={{ position: "relative" }}>
+    <SectionBackground />
+    <ListPage ds headingSection="map" title="Наборы ассетов" groups={[]} ungroupedLabel={null}
+      extraTabs={[{ id: "own", label: "Свои", count: live.length }, { id: "builtin", label: "Встроенные", count: MAP_PACKS.length }]}
+      activeGroup={segment} onGroupChange={setSegment}
+      actions={<label className="d-btn" title="Набор из файла, выгруженного в SoyMan" aria-disabled={importing}>{importing ? "Загружаю…" : "Загрузить набор…"}
+        <input type="file" accept=".zip,application/zip" hidden disabled={importing} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importPack(file); }} /></label>}
+      createLabel="+ Набор" onCreate={() => setPackDialog("new")}
+      search={q} onSearch={setQ} searchPlaceholder="Поиск по названию, жанру…" searchLabel="Поиск по наборам"
+      filteredCount={shown} totalCount={total} onResetSearch={resetFilters} showReset={!!qq || !!kindFilter || !!genreFilter}
+      view={view} onViewChange={setView}
+      filters={<div className="maps-filters" role="group" aria-label="Фильтры наборов"><span className="d-mono">вид карты</span>{KINDS.map(chip)}
+        <span className="d-mono">жанр</span>{genreOptions.map(genreChip)}</div>}>
+      {state.error && <LoadErrorCard message={<>Не удалось загрузить наборы: {state.error}</>} onRetry={state.reload} />}
+      {state.loading ? <ListSkeleton variant="tiles" label="Загрузка наборов" /> : shown > 0 && (view === "tiles"
+        ? <RegTiles>{entries.map((entry) => <PackTile key={entry.key} entry={entry} onMenu={openMenu} />)}</RegTiles>
+        : <RegTable columns={PACK_COLUMNS} label="Наборы ассетов">{entries.map((entry) => <PackRow key={entry.key} entry={entry} onMenu={openMenu} />)}</RegTable>)}
+      {!state.loading && shown === 0 && <EmptyState kind="search" title="Ничего не найдено" hint={qq ? `По «${q.trim()}» ничего нет.` : "Под фильтр ничего не попало."}
+        action={<button className="d-btn" onClick={() => { resetFilters(); setSegment(null); }}>Показать все</button>} />}
+      {archived.length > 0 && <section className="reg-arch" aria-label="Архив наборов">
+        <button type="button" className="reg-arch__head" aria-expanded={archive} onClick={() => setArchive(!archive)}><b>Архив</b><span className="d-note">{archived.length}</span><span className="d-mono">{archive ? "Скрыть ‹" : "Показать ›"}</span></button>
+        {archive && <ul className="reg-arch__rows">{archived.map((entry) => <li key={entry.id}><span>{entry.name}</span>
+          <button type="button" className="d-btn d-btn--sm" onClick={() => void setArchived(entry, false)}>Вернуть</button></li>)}</ul>}
+      </section>}
+    </ListPage>
+    {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.entry.name} ariaLabel={`Действия: ${menu.entry.name}`} items={menuItems(menu.entry)} onClose={() => setMenu(null)} />}
+    {windows}
   </div>;
 }

@@ -446,6 +446,14 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
     | undefined;
   if (!current) return res.status(404).json({ error: "not found" });
   const body = (req.body ?? {}) as Record<string, unknown>;
+  // Одна миниатюра — не правка карты: рабочее место дорисовывает её карте, сохранённой
+  // без неё. Ни даты «Изменена», ни ревизии — иначе открытие карты выглядело бы правкой,
+  // а сохранение в соседнем окне упёрлось бы в конфликт ревизий.
+  if (typeof body.thumbnail === "string" && Object.keys(body).every((key) => key === "thumbnail")) {
+    if (!isThumbnail(body.thumbnail)) return res.status(400).json({ error: "thumbnail must be a PNG data URL" });
+    db.prepare("UPDATE maps SET thumbnail = ? WHERE id = ?").run(body.thumbnail, req.params.id);
+    return res.json(db.prepare(`SELECT ${META_COLUMNS} FROM maps WHERE id = ?`).get(req.params.id));
+  }
   const persisted = parseStoredMapDocument(current.cells);
   const incoming = body.document === undefined ? null : parseStoredMapDocument(typeof body.document === "string" ? body.document : JSON.stringify(body.document));
   const v6 = incoming?.format === "v6";
