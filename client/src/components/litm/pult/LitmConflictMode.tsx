@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   campScene,
@@ -36,6 +36,7 @@ import { useLitmBook, type LitmBookEntry } from "./useLitmBook";
 import { LITM_RIBBON_TARGET, useLitmRibbon, type LitmRibbon, type LitmSource } from "./useLitmRibbon";
 import { useUnloadTarget } from "../../../unloadTargets";
 import { LitmAddPanel } from "./LitmAddPanel";
+import { LitmGrimoireDrawer } from "./LitmGrimoireDrawer";
 import "../litm-book.css";
 import "./litm-pult.css";
 
@@ -122,6 +123,8 @@ export function LitmConflictMode({
   const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data ?? null;
   const current = stage?.current ?? null;
   const [adding, setAdding] = useState(false);
+  const [grimOpen, setGrimOpen] = useState(false);
+  const closeGrim = useCallback(() => setGrimOpen(false), []);
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, prompt] = usePrompt();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[]; title?: string } | null>(null);
@@ -307,6 +310,12 @@ export function LitmConflictMode({
   spotRef.current = { spotlight, back };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // G — шторка «Гримуар» (Q8)
+      if (e.code === "KeyG" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !keysBlocked(e.target)) {
+        e.preventDefault();
+        setGrimOpen((o) => !o);
+        return;
+      }
       if (e.code !== "Space" || keysBlocked(e.target)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -378,6 +387,9 @@ export function LitmConflictMode({
           {next != null && <span className="lp-mono">Пробел → {characters.find((c) => c.id === next)?.character_name}</span>}
           <button type="button" className="d-btn d-btn--sm d-btn--ghost" onClick={() => setGive({ keys: sp.current != null ? [`hero:${sp.current}`] : [] })}>
             Дать статус
+          </button>
+          <button type="button" className={`d-btn d-btn--sm${grimOpen ? " is-on" : ""}`} aria-pressed={grimOpen} title="Гримуар действий — клавиша G" onClick={() => setGrimOpen(!grimOpen)}>
+            Гримуар · G
           </button>
           <button type="button" className="d-btn d-btn--sm" onClick={() => setAdding(true)}>
             + Вызов
@@ -504,6 +516,17 @@ export function LitmConflictMode({
           onAdd={async (src: LitmSource, count: number) => {
             await ribbon.add(src, count);
           }}
+        />
+      )}
+      {grimOpen && systemId != null && (
+        <LitmGrimoireDrawer
+          systemId={systemId}
+          spotName={sp.current != null ? heroName(sp.current) : null}
+          onGive={(name, tier, toSpot) => setGive({ keys: toSpot && sp.current != null ? [`hero:${sp.current}`] : [], name, tier })}
+          onLog={(name) => noteLitm(sessionId, `${sp.current != null ? heroName(sp.current) : "Гримуар"}: ${name}`)}
+          onScratch={(e) => void scratchMenu(e.clientX, e.clientY)}
+          onPick={(e, items) => setMenu({ x: e.clientX, y: e.clientY, items })}
+          onClose={closeGrim}
         />
       )}
       {give && <LitmGiveStatus targets={giveTargets} initial={give} onClose={() => setGive(null)} onApply={applyGive} />}

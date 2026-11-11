@@ -144,3 +144,23 @@ export function grimMark(raw: string, before: string): { kind: "status" | "tag";
   if (raw.includes(" ") || /тег[а-я]*\s*[—:]?\s*$/i.test(before.slice(-14))) return { kind: "tag", name: raw };
   return { kind: "status", name: raw.replace(/-/g, " ") };
 }
+
+export interface GrimGive {
+  statuses: { name: string; tier?: number }[];
+  scratch: boolean;
+  named: string[];
+}
+
+/** Что пульт умеет взять из строки Гримуара: статусы (не теги), «вычеркнуть тег», **Именованное**. */
+export function grimGive(text: string): GrimGive {
+  const statuses: GrimGive["statuses"] = [];
+  for (const m of text.matchAll(/(?<!\*)\*([^*\n]+)\*(?!\*)/g)) {
+    const k = grimMark(m[1], text.slice(0, m.index));
+    if (k.kind === "status" && !statuses.some((s) => s.name === k.name)) statuses.push({ name: k.name, tier: k.tier ? Number(k.tier) : undefined });
+  }
+  return {
+    statuses,
+    scratch: /вычеркн[а-я]*\s+тег/i.test(text),
+    named: [...text.matchAll(/\*\*([^*]+)\*\*/g)].map((m) => m[1].trim()),
+  };
+}

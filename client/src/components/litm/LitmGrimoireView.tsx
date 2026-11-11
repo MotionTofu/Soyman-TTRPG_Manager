@@ -3,18 +3,17 @@ import { Link } from "react-router-dom";
 import { addToBag } from "../../bag";
 import { compendiumPaths } from "../../data/compendiumEntries";
 import { useResource } from "../../data/hooks";
-import type { CompendiumEntry, SystemSection } from "../../types";
+import type { CompendiumEntry } from "../../types";
 import { NavIcon } from "../NavIcons";
 import { LitmRich, Tag, type GrimLinks } from "./LitmBook";
-import { norm, plural, splitConsequence } from "./litmBookText";
+import { grimoireHref, useGrimoire } from "./useGrimoire";
+import { plural, splitConsequence } from "./litmBookText";
 import {
-  EFFECT_NAMES, OUTCOMES, articleEffects, articleOutcome, grimoireOf, resolveBookRef, searchGrimoire,
+  EFFECT_NAMES, OUTCOMES, articleEffects, articleOutcome, grimoireOf, searchGrimoire,
   type GrimArticle, type GrimChapter, type GrimIntro,
 } from "./litmGrimoire";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
-const NO_SECTIONS: SystemSection[] = [];
-const href = (systemId: number, sectionId: number, id: number) => `/systems/${systemId}?section=${sectionId}&entry=${id}`;
 
 /** Абзацы книги: «• …» — пункты списка, строка целиком **так** — подзаголовок. */
 function Paras({ lines, grim }: { lines: string[]; grim: GrimLinks }) {
@@ -45,7 +44,7 @@ function Cq({ text, grim }: { text: string; grim: GrimLinks }) {
 
 const paras = (text: string) => text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
 
-function Effect({ k, tips }: { k: string; tips: Map<string, string> }) {
+export function Effect({ k, tips }: { k: string; tips: Map<string, string> }) {
   return <span className={OUTCOMES.has(k) ? "lg-eff lg-eff--out" : "lg-eff"} title={tips.get(k)}>{EFFECT_NAMES[k] ?? k}</span>;
 }
 
@@ -71,9 +70,15 @@ function IntroCard({ title, titleEn, limits, sections, grim, closed }: GrimIntro
   );
 }
 
-function Article({ a, chapter, prev, next, link, grim, tips }: {
+/** Кнопки пульта у строк статьи (шторка «Гримуар», Q8): за успехом и последствием. */
+export interface GrimActs {
+  success: (text: string) => ReactNode;
+  consequence: (text: string) => ReactNode;
+}
+
+export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
   a: GrimArticle; chapter: GrimChapter; prev: GrimArticle | null; next: GrimArticle | null;
-  link: (id: number) => string; grim: GrimLinks; tips: Map<string, string>;
+  link: (id: number) => string; grim: GrimLinks; tips: Map<string, string>; acts?: GrimActs;
 }) {
   const e = a.entry;
   const effects = articleEffects(a).filter((k) => !OUTCOMES.has(k));
@@ -115,10 +120,10 @@ function Article({ a, chapter, prev, next, link, grim, tips }: {
           <div>
             <div className="lb-lbl lg-colhead">Что выходит<small>Success · Extra Feats · Consequences</small></div>
             {a.success.map((s, i) => (
-              <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} /></p>
+              <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} />{acts?.success(s.text)}</p>
             ))}
             {a.feats.length > 0 && <><div className="lb-lbl lg-sub">Доп. подвиги</div><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
-            {a.consequences.length > 0 && <><div className="lb-lbl lg-sub">Последствия</div><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} /></li>)}</ul></>}
+            {a.consequences.length > 0 && <><div className="lb-lbl lg-sub">Последствия</div><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} />{acts?.consequence(t)}</li>)}</ul></>}
           </div>
         </div>
       ) : (
@@ -148,7 +153,7 @@ function Article({ a, chapter, prev, next, link, grim, tips }: {
 }
 
 /** Строки статей главы: имя и эффекты глаголами; отсылки — «→ см.» (Q6). */
-function ArticleRows({ chapter, selectedId, link }: { chapter: GrimChapter; selectedId?: number; link: (id: number) => string }) {
+export function ArticleRows({ chapter, selectedId, link }: { chapter: GrimChapter; selectedId?: number; link: (id: number) => string }) {
   let sub = "";
   return (
     <ul className="lg-rows">
@@ -177,7 +182,7 @@ function ArticleRows({ chapter, selectedId, link }: { chapter: GrimChapter; sele
 export function LitmGrimoireToc({ systemId, sectionId, selectedId }: { systemId: number; sectionId: number; selectedId: number | undefined }) {
   const entries = useResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, sectionId)).data ?? NO_ENTRIES;
   const chapters = useMemo(() => grimoireOf(entries), [entries]);
-  const link = (id: number) => href(systemId, sectionId, id);
+  const link = (id: number) => grimoireHref(systemId, sectionId, id);
   const openId = chapters.find((c) => c.entry.id === selectedId || c.articles.some((a) => a.entry.id === selectedId))?.entry.id;
   return (
     <div className="litm-book litm-book--toc lg-toc">
@@ -201,24 +206,7 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
   entries: CompendiumEntry[];
   selectedId: number | undefined;
 }) {
-  const chapters = useMemo(() => grimoireOf(entries), [entries]);
-  const articles = useMemo(() => chapters.flatMap((c) => c.articles), [chapters]);
-  const sections = useResource<SystemSection[]>(compendiumPaths.sections(systemId)).data ?? NO_SECTIONS;
-  const rulesSection = sections.find((s) => s.name === "Справочник");
-  const ruleEntries = useResource<CompendiumEntry[]>(rulesSection ? compendiumPaths.sectionEntries(systemId, rulesSection.id) : null).data ?? NO_ENTRIES;
-  const link = (id: number) => href(systemId, sectionId, id);
-
-  const grim = useMemo<GrimLinks>(() => {
-    const rules = new Map(ruleEntries.map((e) => [norm(e.name), e.id]));
-    return {
-      article: (name, page) => { const id = resolveBookRef(chapters, name, page); return id === null ? null : href(systemId, sectionId, id); },
-      rule: (name) => {
-        const id = rules.get(norm(name));
-        return id !== undefined && rulesSection ? href(systemId, rulesSection.id, id) : null;
-      },
-    };
-  }, [chapters, ruleEntries, rulesSection, systemId, sectionId]);
-  const tips = useMemo(() => new Map(articles.flatMap((a) => a.effects).map((f) => [f.key, `${f.name} — ${f.text}`])), [articles]);
+  const { chapters, articles, grim, tips, link } = useGrimoire(systemId, sectionId, entries);
 
   const [query, setQuery] = useState("");
   const hits = useMemo(() => searchGrimoire(articles, query), [articles, query]);

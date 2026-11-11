@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { CompendiumEntry } from "../../types";
 import { LitmRich, type GrimLinks } from "./LitmBook";
 import { litmCatalogOf } from "./litmBookText";
-import { articleEffects, articleOutcome, grimMark, grimoireOf, resolveBookRef, resolveRef, searchGrimoire } from "./litmGrimoire";
+import { articleEffects, articleOutcome, grimGive, grimMark, grimoireOf, resolveBookRef, resolveRef, searchGrimoire } from "./litmGrimoire";
 
 const entry = (id: number, kind: string, name: string, parent: number | null, position: number, data: Record<string, unknown>) =>
   ({ id, kind, name, name_original: name, parent_id: parent, position, data, description: "" }) as unknown as CompendiumEntry;
@@ -62,5 +62,11 @@ describe("Гримуар действий LitM", () => {
     expect(html).toContain('<span class="lb-st">отвлечён</span>');
     expect(html).toContain('<span class="lb-cq">Заблокировано</span>');
     expect(litmCatalogOf("litm", { id: 1, system_id: 1, position: 0, name: "Гримуар действий", kind: "mechanics", created_at: "" })).toBe("grimoire");
+  });
+
+  it("takes statuses, scratch and named consequences for the pult drawer", () => {
+    expect(grimGive("*измотан*, *обижен* или вычеркнуть тег")).toEqual({ statuses: [{ name: "измотан" }, { name: "обижен" }], scratch: true, named: [] });
+    expect(grimGive("*подозрение*, *тревога* или **Разоблачение**").named).toEqual(["Разоблачение"]);
+    expect(grimGive("*тупой клинок*, *в-синяках*, *ранен-2*").statuses).toEqual([{ name: "в синяках" }, { name: "ранен", tier: 2 }]);
   });
 });
