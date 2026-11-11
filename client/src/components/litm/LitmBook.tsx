@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import "./litm-book.css";
+import { grimMark } from "./litmGrimoire";
 import { MIGHT_NAMES, NAMED_CONSEQUENCES, splitConsequence, type LitmMight } from "./litmBookText";
 
 /** Общие кусочки «сказочной книги» LitM: теги, статусы, ступени, роли, рейтинг
@@ -30,19 +32,51 @@ export function Rating({ value }: { value: number }) {
 }
 
 const TOKEN = /\*\*([^*]+)\*\*|(?<!\*)\*([^*\n]+)\*(?!\*)/g;
+const GRIM_REF = /«([^»]+)»\s*\(с\.\s*(\d+)\)/g;
+
+/** Ссылки Гримуара: статья по «Названию» (с. N), правило корника по **Имени**. */
+export interface GrimLinks {
+  article: (name: string, page: number) => string | null;
+  rule: (name: string) => string | null;
+}
 
 /** Разметка книги → вид «сказочной книги»: `*x-3*` — статус с уровнем,
- *  `*x*` — тег, `**Заблокировано**` — стрелка последствия, `**ИМЯ**` — капитель. */
-export function LitmRich({ text }: { text: string }) {
+ *  `*x*` — тег, `**Заблокировано**` — стрелка последствия, `**ИМЯ**` — капитель.
+ *  С `grim` — правила Гримуара: статус или тег по месту, ссылки на статьи и правила. */
+export function LitmRich({ text, grim }: { text: string; grim?: GrimLinks }) {
+  if (grim) {
+    const parts: ReactNode[] = [];
+    let last = 0;
+    for (const m of text.matchAll(GRIM_REF)) {
+      const at = m.index ?? 0;
+      const href = grim.article(m[1], Number(m[2]));
+      if (!href) continue;
+      if (at > last) parts.push(<RichRun key={last} text={text.slice(last, at)} grim={grim} />);
+      parts.push(<Link key={at} className="lb-link" to={href}>{m[1]}, с. {m[2]}</Link>);
+      last = at + m[0].length;
+    }
+    if (!parts.length) return <RichRun text={text} grim={grim} />;
+    if (last < text.length) parts.push(<RichRun key={last} text={text.slice(last)} grim={grim} />);
+    return <>{parts}</>;
+  }
+  return <RichRun text={text} />;
+}
+
+function RichRun({ text, grim }: { text: string; grim?: GrimLinks }) {
   const out: ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(TOKEN)) {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     if (m[1] !== undefined) {
+      const rule = grim && !NAMED_CONSEQUENCES.has(m[1]) ? grim.rule(m[1]) : null;
       out.push(NAMED_CONSEQUENCES.has(m[1])
         ? <span key={at} className="lb-cq">{m[1]}</span>
+        : rule ? <Link key={at} className="lb-ref lb-link" to={rule}>{m[1]}</Link>
         : <b key={at} className="lb-ref">{m[1]}</b>);
+    } else if (grim) {
+      const mark = grimMark(m[2], text.slice(Math.max(0, at - 24), at));
+      out.push(mark.kind === "tag" ? <Tag key={at}>{mark.name}</Tag> : <Status key={at} name={mark.name} tier={mark.tier} />);
     } else {
       const tier = /^(.*)-(\d+)$/.exec(m[2]);
       // «снять 2 уровня с *ублажён*», «сбросить *сбежал*», «статус *спрятан*» — статус без уровня.
