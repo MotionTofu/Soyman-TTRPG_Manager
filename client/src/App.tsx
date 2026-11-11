@@ -27,6 +27,7 @@ const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m
 const CutscenesPage = lazy(() => import("./pages/CutscenesPage").then(m => ({ default: m.CutscenesPage })));
 const CutsceneWorkshopPage = lazy(() => import("./pages/CutsceneWorkshopPage").then(m => ({ default: m.CutsceneWorkshopPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
+const WorkbenchRoute = lazy(() => import("./pages/WorkbenchPage").then((m) => ({ default: m.WorkbenchRoute })));
 const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
 const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
@@ -218,6 +219,7 @@ function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/library" element={<LibraryRoute />} />
+              <Route path="/workbench" element={<WorkbenchRoute />} />
               <Route path="/now-playing" element={<NowPlayingPage />} />
               <Route path="/campaigns" element={<CampaignsRoute />} />
               <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />

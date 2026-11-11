@@ -6,10 +6,10 @@ import { DndGroupIndex, DndRegister } from "./DndCompendiumViews";
 import { ContextMenu } from "./ContextMenu";
 import { TidyCompendiumDialog } from "./TidyCompendiumDialog";
 import { openEntityMenu } from "../pageMenu";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys, type Affect } from "../data/entities";
-import { errorText, useAction, useResource, write } from "../data/hooks";
+import { errorText, useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { attemptWithNotice, labelled, showSaveError } from "../data/notices";
 import { compendiumAffects, compendiumMembershipAffects, compendiumPaths } from "../data/compendiumEntries";
@@ -46,7 +46,7 @@ import { StartingEquipmentPicker, type StartingEquipmentPick } from "./dnd/Start
 import { useCompendiumViewMode } from "../hooks/useCompendiumViewMode";
 import { EMPTY_PROGRESSION, type ClassProgression } from "./dnd/progression";
 import { EMPTY_COST, type DndCheck, type DndCost, type DndEffect } from "./dnd/effects";
-import { Verstak } from "./Verstak/Verstak";
+import { WORKBENCH_AFFECTS, addCardsToWorkbench } from "../workbench";
 import { EquipmentTileGrid } from "./EquipmentTileGrid";
 import { SpellTable } from "./SpellTable";
 import { ClassTileGrid } from "./ClassTileGrid";
@@ -511,7 +511,8 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   const [filterSize, setFilterSize] = useState("");
   const [filterEquipmentCategory, setFilterEquipmentCategory] = useState("");
   const [filterEquipmentSource, setFilterEquipmentSource] = useState("");
-  const [verstakOpen, setVerstakOpen] = useState(false);
+  const navigate = useNavigate();
+  const afterWrite = useAfterWrite();
   const { user } = useCurrentUser();
   const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
   const [alertDialog, showAlert] = useAlert();
@@ -626,37 +627,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       return next;
     });
   }
-  function handlePrint() {
+  // Верстак — постоянная страница (гриллинг 2026-11-11, В9): выбранное
+  // добавляется в черновик без повторов, и верстак открывается.
+  async function openWorkbench() {
     const ids = [...selectedIds];
-    const toPrint = entries.filter((e) => ids.includes(e.id));
-    if (toPrint.length === 0) { showAlert("Выберите записи для печати."); return; }
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Справочник — печать</title><style>
-      body{font-family:Georgia,serif;padding:24px;color:#111}
-      .card{border:1.5px solid #111;padding:14px;margin-bottom:12px;page-break-inside:avoid}
-      .card h3{margin:0 0 6px;font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:0.06em}
-      .muted{color:#666;font-size:12px}
-      @media print{body{padding:0}}
-    </style></head><body><h1>Справочник — ${section.name}</h1>${toPrint.map((e) => {
-      const plain = stripMentions(e.description || "").replace(/</g, "&lt;");
-      return `
-      <div class="card">
-        <h3>${(e.name || "Без названия").replace(/</g, "&lt;")}</h3>
-        ${plain ? `<div style="white-space:pre-wrap">${plain}</div>` : `<div class="muted">Без описания</div>`}
-        ${e.data && Object.keys(e.data).length ? `<div class="muted" style="margin-top:6px">${Object.entries(e.data).map(([k,v]) => `${String(k).replace(/</g, "&lt;")}: ${String(v).replace(/</g, "&lt;")}`).join(" · ")}</div>` : ""}
-      </div>`;
-    }).join("")}<script>window.print()</script></body></html>`;
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); }
-  }
-  async function handleShowToPlayers() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) { showAlert("Выберите записи для показа."); return; }
-    // Если выбран один — показываем его карточкой, если несколько — пачкой
-    // Показ — не правка данных: другим окнам сообщать нечего.
-    const shown = await attemptWithNotice("Не показано игрокам", () =>
-      write.post(`/systems/${systemId}/show-entries`, { entry_ids: ids })
-    );
-    if (shown) showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
+    if (!ids.length) return;
+    if (await attemptWithNotice("Не добавлено на верстак", () => addCardsToWorkbench(ids))) {
+      afterWrite(WORKBENCH_AFFECTS);
+      navigate("/workbench");
+    }
   }
   // Каталоги Otherscape (макеты «Д»): «Темы персонажа» и «Испытания» по
   // умолчанию — список слева, карточка справа; выбранное — в адресе (?entry=).
@@ -1416,10 +1395,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       {loadError && <LoadErrorCard message={<>Не удалось загрузить записи: {loadError}</>} onRetry={entriesState.reload} />}
       <div className="d-bar"><label className="d-field d-bar__grow"><NavIcon name="search" /><input type="search" aria-label="Поиск по названию" placeholder="Найти правило, состояние, термин…" value={searchQuery} onChange={(event)=>setSearchQuery(event.target.value)} /></label><button type="button" className={`d-btn${showFavOnly ? " active" : ""}`} aria-pressed={showFavOnly} onClick={()=>setShowFavOnly(!showFavOnly)}>★ Избранное</button></div>
       <DndGroupIndex groups={groups} entries={entries} onSelect={(id)=>{setRulesGrouping("groups");setExpanded((previous)=>new Set([...previous,id]));setTimeout(()=>document.getElementById(`comp-entry-${id}`)?.scrollIntoView({block:"start",behavior:"auto"}),0);}} />
-      {bulkSelect && <div className="d-bar"><label><input type="checkbox" checked={flat.length>0 && flat.every((entry)=>selectedIds.has(entry.id))} onChange={(event)=>setSelectedIds(event.target.checked ? new Set(flat.map((entry)=>entry.id)) : new Set())} /> Выбрать всё</label><button type="button" className="d-btn" disabled={selectedIds.size===0} onClick={()=>setVerstakOpen(true)}>Верстак · {selectedIds.size}</button><button type="button" className="d-btn d-btn--ghost" onClick={()=>setSelectedIds(new Set())}>Сбросить</button></div>}
+      {bulkSelect && <div className="d-bar"><label><input type="checkbox" checked={flat.length>0 && flat.every((entry)=>selectedIds.has(entry.id))} onChange={(event)=>setSelectedIds(event.target.checked ? new Set(flat.map((entry)=>entry.id)) : new Set())} /> Выбрать всё</label><button type="button" className="d-btn" disabled={selectedIds.size===0} onClick={()=>void openWorkbench()}>Верстак · {selectedIds.size}</button><button type="button" className="d-btn d-btn--ghost" onClick={()=>setSelectedIds(new Set())}>Сбросить</button></div>}
       <div className="comp-list">{(rulesGrouping === "alpha" ? flat : sortForDisplay(topLevel)).map((entry)=><SortableRow key={entry.id} entry={entry} group={topLevel} sortMode={sortMode} dragId={dragId} onDragStartEntry={setDragId} onDropEntry={reorderWithinGroup}><EntryNode {...nodeProps} entry={entry} depth={0} flat={rulesGrouping === "alpha"} /></SortableRow>)}</div>
       {topLevel.length===0 && <p className="muted">{searchQuery || showFavOnly ? "Подходящих записей нет." : "Добавьте первую группу или статью."}</p>}
-      {verstakOpen && <Verstak entries={entries} selectedIds={selectedIds} onPrint={handlePrint} onShow={handleShowToPlayers} forceOpen onClose={()=>setVerstakOpen(false)} onRemove={(id)=>setSelectedIds((previous)=>{const next=new Set(previous);next.delete(id);return next;})} />}
       {sectionOverlays}{alertDialog}{confirmDialog}
     </div>;
   }
@@ -1481,7 +1459,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
                     <input type="checkbox" checked={selectedIds.size === entries.filter((e) => e.kind === "mechanic_item").length && entries.filter((e) => e.kind === "mechanic_item").length > 0} onChange={(e) => { if (e.target.checked) setSelectedIds(new Set(entries.filter((en) => en.kind === "mechanic_item").map((en) => en.id))); else setSelectedIds(new Set()); }} />
                     Выбрать всё
                   </label>
-                  <button type="button" className="primary" disabled={selectedIds.size === 0} onClick={() => setVerstakOpen(true)} title="Открыть Верстак — превью, печать, показать игрокам">
+                  <button type="button" className="primary" disabled={selectedIds.size === 0} onClick={() => void openWorkbench()} title="Добавить выбранное на верстак и открыть его">
                     <NavIcon name="eye" /> {selectedIds.size > 0 ? `Верстак · ${selectedIds.size}` : "Верстак"}
                   </button>
                   {selectedIds.size > 0 && <button type="button" onClick={() => setSelectedIds(new Set())}>Сбросить</button>}
@@ -1598,12 +1576,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
         {entries.some((e) => e.parent_id === null && e.name === "Навыки") && (
           <DndSkillNamesPanel systemId={systemId} />
         )}
-        {verstakOpen && <Verstak entries={entries} selectedIds={selectedIds} onPrint={handlePrint} onShow={handleShowToPlayers} forceOpen onClose={() => setVerstakOpen(false)} onRemove={(id) => setSelectedIds((prev) => { const n = new Set(prev); // удаляем группу вместе с потомками
-                const byParent = new Map<number | null, number[]>();
-                for (const e of entries) { const k = e.parent_id; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k)!.push(e.id); }
-                const collect = (root: number): number[] => { const out:number[]=[]; const stack=[root]; while(stack.length){ const cur=stack.pop()!; out.push(cur); const kids=byParent.get(cur)??[]; for(const kid of kids) stack.push(kid);} return out; };
-                collect(id).forEach((did) => n.delete(did));
-                return n; })} />}
         {alertDialog}
         {confirmDialog}
       </div>

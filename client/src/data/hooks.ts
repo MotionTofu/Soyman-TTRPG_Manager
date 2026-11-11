@@ -29,6 +29,8 @@ export interface DataState<T> {
   loading: boolean;
   /** Текст ошибки чтения; null — ошибки нет. */
   error: string | null;
+  /** На экране ответ прежнего пути (`keepPrevious`), новый ещё грузится. */
+  placeholder?: boolean;
   reload: () => void;
 }
 
@@ -78,6 +80,7 @@ export function useResource<T>(
     data: query.data,
     loading: path != null && query.isPending,
     error: query.error ? errorText(query.error) : null,
+    placeholder: query.isPlaceholderData,
     reload,
   };
 }

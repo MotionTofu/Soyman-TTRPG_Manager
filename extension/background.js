@@ -38,6 +38,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === "flush") { flush().then(() => reply(true)); return true; }
   if (msg.type === "enqueue") { enqueue(msg.snap).then(() => reply(true)); return true; }
   if (msg.type === "created") { notifyCreated(msg.entity); reply(true); return false; }
+  if (msg.type === "workbench") { notifyWorkbench(msg.count, msg.title); reply(true); return false; }
   if (msg.type === "open") { void openEntity(msg.kind, msg.id); reply(true); return false; }
   return false;
 });
@@ -99,20 +100,40 @@ function notifyCreated(entity) {
   });
 }
 
-async function openCreated(notificationId) {
-  const [tag, kind, rawId] = notificationId.split(":");
-  if (tag !== "created") return;
-  chrome.notifications.clear(notificationId);
-  await openEntity(kind, Number(rawId));
+function notifyWorkbench(count, title) {
+  chrome.notifications.create("workbench", {
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: `На верстаке: ${count} ${plural(count, "блок", "блока", "блоков")}`,
+    message: title ? `${title} — добавлено` : "Фрагмент добавлен",
+    buttons: [{ title: "Открыть верстак" }],
+  });
 }
 
-async function openEntity(kind, id) {
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  return m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many;
+}
+
+async function openCreated(notificationId) {
+  const [tag, kind, rawId] = notificationId.split(":");
+  if (tag !== "created" && tag !== "workbench") return;
+  chrome.notifications.clear(notificationId);
+  await (tag === "workbench" ? openRoute({ kind: "workbench" }) : openEntity(kind, Number(rawId)));
+}
+
+function openEntity(kind, id) {
+  return openRoute({ kind, id });
+}
+
+async function openRoute(target) {
   const { key, base } = await store();
   try {
     const res = await fetch(`${base}/api/web-capture/ext/open`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ kind, id }),
+      body: JSON.stringify(target),
     });
     const body = await res.json();
     // SoyMan запущен не как приложение (из репозитория) — окна у него нет.

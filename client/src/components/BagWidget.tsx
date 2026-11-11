@@ -1,21 +1,19 @@
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
-import { Verstak } from "./Verstak/Verstak";
 import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
-import { useResource, write } from "../data/hooks";
+import { useAfterWrite } from "../data/hooks";
 import { attemptWithNotice } from "../data/notices";
-import type { CompendiumEntry, SearchResult } from "../types";
+import type { SearchResult } from "../types";
 import { useMapWorkspace } from "../maps/workspace/workspaceContext";
 import { placementSource } from "../maps/workspace/tokenPlacement";
 import { useCurrentUser } from "../api/currentUser";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { WebInbox, useWebInbox } from "./WebInbox";
-
-const NO_ENTRIES: CompendiumEntry[] = [];
+import { WORKBENCH_AFFECTS, addCardsToWorkbench, useWorkbench } from "../workbench";
 
 // title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
 export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace?: () => void } = {}) {
@@ -26,13 +24,23 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
   const [dragOver, setDragOver] = useState(false);
   const [unloading, setUnloading] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "info" | "error" } | null>(null);
-  const [verstakOpen, setVerstakOpen] = useState(false);
   // Входящие (захват с сайтов) — вкладка Мешка у Мастера; на карте их нет.
   const isPlayer = useCurrentUser().user?.role === "player";
   const showInbox = !isPlayer && !mapPlacement;
   const inbox = useWebInbox(showInbox).data ?? [];
   const [tab, setTab] = useState<"bag" | "inbox">(() => (safeGetItem("bagTab") === "inbox" ? "inbox" : "bag"));
   const onInbox = showInbox && tab === "inbox";
+  // Верстак — постоянный черновик (В9, В10): кнопка работает и при пустом
+  // Мешке, на ней счётчик блоков; карточки Мешка добавляются, Мешок остаётся.
+  const navigate = useNavigate();
+  const afterWrite = useAfterWrite();
+  const benchCount = useWorkbench({ enabled: !isPlayer }).data?.length ?? 0;
+  async function toWorkbench() {
+    const ids = items.filter((i) => i.type === "compendium_entry").map((i) => i.id);
+    if (ids.length && !(await attemptWithNotice("Не добавлено на верстак", () => addCardsToWorkbench(ids)))) return;
+    if (ids.length) afterWrite(WORKBENCH_AFFECTS);
+    navigate("/workbench");
+  }
   function pickTab(next: "bag" | "inbox") {
     setTab(next);
     safeSetItem("bagTab", next);
@@ -108,15 +116,14 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
       <div className="search-heading bag-heading">
         {title ?? <strong>Мешок</strong>}
         {!onInbox && <div className="row" style={{ gap: 4 }}>
-          <button
+          {!isPlayer && <button
             type="button"
             className="bag-unload"
-            disabled={items.length === 0}
-            title={items.length === 0 ? "Мешок пуст" : "Открыть все карточки из мешка на верстаке"}
-            onClick={() => setVerstakOpen(true)}
+            title={items.some((i) => i.type === "compendium_entry") ? "Добавить карточки из мешка на верстак и открыть его" : "Открыть верстак"}
+            onClick={() => void toWorkbench()}
           >
-            На верстак
-          </button>
+            На верстак{benchCount > 0 ? ` · ${benchCount}` : ""}
+          </button>}
           <button
             type="button"
             className="bag-unload"
@@ -196,13 +203,6 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
           onConfirm={runUnload}
         />
       )}
-      {verstakOpen && (
-        <BagVerstakModal
-          items={items}
-          onClose={() => setVerstakOpen(false)}
-          onRemove={removeFromBag}
-        />
-      )}
     </div>
   );
 }
@@ -275,59 +275,5 @@ function UnloadModal({
         </div>
       </div>
     </Modal>
-  );
-}
-
-function BagVerstakModal({
-  items,
-  onClose,
-  onRemove,
-}: {
-  items: SearchResult[];
-  onClose: () => void;
-  onRemove: (index: number) => void;
-}) {
-  const ids = items.filter((i) => i.type === "compendium_entry").map((i) => i.id);
-  // Записи мешка — пачкой под ключом слоя: правка записи в компендиуме
-  // (`{ kind: "compendium_entry" }`) задевает и её.
-  const batch = useResource<CompendiumEntry[]>(ids.length ? `/systems/entries/batch?ids=${ids.join(",")}` : null, {
-    keepPrevious: true,
-  });
-  const entries = ids.length ? (batch.data ?? NO_ENTRIES) : NO_ENTRIES;
-  const loading = batch.loading;
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-
-  // Пришла новая пачка — выбрано всё, что в ней есть, как при открытии.
-  useEffect(() => {
-    setSelectedIds(new Set((batch.data ?? []).map((e) => e.id)));
-  }, [batch.data]);
-
-  async function handleShowToPlayers() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    const systemId = entries[0]?.system_id;
-    if (!systemId) return;
-    // Показ — не правка данных: перечитывать и будить другие окна нечего.
-    await attemptWithNotice("Не показано игрокам", () => write.post(`/systems/${systemId}/show-entries`, { entry_ids: ids }));
-  }
-
-  if (loading) {
-    return <Verstak entries={[]} selectedIds={new Set()} onPrint={() => {}} onShow={() => {}} forceOpen onClose={onClose} />;
-  }
-
-  return (
-    <Verstak
-      entries={entries}
-      selectedIds={selectedIds}
-      onPrint={() => {}}
-      onShow={handleShowToPlayers}
-      forceOpen
-      onClose={onClose}
-      onRemove={(id) => {
-        setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
-        const idx = items.findIndex((it) => it.type === "compendium_entry" && it.id === id);
-        if (idx >= 0) onRemove(idx);
-      }}
-    />
   );
 }

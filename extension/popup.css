@@ -109,3 +109,22 @@ select.field { padding: 0 8px; font: 13px "Segoe UI", system-ui, sans-serif; }
 .warnbox { display: flex; gap: 10px; padding: 10px 12px; border: 2px solid var(--mag); font-size: 13px; }
 .warnbox b { display: block; margin-bottom: 3px; }
 .warnbox .dot { width: 10px; height: 10px; margin-top: 4px; flex: none; border-radius: 50%; background: var(--mag); }
+
+/* Вкладка «Верстак» (поставка 3, В2; макет Web-Popup, состояние 3). */
+.seg { display: grid; grid-template-columns: 1fr 1fr; margin-top: 12px; border: 2px solid var(--edge); }
+.seg button {
+  height: 32px; border: 0; background: none; color: var(--ink); cursor: pointer;
+  font: 500 12px var(--ui); letter-spacing: .08em; text-transform: uppercase;
+}
+.seg button + button { border-left: 2px solid var(--edge); }
+.seg button[aria-selected="true"] { background: var(--plate); color: var(--plate-ink); }
+.seg button:disabled { opacity: .45; cursor: default; }
+.paper {
+  max-height: 230px; overflow: auto; padding: 12px 14px; background: #FFFFFF; color: #151515; border: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.paper h4 { margin: 0 0 6px; font: 500 16px var(--ui); letter-spacing: .03em; white-space: normal; }
+.paper h4:empty { display: none; }
+.chk { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; cursor: pointer; }
+.chk input { width: 16px; height: 16px; margin: 0; accent-color: #151515; }
+.stat { margin: 10px 0 0; font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

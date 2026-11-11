@@ -4334,59 +4334,6 @@ body.live-hide-search.live-hide-dock .app-content {
   color: var(--status-cancelled-fg);
 }
 
-/* Верстак-модалка из мешка — боковая панель со списком предметов */
-.bag-verstak-sidebar {
-  border-left: 1px solid var(--line);
-  padding-left: var(--sp-4);
-}
-.bag-verstak-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: 3px;
-  cursor: default;
-  user-select: none;
-}
-.bag-verstak-item:hover {
-  background: var(--bg-elevated);
-}
-.bag-verstak-item-type {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.bag-verstak-item-name {
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bag-verstak-context-menu {
-  background: var(--bg-elevated);
-  border: 1px solid var(--line);
-  border-radius: var(--card-radius);
-  padding: var(--sp-2);
-  min-width: 160px;
-}
-.bag-verstak-context-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
-  font-size: var(--fs-meta);
-  border: none;
-  background: transparent;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.bag-verstak-context-menu button:hover {
-  background: var(--accent);
-  color: var(--accent-fg, #fff);
-}
-
 /* Home sidebar's compact calendar (see MiniCalendar.tsx) — square day cells
    via aspect-ratio, a big date number, and status-colored indicator squares
    instead of the full MonthCalendar's text labels. Deliberately much lower

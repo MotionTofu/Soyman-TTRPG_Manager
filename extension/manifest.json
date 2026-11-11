@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SoyMan — захват с сайтов",
   "short_name": "SoyMan",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Выделенный текст с любого сайта — во Входящие SoyMan или сразу в сущность, вместе с адресом страницы.",
   "minimum_chrome_version": "116",
   "permissions": [

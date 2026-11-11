@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "../db/db";
 import { requireKind } from "../db/entityKinds";
 import { artifactFolder, beingFolder, communityFolder, locationFolder, settingGeographyRoot } from "../services/filesystem";
+import { addFragment, workbenchCount } from "./workbench";
 
 // Захват с сайтов расширением браузера (гриллинг 2026-11-05, Q1–Q24;
 // .scratch/web-sources/extension-decisions.md).
@@ -85,7 +86,7 @@ webCaptureExtRouter.post("/pair", (req, res) => {
 
 webCaptureExtRouter.get("/status", requireExtensionKey, (_req, res) => {
   const { n } = db.prepare("SELECT COUNT(*) AS n FROM web_inbox").get() as { n: number };
-  res.json({ connected: true, inbox: n });
+  res.json({ connected: true, inbox: n, workbench: workbenchCount() });
 });
 
 const inboxInput = z.object({
@@ -192,17 +193,40 @@ webCaptureExtRouter.post("/entities", requireExtensionKey, (req, res) => {
   res.status(201).json({ kind: input.kind, id, name: input.name, label: EXT_KINDS[input.kind].label, setting: setting.name });
 });
 
+// «На верстак» из окна разбора (поставка 3, В2): фрагмент — в конец
+// черновика, Мастер остаётся на сайте. Содержимое черновика ключ не читает,
+// только число блоков для уведомления.
+const workbenchInput = inboxInput.extend({
+  title: z.string().max(300).optional(),
+  show_source: z.boolean().optional(),
+});
+
+webCaptureExtRouter.post("/workbench", requireExtensionKey, (req, res) => {
+  const parsed = workbenchInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Фрагмент не принят: нет текста или адреса страницы" });
+  const input = parsed.data;
+  const captured = input.captured_at && !Number.isNaN(Date.parse(input.captured_at)) ? new Date(input.captured_at).toISOString() : nowIso();
+  const { id, duplicate } = addFragment({ ...input, captured_at: captured });
+  res.status(duplicate ? 200 : 201).json({ id, duplicate, count: workbenchCount() });
+});
+
 // «Открыть в SoyMan» из уведомления. Окно открывает Electron (сервер живёт в
 // его процессе и слушает событие); без него — например, сервер запущен из
 // репозитория — расширение откроет страницу вкладкой браузера.
 webCaptureExtRouter.post("/open", requireExtensionKey, (req, res) => {
-  const parsed = z.object({ kind: extKind, id: z.number().int().positive() }).safeParse(req.body);
+  const parsed = z.union([
+    z.object({ kind: extKind, id: z.number().int().positive() }),
+    z.object({ kind: z.literal("workbench") }),
+  ]).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Неверная сущность" });
-  const { kind, id } = parsed.data;
-  if (!db.prepare(`SELECT 1 FROM ${requireKind(kind).table} WHERE id = ?`).get(id)) {
-    return res.status(404).json({ error: "Сущность не найдена" });
+  const target = parsed.data;
+  let route = "/workbench";
+  if (target.kind !== "workbench") {
+    if (!db.prepare(`SELECT 1 FROM ${requireKind(target.kind).table} WHERE id = ?`).get(target.id)) {
+      return res.status(404).json({ error: "Сущность не найдена" });
+    }
+    route = `${EXT_KINDS[target.kind].route}/${target.id}`;
   }
-  const route = `${EXT_KINDS[kind].route}/${id}`;
   const bus: NodeJS.EventEmitter = process;
   const opened = bus.listenerCount(OPEN_ROUTE_EVENT) > 0 && bus.emit(OPEN_ROUTE_EVENT, route);
   res.json({ opened, route });
@@ -295,6 +319,21 @@ webCaptureRouter.post("/inbox/:id/attach", (req, res) => {
   })();
   if ("error" in result) return res.status(result.status).json({ error: result.error });
   res.status(201).json(db.prepare("SELECT * FROM web_entity_sources WHERE id = ?").get(result.id));
+});
+
+// «Верстак» во Входящих (В3): фрагмент переезжает на верстак и уходит из
+// Входящих — одной транзакцией.
+webCaptureRouter.post("/inbox/:id/to-workbench", (req, res) => {
+  const result = db.transaction(() => {
+    const item = db.prepare("SELECT client_id, url, page_title, heading, text, captured_at FROM web_inbox WHERE id = ?")
+      .get(req.params.id) as { client_id: string; url: string; page_title: string; heading: string; text: string; captured_at: string } | undefined;
+    if (!item) return null;
+    const added = addFragment(item);
+    db.prepare("DELETE FROM web_inbox WHERE id = ?").run(req.params.id);
+    return added;
+  })();
+  if (!result) return res.status(404).json({ error: "Фрагмент уже разобран" });
+  res.status(201).json({ id: result.id, count: workbenchCount() });
 });
 
 webCaptureRouter.get("/sources/entity/:kind/:targetId", (req, res) => {

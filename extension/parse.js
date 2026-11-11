@@ -1,12 +1,15 @@
 // Окно «Разобрать сейчас…» (макет Web-Popup, состояния 1, 2, 4; Q10, Q11,
 // Q19–Q21). Фрагмент кладёт сюда background.js через storage.session.
 // Создать сущность — сразу в SoyMan; не вышло или передумал — во Входящие.
+// Вкладка «Верстак» (поставка 3, В2) кладёт фрагмент в черновик печати.
 const $ = (id) => document.getElementById(id);
 const draftKey = `draft:${new URLSearchParams(location.search).get("id")}`;
 const KIND_LABEL = { being: "Существо", location: "Место", community: "Сообщество", artifact: "Артефакт" };
 let snap = null;
 let conn = null;
 let suggested = "";
+let mode = "entity";
+let hasSettings = false;
 
 function view(id) {
   for (const v of ["loading", "form", "off"]) $(v).hidden = v !== id;
@@ -39,22 +42,24 @@ async function api(path, init = {}) {
 async function start() {
   snap = (await chrome.storage.session.get(draftKey))[draftKey];
   if (!snap) return window.close();
-  conn = await chrome.storage.local.get({ key: "", base: "", disconnected: false, lastKind: "being", lastSetting: 0 });
+  conn = await chrome.storage.local.get({ key: "", base: "", disconnected: false, lastKind: "being", lastSetting: 0, lastMode: "entity" });
   if (!conn.key || conn.disconnected) {
     return offline("Расширение не подключено", "Подключите его в окошке у значка SoyMan. Фрагмент подождёт в очереди и уйдёт во Входящие после подключения.", "НЕ ПОДКЛЮЧЕНО");
   }
-  let settings;
+  let settings, status;
   try {
-    const res = await api("/settings");
-    if (res.status === 401) {
-      await chrome.storage.local.set({ disconnected: true });
-      return offline("Подключение снято в SoyMan", "Подключите расширение заново в окошке у значка. Фрагмент подождёт в очереди.", "НЕ ПОДКЛЮЧЕНО");
-    }
+    const [res, st] = await Promise.all([api("/settings"), api("/status")]);
+    if (res.status === 401) return unpaired();
     settings = await res.json();
+    status = st.ok ? await st.json() : {};
   } catch {
     return offline("SoyMan не запущен");
   }
-  if (!settings.length) return offline("В SoyMan нет сеттингов", "Сущность живёт в сеттинге — создайте его в SoyMan. А фрагмент пока можно положить во Входящие.", "");
+  // Без сеттингов сущность не создать, а на верстак положить можно.
+  hasSettings = settings.length > 0;
+  $("mode-entity").disabled = !hasSettings;
+  $("mode-entity").title = hasSettings ? "" : "В SoyMan нет сеттингов — сущность живёт в сеттинге";
+  showCount(status.workbench);
 
   $("src-title").textContent = snap.page_title || host(snap.url);
   $("src-meta").textContent = `${host(snap.url)} · ${new Date(snap.captured_at).toLocaleDateString("ru-RU")}`;
@@ -68,9 +73,42 @@ async function start() {
   const paragraphs = snap.text.split(/\n\s*\n/).filter((p) => p.trim()).length;
   $("preview-label").textContent = `В описание · ${paragraphs} ${plural(paragraphs, "абзац", "абзаца", "абзацев")}`;
   $("preview").textContent = snap.text;
+  $("wb-title").value = snap.heading.trim();
+  $("wb-title-tag").hidden = !snap.heading.trim();
+  $("paper-text").textContent = snap.text;
+  syncPaper();
   view("form");
-  $("name").focus();
-  $("name").select();
+  setMode(hasSettings ? conn.lastMode : "wb");
+}
+
+function setMode(next) {
+  mode = next === "wb" || !hasSettings ? "wb" : "entity";
+  for (const b of document.querySelectorAll(".seg button")) b.setAttribute("aria-selected", String(b.dataset.mode === mode));
+  $("pane-entity").hidden = mode !== "entity";
+  $("pane-wb").hidden = mode !== "wb";
+  $("create").hidden = mode !== "entity" || !$("dup").hidden;
+  $("force").hidden = mode !== "entity" || $("dup").hidden;
+  $("to-wb").hidden = mode !== "wb";
+  $("to-inbox").className = mode === "entity" && !$("dup").hidden ? "primary" : "btn left";
+  $("error").hidden = true;
+  const field = mode === "wb" ? $("wb-title") : $("name");
+  field.focus();
+  field.select();
+}
+
+function syncPaper() {
+  $("paper-title").textContent = $("wb-title").value.trim();
+}
+
+function showCount(n) {
+  if (typeof n !== "number") return;
+  $("wb-count").textContent = n ? `На верстаке ${n} ${plural(n, "блок", "блока", "блоков")}` : "Верстак пуст";
+  $("wb-count").hidden = false;
+}
+
+async function unpaired() {
+  await chrome.storage.local.set({ disconnected: true });
+  return offline("Подключение снято в SoyMan", "Подключите расширение заново в окошке у значка. Фрагмент подождёт в очереди.", "НЕ ПОДКЛЮЧЕНО");
 }
 
 function plural(n, one, few, many) {
@@ -124,26 +162,52 @@ async function create(force) {
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 409) return showDup(body.duplicates);
-    if (res.status === 401) {
-      await chrome.storage.local.set({ disconnected: true });
-      return offline("Подключение снято в SoyMan", "Подключите расширение заново в окошке у значка. Фрагмент подождёт в очереди.", "НЕ ПОДКЛЮЧЕНО");
-    }
+    if (res.status === 401) return unpaired();
     if (!res.ok) throw new Error(body.error || "SoyMan не создал сущность");
-    await chrome.storage.local.set({ lastKind: kind, lastSetting: settingId });
+    await chrome.storage.local.set({ lastKind: kind, lastSetting: settingId, lastMode: "entity" });
     await chrome.runtime.sendMessage({ type: "created", entity: body });
     await done();
   } catch (e) {
-    if (e instanceof TypeError) return offline("SoyMan не запущен", "Он закрылся, пока окно было открыто. Фрагмент можно положить в очередь — уйдёт во Входящие при запуске.");
-    $("error").textContent = e.message;
-    $("error").hidden = false;
+    failed(e);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function failed(e) {
+  if (e instanceof TypeError) return offline("SoyMan не запущен", "Он закрылся, пока окно было открыто. Фрагмент можно положить в очередь — уйдёт во Входящие при запуске.");
+  $("error").textContent = e.message;
+  $("error").hidden = false;
+}
+
+async function toWorkbench() {
+  setBusy(true);
+  $("error").hidden = true;
+  try {
+    // client_id — номер окна: повтор после обрыва не кладёт второй блок.
+    const res = await api("/workbench", {
+      method: "POST",
+      body: JSON.stringify({
+        ...snap, client_id: draftKey.slice(6), title: $("wb-title").value.trim(), show_source: $("wb-source").checked,
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401) return unpaired();
+    if (!res.ok) throw new Error(body.error || "SoyMan не принял фрагмент");
+    await chrome.storage.local.set({ lastMode: "wb" });
+    await chrome.runtime.sendMessage({ type: "workbench", count: body.count, title: $("wb-title").value.trim() || snap.page_title });
+    await done();
+  } catch (e) {
+    failed(e);
   } finally {
     setBusy(false);
   }
 }
 
 function setBusy(busy) {
-  for (const id of ["create", "force", "to-inbox"]) $(id).disabled = busy;
+  for (const id of ["create", "force", "to-inbox", "to-wb"]) $(id).disabled = busy;
   $("create").textContent = busy ? "Создаю…" : "Создать";
+  $("to-wb").textContent = busy ? "Кладу…" : "На верстак";
 }
 
 async function toInbox() {
@@ -156,7 +220,9 @@ async function done() {
   window.close();
 }
 
-$("form").addEventListener("submit", (e) => { e.preventDefault(); void create(false); });
+$("form").addEventListener("submit", (e) => { e.preventDefault(); void (mode === "wb" ? toWorkbench() : create(false)); });
+for (const b of document.querySelectorAll(".seg button")) b.addEventListener("click", () => setMode(b.dataset.mode));
+$("wb-title").addEventListener("input", () => { $("wb-title-tag").hidden = $("wb-title").value !== snap.heading.trim() || !snap.heading.trim(); syncPaper(); });
 $("force").addEventListener("click", () => void create(true));
 $("to-inbox").addEventListener("click", () => void toInbox());
 $("to-queue").addEventListener("click", () => void toInbox());

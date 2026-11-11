@@ -75,7 +75,7 @@ describe("web capture from the browser extension", () => {
     expect((await request(server.app).post("/api/web-capture/ext/inbox").auth(key, { type: "bearer" })
       .send({ ...fragment("frag-0002"), url: "file:///C:/secret.txt" })).status).toBe(400);
     const status = await request(server.app).get("/api/web-capture/ext/status").auth(key, { type: "bearer" });
-    expect(status.body).toEqual({ connected: true, inbox: 1 });
+    expect(status.body).toEqual({ connected: true, inbox: 1, workbench: 0 });
     expect((await request(server.app).get("/api/web-capture/inbox").auth(player, { type: "bearer" })).status).toBe(403);
     const inbox = await request(server.app).get("/api/web-capture/inbox").auth(gm, { type: "bearer" });
     expect(inbox.body).toEqual([expect.objectContaining({ id: first.body.id, heading: "Старая обсерватория", captured_at: "2026-11-05T12:40:00.000Z" })]);
@@ -134,6 +134,30 @@ describe("web capture from the browser extension", () => {
     expect((await ext("post", "/open").send({ kind: "location", id: forced.body.id })).body)
       .toEqual({ opened: false, route: `/locations/${forced.body.id}` });
     expect((await ext("post", "/open").send({ kind: "location", id: 999_999 })).status).toBe(404);
+  });
+
+  it("puts fragments on the workbench from the browser and from the inbox", async () => {
+    const ext = (url: string) => request(server.app).post(`/api/web-capture/ext${url}`).auth(key, { type: "bearer" });
+    const sent = await ext("/workbench").send({ ...fragment("bench-0001"), show_source: true });
+    expect(sent.status).toBe(201);
+    expect(sent.body.count).toBe(1);
+    expect((await ext("/workbench").send(fragment("bench-0001"))).body).toMatchObject({ duplicate: true, count: 1 });
+    expect((await request(server.app).get("/api/web-capture/ext/status").auth(key, { type: "bearer" })).body.workbench).toBe(1);
+    // Ключ расширения кладёт на верстак, но не читает его.
+    expect((await request(server.app).get("/api/workbench/blocks").auth(key, { type: "bearer" })).status).toBe(401);
+
+    const queued = await ext("/inbox").send(fragment("bench-0002"));
+    const moved = await request(server.app).post(`/api/web-capture/inbox/${queued.body.id}/to-workbench`).auth(gm, { type: "bearer" });
+    expect(moved.status).toBe(201);
+    expect(moved.body.count).toBe(2);
+    expect((await request(server.app).get("/api/web-capture/inbox").auth(gm, { type: "bearer" })).body).toEqual([]);
+    const bench = (await request(server.app).get("/api/workbench/blocks").auth(gm, { type: "bearer" })).body;
+    expect(bench).toEqual([
+      expect.objectContaining({ kind: "fragment", title: "Старая обсерватория", show_source: 1, url: fragment("x").url }),
+      expect.objectContaining({ kind: "fragment", show_source: 0, text: fragment("x").text }),
+    ]);
+    expect((await ext("/open").send({ kind: "workbench" })).body).toEqual({ opened: false, route: "/workbench" });
+    db.prepare("DELETE FROM workbench_blocks").run();
   });
 
   it("stops accepting fragments once the GM disconnects the extension", async () => {
