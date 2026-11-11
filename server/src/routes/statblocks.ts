@@ -190,11 +190,29 @@ statblocksRouter.post("/import", (req, res) => {
 });
 
 statblocksRouter.get("/", (req, res) => {
-  const { owner_type, owner_id, archived } = req.query as {
+  const { owner_type, owner_id, owner_ids, archived } = req.query as {
     owner_type?: string;
     owner_id?: string;
+    owner_ids?: string;
     archived?: string;
   };
+  // Каталог раздела справочника (вызовы LitM) читает статблоки всех записей
+  // раздела одним запросом, а не по запросу на запись. Только записи
+  // справочника: листы персонажей так не отдаются.
+  if (owner_ids !== undefined) {
+    if (owner_type !== "compendium_entry")
+      return res.status(400).json({ error: "owner_ids — только для owner_type=compendium_entry" });
+    const ids = [...new Set(owner_ids.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 1000);
+    if (!ids.length) return res.json([]);
+    const rows = db
+      .prepare(
+        `SELECT * FROM statblocks
+          WHERE owner_type = 'compendium_entry' AND owner_id IN (${ids.map(() => "?").join(",")}) AND archived_at IS NULL
+          ORDER BY owner_id, created_at`
+      )
+      .all(...ids) as { avatar_image_path: string | null }[];
+    return res.json(rows.map(withAvatarUrl));
+  }
   if (!owner_type || !owner_id)
     return res.status(400).json({ error: "owner_type and owner_id are required" });
   // `archived=1` — корзина статблоков владельца. Удалённый статблок до сих

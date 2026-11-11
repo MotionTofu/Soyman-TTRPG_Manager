@@ -108,6 +108,20 @@ const RULES: Rule[] = [
   { pattern: /^\/characters\/(\d+)(\/|$)/, resolve: (_r, m) => column("SELECT campaign_id FROM characters WHERE id = ?", m[1]) },
   // Записи кампании (цитаты, заметки) — их пишут и игроки, и Мастер.
   { pattern: /^\/campaign-entries\/?$/, resolve: (r) => fromBodyOrQuery(r) },
+  // Полоса «Сцена» LitM (Д33, Q19): спотлайт и сюжетные теги — на листе игрока.
+  // Только строка сцены: правки вызовов и боя D&D игрокам не сигналят.
+  {
+    pattern: /^\/initiative-entries\/?$/,
+    resolve: (r) => (r.body?.kind === "litm_scene" ? column("SELECT campaign_id FROM sessions WHERE id = ?", r.body.session_id) : []),
+  },
+  {
+    pattern: /^\/initiative-entries\/(\d+)\/?$/,
+    resolve: (_r, m) =>
+      column(
+        "SELECT s.campaign_id FROM initiative_entries ie JOIN sessions s ON s.id = ie.session_id WHERE ie.id = ? AND ie.kind = 'litm_scene'",
+        m[1]
+      ),
+  },
   { pattern: /^\/campaign-entries\/(\d+)\/?$/, resolve: (_r, m) => column("SELECT campaign_id FROM campaign_entries WHERE id = ?", m[1]) },
   // Сеттинг: игроцкий текст, видимые статьи и хроника — видны всем его кампаниям.
   {

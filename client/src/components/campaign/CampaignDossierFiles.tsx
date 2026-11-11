@@ -72,6 +72,8 @@ interface Props {
   roster: RosterPlayer[];
   characters: Character[];
   sheets: Map<number, SheetInfo>;
+  /** Спотлайт за кампанию LitM по id персонажа (Д33, Q15). */
+  spotlight?: Record<string, number>;
   debts: CampaignDebt[];
   currency: string;
   hideFinance: boolean;
@@ -210,6 +212,7 @@ export function CampaignDossierFiles(props: Props) {
                     {CHARACTER_STATUS_LABELS[status]}
                   </button>
                   <SheetLines id={c.id} name={c.character_name} info={info} />
+                  {!!props.spotlight?.[c.id] && <p className="dossier-file__last"><span>Спотлайт за кампанию</span> ×{props.spotlight[c.id]}</p>}
                   {ci === 0 && last}
                 </div>
               </li>;

@@ -5,12 +5,16 @@ interface Props {
   variant: "power" | "weak";
   onChange: (tags: string[]) => void;
   leadingChip?: string;
+  /** Вычеркнутые теги (по тексту). С `onToggleScratch` нажатие на тег
+   *  вычёркивает его и возвращает (Q10 пульта LitM). */
+  scratched?: readonly string[];
+  onToggleScratch?: (tag: string) => void;
 }
 
 // Chip list with an inline add box and a remove button per chip. Used both
 // inside the full theme-card edit form and directly in the collapsed view,
 // so tags can be added/removed without opening full statblock edit mode.
-export const TagList = memo(function TagList({ tags, variant, onChange, leadingChip }: Props) {
+export const TagList = memo(function TagList({ tags, variant, onChange, leadingChip, scratched, onToggleScratch }: Props) {
   const [draft, setDraft] = useState("");
   const cls = variant === "power" ? "litm-tag-power" : "litm-tag-weak";
   const safeTags = tags ?? [];
@@ -23,13 +27,28 @@ export const TagList = memo(function TagList({ tags, variant, onChange, leadingC
   function remove(i: number) {
     onChange(safeTags.filter((_, idx) => idx !== i));
   }
+  function label(t: string) {
+    if (!onToggleScratch) return t;
+    const on = scratched?.includes(t) ?? false;
+    return (
+      <button
+        type="button"
+        className="litm-tag-text"
+        aria-pressed={on}
+        title={on ? "Вернуть тег" : "Вычеркнуть тег"}
+        onClick={() => onToggleScratch(t)}
+      >
+        {t}
+      </button>
+    );
+  }
 
   return (
     <div className="litm-tag-row">
-      {leadingChip && <span className={`litm-tag ${cls}`}>{leadingChip}</span>}
+      {leadingChip && <span className={`litm-tag ${cls}${scratched?.includes(leadingChip) ? " is-scratched" : ""}`}>{label(leadingChip)}</span>}
       {safeTags.map((t, i) => (
-        <span key={i} className={`litm-tag ${cls}`}>
-          {t}
+        <span key={i} className={`litm-tag ${cls}${scratched?.includes(t) ? " is-scratched" : ""}`}>
+          {label(t)}
           <button type="button" onClick={() => remove(i)}>
             −
           </button>

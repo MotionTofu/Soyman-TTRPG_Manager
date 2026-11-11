@@ -36,6 +36,15 @@ function BattleFullLog({ battleId }: { battleId: number }) {
   );
 }
 
+/** Строка «Вызовов вечера» LitM (Д33, Q15): кто чем преодолён, статусы героев, спотлайт. */
+function litmMeta(l: NonNullable<BattleSummary["litm"]>): string[] {
+  return [
+    l.overcome.length ? `преодолены: ${l.overcome.map((o) => `${o.name} (${o.by})`).join(", ")}` : "никто не преодолён",
+    l.statuses.length ? `получили: ${l.statuses.map((h) => `${h.name} ${h.list.join(", ")}`).join("; ")}` : "",
+    l.spotlight.length ? `спотлайт: ${l.spotlight.map((s) => `${s.name} ×${s.n}`).join(", ")}` : "",
+  ];
+}
+
 /**
  * «Бои вечера» в «Итогах» (Q21, Q22, Q73, Q83): строка на бой — раунды,
  * время, повергнутые, урон по сторонам; у Мастера раскрывается в полный лог.
@@ -45,10 +54,11 @@ export function SessionBattles({ sessionId, isPlayer }: { sessionId: number; isP
   const battles = useResource<BattleSummary[]>(sessionBattlesPath(sessionId)).data ?? NO_BATTLES;
   const [open, setOpen] = useState<number | null>(null);
   if (battles.length === 0) return null;
+  const litm = battles.every((b) => b.litm);
   return (
     <div className="card stack sp-battles">
       <div className="row sp-notes__head">
-        <span className="sp-title">Бои вечера</span>
+        <span className="sp-title">{litm ? "Вызовы вечера" : "Бои вечера"}</span>
         <span className="muted">{isPlayer ? "полный лог видит только Мастер" : "строка раскрывается в полный лог"}</span>
       </div>
       {battles.map((b) => {
@@ -56,12 +66,11 @@ export function SessionBattles({ sessionId, isPlayer }: { sessionId: number; isP
         const defeated = b.defeated.length ? `повержены: ${b.defeated.join(", ")}` : "без повергнутых";
         const meta = [
           b.carried_from != null ? `продолжение из сессии ${b.carried_from}` : "",
-          defeated,
-          isPlayer ? "" : `партия нанесла ${b.dealt}, получила ${b.taken}`,
+          ...(b.litm ? litmMeta(b.litm) : [defeated, isPlayer ? "" : `партия нанесла ${b.dealt}, получила ${b.taken}`]),
         ]
           .filter(Boolean)
           .join(" · ");
-        const rounds = `${b.rounds} ${plural(b.rounds, "раунд", "раунда", "раундов")}`;
+        const rounds = b.litm ? "" : `${b.rounds} ${plural(b.rounds, "раунд", "раунда", "раундов")}`;
         return (
           <div key={b.id} className="sp-battle">
             <button

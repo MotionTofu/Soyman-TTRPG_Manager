@@ -2087,6 +2087,7 @@ function StatblockCard({
                 value={litmValue as LitMCharacterData}
                 onQuickUpdate={quickSave}
                 campaignId={campaignId}
+                characterId={statblock.owner_type === "character" ? statblock.owner_id : undefined}
               />
             )}
             {statblock.format === "litm_challenge" && litmValue && (

@@ -1,4 +1,4 @@
-import { battleStats, describeChanges, diffValues, type LogChange } from "@soyman/shared";
+import { battleStats, describeChanges, diffValues, litmStats, type BattleLine, type LogChange } from "@soyman/shared";
 import { db } from "../db/db";
 import { broadcastToGm } from "./realtime";
 import { SESSION_NUMBER_SQL } from "./sessionNumber";
@@ -42,13 +42,21 @@ function currentSceneName(sessionId: number): string | null {
   return row?.name?.trim() || null;
 }
 
-/** «Засада у моста», второй там же — «Засада у моста · 2»; без сцены — «Бой N». */
-function battleName(sessionId: number): string {
+/** Кампания на Legend in the Mist: её бои — «Вызовы» (Backlog Д33), итоги свои. */
+function campaignIsLitm(campaignId: number): boolean {
+  const row = db
+    .prepare("SELECT sy.code FROM campaigns c JOIN systems sy ON sy.id = c.system_id WHERE c.id = ?")
+    .get(campaignId) as { code: string | null } | undefined;
+  return row?.code === "litm";
+}
+
+/** «Засада у моста», второй там же — «Засада у моста · 2»; без сцены — «Бой N» («Вызовы N» в LitM). */
+function battleName(sessionId: number, litm: boolean): string {
   const names = (db.prepare("SELECT name FROM battles WHERE session_id = ?").all(sessionId) as { name: string }[]).map(
     (r) => r.name
   );
   const scene = currentSceneName(sessionId);
-  if (!scene) return `Бой ${names.length + 1}`;
+  if (!scene) return `${litm ? "Вызовы" : "Бой"} ${names.length + 1}`;
   const same = names.filter((n) => n === scene || n.startsWith(`${scene} · `)).length;
   return same ? `${scene} · ${same + 1}` : scene;
 }
@@ -61,7 +69,7 @@ export function openBattle(sessionId: number, turnEntryId: number | null, round:
   const id = Number(
     db
       .prepare("INSERT INTO battles (campaign_id, session_id, name) VALUES (?, ?, ?)")
-      .run(s.campaign_id, sessionId, battleName(sessionId)).lastInsertRowid
+      .run(s.campaign_id, sessionId, battleName(sessionId, campaignIsLitm(s.campaign_id))).lastInsertRowid
   );
   db.prepare("INSERT INTO battle_spans (battle_id, session_id, started_at) VALUES (?, ?, datetime('now'))").run(id, sessionId);
   db.prepare("UPDATE sessions SET combat_battle_id = ? WHERE id = ?").run(id, sessionId);
@@ -321,8 +329,58 @@ export function logSheetEdit(characterId: number, before: string | null, after: 
   }
 }
 
-/** «Бои вечера» сессии (Q21, Q73, Q79, Q83). */
+function parseLines(rows: { changes: string; undone: number }[]): BattleLine[] {
+  return rows.map((l) => {
+    let changes: LogChange[] = [];
+    try {
+      changes = JSON.parse(l.changes);
+    } catch {
+      /* битая строка в итоги не идёт */
+    }
+    return { changes, undone: !!l.undone };
+  });
+}
+
+function characterNames(ids: string[]): Map<number, string> {
+  if (!ids.length) return new Map();
+  const rows = db
+    .prepare(`SELECT id, character_name FROM characters WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .all(...ids.map(Number)) as { id: number; character_name: string }[];
+  return new Map(rows.map((r) => [r.id, r.character_name]));
+}
+
+/**
+ * «Вызовы вечера» (Д33, Q15): кто чем преодолён и статусы героев — по всему
+ * конфликту, спотлайт — только за эту сессию (перенесённый считается в своей).
+ */
+function litmSummary(battleId: number, sessionId: number) {
+  const rows = db.prepare("SELECT changes, undone, session_id FROM battle_log WHERE battle_id = ? ORDER BY id").all(battleId) as {
+    changes: string;
+    undone: number;
+    session_id: number;
+  }[];
+  const all = litmStats(parseLines(rows));
+  const own = litmStats(parseLines(rows.filter((r) => r.session_id === sessionId))).spotlight;
+  const names = characterNames(Object.keys(own));
+  return {
+    overcome: all.overcome,
+    statuses: all.statuses,
+    spotlight: Object.entries(own).map(([id, n]) => ({ id: Number(id), name: names.get(Number(id)) ?? "?", n })),
+  };
+}
+
+/** Спотлайт за кампанию по героям (Д33, Q15) — для дела игрока в «Партии». */
+export function campaignSpotlight(campaignId: number): Record<string, number> {
+  const rows = db
+    .prepare("SELECT l.changes, l.undone FROM battle_log l JOIN battles b ON b.id = l.battle_id WHERE b.campaign_id = ?")
+    .all(campaignId) as { changes: string; undone: number }[];
+  return litmStats(parseLines(rows)).spotlight;
+}
+
+/** «Бои вечера» сессии (Q21, Q73, Q79, Q83); в LitM — «Вызовы вечера». */
 export function sessionBattles(sessionId: number) {
+  const campaign = db.prepare("SELECT campaign_id FROM sessions WHERE id = ?").get(sessionId) as { campaign_id: number } | undefined;
+  const litm = campaign ? campaignIsLitm(campaign.campaign_id) : false;
   const battles = db
     .prepare(
       `SELECT b.id, b.name, b.carry_campaign_id FROM battles b
@@ -337,17 +395,7 @@ export function sessionBattles(sessionId: number) {
       undone: number;
       round: number;
     }[];
-    const stats = battleStats(
-      lines.map((l) => {
-        let changes: LogChange[] = [];
-        try {
-          changes = JSON.parse(l.changes);
-        } catch {
-          /* битая строка в итоги не идёт */
-        }
-        return { changes, undone: !!l.undone };
-      })
-    );
+    const stats = battleStats(parseLines(lines));
     const rounds = lines.filter((l) => !l.undone).map((l) => l.round).filter((r) => r > 0);
     return {
       id: b.id,
@@ -360,6 +408,7 @@ export function sessionBattles(sessionId: number) {
       /** Ждёт следующую сессию, которой ещё нет. */
       carry_pending: b.carry_campaign_id != null,
       ...stats,
+      ...(litm ? { litm: litmSummary(b.id, sessionId) } : {}),
     };
   });
 }

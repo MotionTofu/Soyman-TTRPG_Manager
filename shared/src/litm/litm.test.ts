@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vitest";
+import {
+  formatStatus,
+  giveStatus,
+  heroCondition,
+  normalizeStatuses,
+  parseStatusTag,
+  reduceMarks,
+  reduceStatus,
+  stackMarks,
+  statusTier,
+} from "./status";
+import {
+  challengeStateFromProfile,
+  giveToLimit,
+  overcomeBy,
+  parseChallengeState,
+  parseSceneState,
+  passSpotlight,
+  reduceLimit,
+  turnedLimits,
+  type LitmSpotlight,
+} from "./conflict";
+
+describe("статусы LitM — примеры книги (A167–A168)", () => {
+  it("складывает: отвлечён-2 + отвлечён-4 = 4, отвлечён-2 + отвлечён-2 = 3", () => {
+    expect(stackMarks([2], 4)).toEqual([2, 4]);
+    expect(statusTier(stackMarks([2], 4))).toBe(4);
+    expect(stackMarks([2], 2)).toEqual([2, 3]);
+    expect(statusTier(stackMarks([2], 2))).toBe(3);
+  });
+
+  it("занятая клетка → следующая свободная справа, сверх шестой не растёт", () => {
+    expect(stackMarks([1, 2, 3], 1)).toEqual([1, 2, 3, 4]);
+    expect(stackMarks([1, 2, 3, 4, 5, 6], 2)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(stackMarks([6], 6)).toEqual([6]);
+  });
+
+  it("ослабляет сдвигом влево: благословлён-4 − 3 = 1; ниже 1 — снят", () => {
+    expect(reduceMarks([4], 3)).toEqual([1]);
+    expect(reduceMarks([1, 3], 1)).toEqual([2]);
+    expect(reduceStatus([{ name: "ранен", marks: [2] }], "Ранен", 2)).toEqual([]);
+  });
+
+  it("одинаковое имя складывается само, «Сложить с» — в чужую карточку", () => {
+    let list = giveStatus([], "ранен", 2);
+    list = giveStatus(list, "Ранен ", 2);
+    expect(list).toEqual([{ name: "ранен", marks: [2, 3] }]);
+    list = giveStatus(list, "истекает кровью", 1, "ранен");
+    expect(list.map(formatStatus)).toEqual(["ранен-3"]);
+    list = giveStatus(list, "напуган", 1);
+    expect(list.map(formatStatus)).toEqual(["ранен-3", "напуган-1"]);
+  });
+
+  it("читает разметку: имя с дефисами, уровень — последнее число", () => {
+    expect(parseStatusTag("*настороже-1*")).toEqual({ name: "настороже", tier: 1 });
+    expect(parseStatusTag("*застигнут-врасплох-3*")).toEqual({ name: "застигнут-врасплох", tier: 3 });
+    expect(parseStatusTag("*плащ и кинжал*")).toBeNull();
+    expect(parseStatusTag("*охраняет-территорию-2*, *кочевник-2*")).toBeNull();
+  });
+
+  it("герой: 5 — повержен, 6 — необратимо", () => {
+    const list = [{ name: "ранен", marks: [2, 4, 5] }, { name: "отравлен", marks: [3] }];
+    expect(heroCondition(list).overcome?.name).toBe("ранен");
+    expect(heroCondition(list).beyond).toBeNull();
+    expect(heroCondition([{ name: "проклят", marks: [6] }]).beyond?.name).toBe("проклят");
+  });
+
+  it("битые статусы из листа выбрасываются", () => {
+    expect(normalizeStatuses([{ name: "ранен", marks: [3, 1, 3, 9] }, { name: "", marks: [1] }, null, { name: "х", marks: [] }]))
+      .toEqual([{ name: "ранен", marks: [1, 3] }]);
+  });
+});
+
+describe("строка вызова", () => {
+  const catspaw = {
+    limitList: [{ name: "Ранить", max: "3" }, { name: "Поймать или сбежать", max: "5" }, { name: "Убедить", max: "-" }],
+    tagList: [{ text: "*плащ и кинжал*" }, { text: "*идеальная-позиция-2*" }],
+  };
+
+  it("собирается из профиля: пределы, «—», стартовые статусы из тегов (Q6)", () => {
+    const s = challengeStateFromProfile(catspaw);
+    expect(s.limits.map((l) => l.max)).toEqual([3, 5, null]);
+    expect(s.statuses).toEqual([{ name: "идеальная-позиция", marks: [2] }]);
+    expect(s.declaredThreat).toBeNull();
+  });
+
+  it("предел достигнут — преодолён; «—» статус не принимает", () => {
+    let s = challengeStateFromProfile(catspaw);
+    s = giveToLimit(s, 0, "ранен", 2);
+    expect(overcomeBy(s)).toBeNull();
+    s = giveToLimit(s, 0, "ранен", 2);
+    expect(s.limits[0]).toMatchObject({ status: "ранен", marks: [2, 3] });
+    expect(overcomeBy(s)?.name).toBe("Ранить");
+    expect(giveToLimit(s, 2, "убеждён", 4)).toBe(s);
+  });
+
+  it("предел ↻ меняет вызов, а не убирает (Q9)", () => {
+    let s = challengeStateFromProfile({ limitList: [{ name: "Задетая честь", max: "3", arrow: true, note: "Вызывает на дуэль" }] });
+    s = giveToLimit(s, 0, "задета-честь", 3);
+    expect(overcomeBy(s)).toBeNull();
+    expect(turnedLimits(s).map((l) => l.name)).toEqual(["Задетая честь"]);
+  });
+
+  it("«снять 1 уровень с *убежать*» ослабляет предел", () => {
+    let s = challengeStateFromProfile({ limitList: [{ name: "Убежать", max: "3" }] });
+    s = giveToLimit(s, 0, "отстал", 2);
+    s = reduceLimit(s, 0, 1);
+    expect(s.limits[0].marks).toEqual([1]);
+    s = reduceLimit(s, 0, 1);
+    expect(s.limits[0]).toMatchObject({ marks: [], status: "" });
+  });
+
+  it("переживает сохранение в колонку state", () => {
+    const s = giveToLimit(challengeStateFromProfile(catspaw), 1, "схвачен", 1);
+    expect(parseChallengeState(JSON.stringify(s))).toEqual(s);
+    expect(parseChallengeState("не json").limits).toEqual([]);
+  });
+});
+
+describe("спотлайт", () => {
+  const order = [1, 2, 3, 4];
+
+  it("передаётся следующему несходившему и считается", () => {
+    let sp = passSpotlight({ current: null, acted: [], counts: {} }, order);
+    expect(sp.current).toBe(1);
+    sp = passSpotlight(sp, order);
+    expect(sp).toEqual({ current: 2, acted: [1], counts: { 1: 1, 2: 1 } });
+  });
+
+  it("повергнутого пропускает; сходили все — круг заново", () => {
+    let sp: LitmSpotlight = { current: 2, acted: [1], counts: {} };
+    sp = passSpotlight(sp, order, [3]);
+    expect(sp.current).toBe(4);
+    sp = passSpotlight(sp, order, [3]);
+    expect(sp).toMatchObject({ current: 1, acted: [] });
+  });
+
+  it("Мастер даёт спотлайт любому — тот перестаёт быть сходившим", () => {
+    const sp = passSpotlight({ current: 2, acted: [1], counts: { 1: 3 } }, order, [], 1);
+    expect(sp).toEqual({ current: 1, acted: [2], counts: { 1: 4 } });
+  });
+
+  it("сцена из пустого state — пустая", () => {
+    expect(parseSceneState("")).toEqual({ tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null });
+  });
+});

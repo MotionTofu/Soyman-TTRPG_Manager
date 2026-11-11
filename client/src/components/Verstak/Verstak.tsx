@@ -731,6 +731,19 @@ function SpellOrMonsterCard({ entry }: { entry: CompendiumEntry }) {
       </div>
     );
   }
+  // Вызов LitM — своя мини-карточка: роли, рейтинг, место (решение 2026-11-06, Q4),
+  // а не «размер · тип существа» бестиария D&D.
+  if (entry.kind === "monster" && (Array.isArray(d?.roles) || typeof d?.location === "string")) {
+    const roles = Array.isArray(d?.roles) ? (d.roles as string[]).join(" · ") : "";
+    const rating = typeof d?.rating === "number" ? `рейтинг ${"●".repeat(d.rating)}${"○".repeat(Math.max(0, 5 - d.rating))}` : "";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflow: "hidden" }}>
+        <div style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", fontWeight: 700, textTransform: "uppercase" }}>{entry.name || "Без названия"}</div>
+        <div className="muted" style={{ fontSize: "var(--fs-micro)" }}>{["Вызов LitM", roles, rating].filter(Boolean).join(" · ")}</div>
+        <div style={{ fontSize: "var(--fs-meta)", lineHeight: 1.35, whiteSpace: "pre-wrap", overflow: "hidden", flex: 1, borderTop: "1px solid var(--line)", paddingTop: 4 }}>{previewChars(plain, 400) || String(d?.location ?? "Без описания")}</div>
+      </div>
+    );
+  }
   if (entry.kind === "monster") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflow: "hidden" }}>

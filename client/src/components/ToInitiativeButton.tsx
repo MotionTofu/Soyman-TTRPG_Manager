@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useUnloadTargets } from "../unloadTargets";
 import type { SearchResult } from "../types";
+import { LITM_RIBBON_TARGET } from "./litm/pult/useLitmRibbon";
 
 // «В бой» в строке панели (рестайл «Д»: мечи в 14px читались лопатами): существо уезжает в трекер инициативы одним
 // щелчком. Перетаскивание остаётся — оно быстрее, когда рука уже на мыши, — но
@@ -15,14 +16,16 @@ import type { SearchResult } from "../types";
 export function ToInitiativeButton({ item }: { item: SearchResult }) {
   const targets = useUnloadTargets();
   const [sent, setSent] = useState(false);
-  const tracker = targets.find((t) => t.label === "Инициатива" && t.accepts(item));
+  // В кампании LitM ту же кнопку принимает лента «Вызовов» (Д33, Q16).
+  const ribbon = targets.find((t) => t.label === LITM_RIBBON_TARGET && t.accepts(item));
+  const tracker = ribbon ?? targets.find((t) => t.label === "Инициатива" && t.accepts(item));
   if (!tracker) return null;
 
   return (
     <button
       type="button"
       className={`to-init${sent ? " is-sent" : ""}`}
-      title={sent ? "Уже в трекере — можно ещё раз" : "В трекер инициативы"}
+      title={ribbon ? (sent ? "Уже на ленте — можно ещё раз" : "На ленту вызовов") : sent ? "Уже в трекере — можно ещё раз" : "В трекер инициативы"}
       onClick={async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -30,7 +33,7 @@ export function ToInitiativeButton({ item }: { item: SearchResult }) {
         setSent(true);
       }}
     >
-      {sent ? "✓ В бою" : "В бой"}
+      {ribbon ? (sent ? "✓ На ленте" : "На ленту") : sent ? "✓ В бою" : "В бой"}
     </button>
   );
 }

@@ -27,6 +27,8 @@ beforeAll(async () => {
   app.use("/api/sessions", sessionsRouter);
   app.use("/api/battles", battlesRouter);
   app.use("/api/statblocks", statblocksRouter);
+  const { campaignsRouter } = await import("./campaigns");
+  app.use("/api/campaigns", campaignsRouter);
 
   const settingId = insert("INSERT INTO settings (name, folder_path) VALUES ('S', 'Settings/S')");
   campaignId = insert("INSERT INTO campaigns (name, setting_id, folder_path) VALUES ('C', ?, 'Campaigns/C')", settingId);
@@ -110,6 +112,60 @@ describe("бой и лог", () => {
     expect(db.prepare("SELECT combat_active, combat_round FROM sessions WHERE id = ?").get(created.body.id)).toEqual({
       combat_active: 1,
       combat_round: 2,
+    });
+  });
+});
+
+describe("«Вызовы вечера» LitM (Д33, Q15)", () => {
+  it("итоги и спотлайт считаются из неотменённых строк лога", async () => {
+    const { diffValues, sheetView, emptySceneState } = await import("@soyman/shared");
+    const systemId = insert("INSERT INTO systems (name, code) VALUES ('Legend in the Mist (тест)', 'litm')");
+    const settingId = insert("INSERT INTO settings (name, folder_path) VALUES ('S2', 'Settings/S2')");
+    const camp = insert("INSERT INTO campaigns (name, setting_id, system_id, folder_path) VALUES ('L', ?, ?, 'Campaigns/L')", settingId, systemId);
+    const ses = insert("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-11-07', 'planned')", camp);
+    const playerId = insert("INSERT INTO players (name) VALUES ('Игрок L')");
+    const hero = insert("INSERT INTO characters (player_id, campaign_id, character_name) VALUES (?, ?, 'Воин')", playerId, camp);
+    await request(app).put(`/api/sessions/${ses}/combat`).send({ active: true, turn_entry_id: null, round: 1 });
+    const info = (await request(app).get(`/api/sessions/${ses}/battle`)).body;
+    expect(info.name).toBe("Вызовы 1");
+
+    const limit = (marks: number[]) => ({ state: { limits: [{ name: "Изгнать", max: 2, turns: false, note: "", status: "изгнан", marks }] } });
+    const scene = emptySceneState();
+    const lit = { ...scene, spotlight: { current: hero, acted: [hero], counts: { [hero]: 1 } } };
+    const blank = { themes: [], storyThemes: [], fellowshipTheme: {} };
+    const lines = [
+      { target: { t: "row", id: 1, name: "Домовой", party: false }, ops: diffValues(limit([]), limit([1, 2])) },
+      { target: { t: "row", id: 2, name: "Сцена", party: false }, ops: diffValues({ state: scene }, { state: lit }) },
+      { target: { t: "sheet", cid: hero, name: "Воин", party: true }, ops: diffValues(sheetView({ ...blank, statuses: [] }), sheetView({ ...blank, statuses: [{ name: "ранен", marks: [2] }] })) },
+    ];
+    for (const c of lines) {
+      await request(app).post(`/api/battles/${info.id}/log`).send({ session_id: ses, kind: c.target.name === "Сцена" ? "turn" : "event", text: "—", changes: [c] });
+    }
+    const summary = (await request(app).get(`/api/sessions/${ses}/battles`)).body[0];
+    expect(summary.litm).toEqual({
+      overcome: [{ name: "Домовой", by: "Изгнать" }],
+      statuses: [{ cid: hero, name: "Воин", list: ["ранен-2"] }],
+      spotlight: [{ id: hero, name: "Воин", n: 1 }],
+    });
+    expect((await request(app).get(`/api/campaigns/${camp}/litm-spotlight`)).body).toEqual({ [hero]: 1 });
+
+    // Стол игрока (Q19): спотлайт и теги сцены — только пока сессия идёт.
+    const { playerRouter } = await import("./player");
+    const papp = express();
+    papp.use(express.json());
+    papp.use("/api", (req: Record<string, unknown>, _res: unknown, next: () => void) => {
+      req["user"] = { role: "player", playerId };
+      next();
+    });
+    papp.use("/api/player", playerRouter);
+    insert("INSERT INTO campaign_roster (campaign_id, player_id) VALUES (?, ?)", camp, playerId);
+    insert("INSERT INTO initiative_entries (session_id, name, kind, state) VALUES (?, 'Сцена', 'litm_scene', ?)", ses, JSON.stringify({ ...lit, tags: [{ name: "ливень", hindering: true }] }));
+    expect((await request(papp).get(`/api/player/campaigns/${camp}/litm-table`)).body).toBeNull();
+    db.prepare("UPDATE sessions SET live_mode = 'live' WHERE id = ?").run(ses);
+    expect((await request(papp).get(`/api/player/campaigns/${camp}/litm-table`)).body).toEqual({
+      spotlight: hero,
+      tags: [{ name: "ливень", hindering: true }],
+      statuses: [],
     });
   });
 });

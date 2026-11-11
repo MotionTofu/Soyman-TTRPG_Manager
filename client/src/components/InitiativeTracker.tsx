@@ -14,6 +14,7 @@ import { isDead, patchRow, useCombat } from "../combat/useCombat";
 import { endCombatSummary } from "../combat/effectOps";
 import { COMBAT_TYPES, pickName, resolveStatblockInfo } from "../combat/addToCombat";
 import { requestNestFocus, setCombatModeOpen, useCombatModeOpen } from "../combat/combatModeStore";
+import { useSessionSystemCode } from "./litm/pult/useLitmRibbon";
 import type {
   InitiativeKind,
   InitiativeEntry,
@@ -61,7 +62,23 @@ interface Props {
 }
 
 // title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
-export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactNode }) {
+export function InitiativeTracker(props: Props & { title?: ReactNode }) {
+  // В кампании LitM очереди хода нет: расклад — в режиме «Вызовы» пульта (Д33,
+  // Q1). Пока система читается, трекер не ставится, чтобы «Мешок» и «В бой»
+  // не увидели на миг чужую цель «Инициатива».
+  const code = useSessionSystemCode(props.sessionId);
+  if (code === undefined) return null;
+  if (code === "litm")
+    return (
+      <div className="stack">
+        {props.title}
+        <span className="muted">В Legend in the Mist очереди хода нет — вызовы, сцена и спотлайт в режиме «Вызовы» пульта.</span>
+      </div>
+    );
+  return <DndInitiativeTracker {...props} />;
+}
+
+function DndInitiativeTracker({ sessionId, title }: Props & { title?: ReactNode }) {
   const [confirmDialog, confirm] = useConfirm();
   const [resettingRolls, setResettingRolls] = useState(false);
   const [dragOver, setDragOver] = useState(false);
