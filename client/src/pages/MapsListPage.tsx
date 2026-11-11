@@ -1,3 +1,4 @@
+import "./maps-d.css";
 import { useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -8,6 +9,8 @@ import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
+import { RegArchive, RegMeta, RegRow, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
+import type { ContextMenuItem } from "../components/ContextMenu";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { ListPage } from "../components/ListPage";
@@ -16,7 +19,6 @@ import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
 import { mapWorkspaceApi } from "../maps/workspace/mapApi";
 import {
   MAP_GRID_LABELS,
-  MAP_KIND_LABELS,
   MAP_SCALE_PRESETS,
   OVERVIEW_PRESETS,
   TACTICAL_CELL,
@@ -33,7 +35,7 @@ import {
   type MapSummary,
 } from "../maps/mapTypes";
 import { ScalePreview } from "../maps/ScalePreview";
-import { genreLabel, packsFor, rankPacks } from "../maps/assets/packs";
+import { packsFor, rankPacks } from "../maps/assets/packs";
 import { registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
 import { GenrePicker } from "../components/GenrePicker";
 import type { Setting, SettingGenre } from "../types";
@@ -45,19 +47,36 @@ function formatUpdated(value: string): string {
 }
 
 const NO_MAPS: MapSummary[] = [];
+// Без заголовка версии сервер отвечает на карту v6 отказом 409, а в общем списке /maps помечает её
+// «не поддерживается» (для экранов, что не умеют v6): плитки v6 оставались без миниатюры.
+const THUMB_HEADERS = { [MAP_VERSION_HEADER]: "6" };
 /** Миниатюра карты не меняется, пока не сменилась дата правки — она в пути. */
 function thumbPath(map: MapSummary): string {
   return `/maps/${map.id}/thumbnail?v=${encodeURIComponent(map.updated_at)}`;
 }
 
-function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
+const KIND_PLATE: Record<MapKind, string> = { tactical: "тактическая", city: "город", overview: "обзорная" };
+const KIND_TABS: readonly { id: MapKind; label: string }[] = [
+  { id: "tactical", label: "Тактические" },
+  { id: "city", label: "Город" },
+  { id: "overview", label: "Обзорные" },
+];
+
+// «Список» (доска Map-List-Rows): Название · Вид · Клетка · Размер · Изменена; на телефоне — вид.
+const MAP_COLUMNS: RegColumn[] = [
+  { label: "Название", width: "minmax(0, 1.6fr)" },
+  { label: "Вид", width: "120px", phone: true },
+  { label: "Клетка", width: "minmax(110px, 0.8fr)" },
+  { label: "Размер", width: "90px" },
+  { label: "Изменена", width: "130px" },
+];
+
+/** Местные пункты меню карты: общий блок сущности открыть карту не умеет — у карты нет профиля. */
+function useMapMenu(canEdit: boolean) {
   const [dialog, confirm] = useConfirm();
   const run = useAction();
-
-  const thumb =
-    map.thumbnail && map.thumbnail.startsWith("data:image/png;base64,") ? map.thumbnail : null;
-
-  async function remove() {
+  const navigate = useNavigate();
+  async function archive(map: MapSummary) {
     const ok = await confirm({
       title: "Убрать карту в архив?",
       message: `«${map.name}» уйдёт в раздел «Архив» вместе со всеми клетками. Вернуть можно оттуда же.`,
@@ -69,67 +88,18 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
     // При отказе карта остаётся на месте, плашка предлагает повторить.
     await run(labelled("Карта не убрана в архив", () => write.del(`/maps/${map.id}`, map.document_version === 6 ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined)), {
       // Только список: миниатюру удалённой карты перечитывать незачем (404).
-      affects: [{ kind: "map", id: map.id, card: true }],
+      affects: [{ kind: "map", id: map.id, card: true }, { path: "/archive" }],
     });
   }
-
-  return (
-    <div className="card campaign-tile">
-      <Link to={canEdit ? `/maps/${map.id}/workspace` : `/maps/${map.id}`} className="campaign-tile-cover">
-        {thumb ? (
-          <div
-            className="map-tile-art"
-            style={{ backgroundImage: `url("${thumb}")` }}
-            aria-hidden="true"
-          />
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true">
-            <span className="group-add-icon">
-              <NavIcon name="map" />
-            </span>
-          </div>
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{map.name}</h3>
-      </Link>
-      <div className="campaign-tile-meta">
-        {canEdit && <Link to={`/maps/${map.id}/workspace`}>Открыть редактор</Link>}
-        {canEdit && map.document_version !== 6 && <Link to={`/maps/${map.id}`}>Классический редактор</Link>}
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <span className="badge tag">{MAP_GRID_LABELS[map.grid]}</span>
-          <span className="badge tag">{MAP_KIND_LABELS[mapKind(map.scale)]}{map.cell_lore && ` · клетка ${map.cell_lore}`}</span>
-          {map.player_visible === 1 && <span className="badge tag">видят игроки</span>}
-          {map.document_unsupported && <span className="badge tag">{canEdit && map.document_version === 6 ? "новый редактор" : "формат пока не поддерживается"}</span>}
-        </div>
-        <div
-          className="muted row"
-          style={{
-            justifyContent: "space-between",
-            alignItems: "center",
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--fs-micro)",
-          }}
-        >
-          <span>
-            {map.width}×{map.height} · {formatUpdated(map.updated_at)}
-          </span>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={remove}
-              title="В архив"
-              aria-label={`Убрать карту ${map.name} в архив`}
-              style={{ padding: "2px 6px", height: 26 }}
-            >
-              <NavIcon name="delete" />
-            </button>
-          )}
-        </div>
-      </div>
-      {dialog}
-    </div>
-  );
+  const menuFor = (map: MapSummary): ContextMenuItem[] => canEdit ? [
+    { label: "Открыть редактор", onClick: () => navigate(`/maps/${map.id}/workspace`) },
+    ...(map.document_version !== 6 ? [{ label: "Классический редактор", onClick: () => navigate(`/maps/${map.id}`) }] : []),
+    { label: "В архив", danger: true, onClick: () => void archive(map) },
+  ] : [];
+  return [dialog, menuFor] as const;
 }
+
+const gridOf = (map: MapSummary) => MAP_GRID_LABELS[map.grid].toLocaleLowerCase("ru");
 
 export function MapsListPage() {
   const { user } = useCurrentUser();
@@ -148,6 +118,8 @@ export function MapsListPage() {
   const [gridFilter, setGridFilter] = useState<"all" | MapGrid>("all");
   const [visFilter, setVisFilter] = useState<"all" | "visible" | "hidden">("all");
   const [sort, setSort] = useState<"recent" | "az">("recent");
+  const [view, setView] = useListView("maps");
+  const [menuDialog, menuFor] = useMapMenu(canEdit);
 
   const [creating, setCreating] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -169,7 +141,7 @@ export function MapsListPage() {
   // датой правки: не изменившаяся карта берёт миниатюру из кэша.
   const thumbs = useQueries({
     queries: listed.map((m) => (
-      { ...resourceQuery<{ thumbnail: string | null }>(thumbPath(m), { staleMs: Infinity, gcMs: 30 * 60_000 }), enabled: !m.document_unsupported }
+      { ...resourceQuery<{ thumbnail: string | null }>(thumbPath(m), { staleMs: Infinity, gcMs: 30 * 60_000, headers: THUMB_HEADERS }), enabled: !m.document_unsupported || m.document_version === 6 }
     )),
   });
   const maps = useMemo(
@@ -277,47 +249,26 @@ export function MapsListPage() {
 
   const hasActiveFilters = q.trim() !== "" || scaleFilter !== "all" || gridFilter !== "all" || visFilter !== "all";
 
-  const filterToolbar = (
-    <>
-      <select
-        value={scaleFilter}
-        onChange={(e) => setScaleFilter(e.target.value as "all" | MapKind)}
-        aria-label="Фильтр по виду карты"
-        title="Фильтр по виду карты"
-      >
-        <option value="all">Любой вид</option>
-        <option value="tactical">Тактические</option>
-        <option value="city">Города</option>
-        <option value="overview">Обзорные</option>
-      </select>
-      <select
-        value={gridFilter}
-        onChange={(e) => setGridFilter(e.target.value as "all" | MapGrid)}
-        aria-label="Фильтр по сетке"
-        title="Фильтр по сетке"
-      >
-        <option value="all">Любая сетка</option>
-        <option value="square">Квадраты</option>
-        <option value="hex">Гексы</option>
-      </select>
-      {canEdit && (
-        <select
-          value={visFilter}
-          onChange={(e) => setVisFilter(e.target.value as "all" | "visible" | "hidden")}
-          aria-label="Фильтр по видимости игрокам"
-          title='Фильтр по видимости: игроки видят только карты с меткой "видят игроки"'
-        >
-          <option value="all">Все карты</option>
-          <option value="visible">Видят игроки</option>
-          <option value="hidden">Скрыты</option>
-        </select>
-      )}
-      <select value={sort} onChange={(e) => setSort(e.target.value as "recent" | "az")} aria-label="Сортировка">
-        <option value="recent">Недавние</option>
-        <option value="az">А–Я</option>
-      </select>
-    </>
+  const chip = (on: boolean, label: string, onClick: () => void) => (
+    <button type="button" className={`maps-gch${on ? " is-on" : ""}`} aria-pressed={on} onClick={onClick}>{label}</button>
   );
+  // Строка фильтров (доска Map-List): сетка, видимость игрокам, порядок — чипами вместо выпадающих списков.
+  const filterChips = (
+    <div className="maps-filters" role="group" aria-label="Фильтры карт">
+      <span className="d-mono">сетка</span>
+      {chip(gridFilter === "square", "квадраты", () => setGridFilter(gridFilter === "square" ? "all" : "square"))}
+      {chip(gridFilter === "hex", "гексы", () => setGridFilter(gridFilter === "hex" ? "all" : "hex"))}
+      {canEdit && <>
+        <span className="d-mono">игрокам</span>
+        {chip(visFilter === "visible", "видят", () => setVisFilter(visFilter === "visible" ? "all" : "visible"))}
+        {chip(visFilter === "hidden", "скрыты", () => setVisFilter(visFilter === "hidden" ? "all" : "hidden"))}
+      </>}
+      <span className="d-mono">порядок</span>
+      {chip(sort === "recent", "недавние", () => setSort("recent"))}
+      {chip(sort === "az", "а–я", () => setSort("az"))}
+    </div>
+  );
+  const kindCount = (k: MapKind) => maps.filter((m) => mapKind(m.scale) === k).length;
 
   return (
     <div className="stack" style={{ position: "relative" }}>
@@ -328,20 +279,21 @@ export function MapsListPage() {
         navigate(`/maps/${created.id}/workspace`);
       }} />}
       <ListPage
+        ds
         headingSection="map"
-        title="Редактор карт"
+        title="Карты"
         groups={[]}
-        allLabel={null}
         ungroupedLabel={null}
-        activeGroup={null}
-        onGroupChange={() => {}}
+        extraTabs={KIND_TABS.map((t) => ({ ...t, count: kindCount(t.id) }))}
+        activeGroup={scaleFilter === "all" ? null : scaleFilter}
+        onGroupChange={(g) => setScaleFilter((g as MapKind | null) ?? "all")}
         createLabel="+ Новая карта"
         onCreate={canEdit ? openCreate : undefined}
         actions={canEdit ? (
           <>
-          <button type="button" onClick={() => setGeneratorOpen(true)}>Быстрое подземелье</button>
-          <Link to="/maps/packs" className="button">Наборы ассетов</Link>
-          <button type="button" title="Пустая тактическая карта 50×40. Имя — потом" onClick={quickDraft}>
+          <Link to="/maps/packs" className="d-btn">Наборы ассетов</Link>
+          <button type="button" className="d-btn" onClick={() => setGeneratorOpen(true)}>Быстрое подземелье</button>
+          <button type="button" className="d-btn" title="Пустая тактическая карта 50×40. Имя — потом" onClick={quickDraft}>
             + Черновик
           </button>
           </>
@@ -349,6 +301,9 @@ export function MapsListPage() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Поиск по названию…"
+        view={view}
+        onViewChange={setView}
+        filters={filterChips}
         searchLabel="Поиск по картам"
         filteredCount={filtered.length}
         totalCount={maps.length}
@@ -360,7 +315,6 @@ export function MapsListPage() {
         }}
         showReset={hasActiveFilters}
         resetTitle="Сбросить поиск и фильтры"
-        toolbarExtra={filterToolbar}
       >
         {createError && !creating && (
           <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -380,12 +334,37 @@ export function MapsListPage() {
 
         {loading ? (
           <ListSkeleton variant="tiles" label="Загрузка карт" />
+        ) : view === "tiles" ? (
+          filtered.length > 0 && (
+            <RegTiles>
+              {filtered.map((m) => (
+                <RegTile key={m.id} entity={{ type: "map", id: m.id, name: m.name }} to={canEdit ? `/maps/${m.id}/workspace` : `/maps/${m.id}`}
+                  image={m.thumbnail} placeholder={<NavIcon name="map" />} plate={KIND_PLATE[mapKind(m.scale)]} menu={menuFor(m)}>
+                  <div className="reg-tile__chips">
+                    <span className="maps-gch">клетка {m.cell_lore || "—"}</span>
+                    <span className="maps-gch">{gridOf(m)}</span>
+                    {m.player_visible === 1 && <span className="maps-gch is-on">видят игроки</span>}
+                  </div>
+                  <RegMeta>{m.width}×{m.height} · {formatUpdated(m.updated_at)}</RegMeta>
+                </RegTile>
+              ))}
+            </RegTiles>
+          )
         ) : (
-          <div className="grid-cards">
-            {filtered.map((m) => (
-              <MapTile key={m.id} map={m} canEdit={canEdit} />
-            ))}
-          </div>
+          filtered.length > 0 && (
+            <RegTable columns={MAP_COLUMNS} label="Карты">
+              {filtered.map((m) => (
+                <RegRow key={m.id} entity={{ type: "map", id: m.id, name: m.name }} to={canEdit ? `/maps/${m.id}/workspace` : `/maps/${m.id}`}
+                  columns={MAP_COLUMNS} menu={menuFor(m)}
+                  cells={[
+                    <span key="kind" className="d-mono">{KIND_PLATE[mapKind(m.scale)]}</span>,
+                    <span key="cell" className="d-mono">{m.cell_lore || "—"} · {gridOf(m)}</span>,
+                    <span key="size" className="d-mono">{m.width}×{m.height}</span>,
+                    <span key="date" className="d-mono">{formatUpdated(m.updated_at)}</span>,
+                  ]} />
+              ))}
+            </RegTable>
+          )
         )}
 
         {!loading && !loadError && maps.length > 0 && filtered.length === 0 && (
@@ -424,61 +403,73 @@ export function MapsListPage() {
             }
           />
         )}
+        {canEdit && <RegArchive type="map" basePath="/maps" affects={[{ kind: "map", card: true }]} />}
+        {menuDialog}
       </ListPage>
 
       {creating && pickingGenres && <GenrePicker selected={genres} title="Жанры карты" hint="До трёх жанров: наборы ассетов выстроятся по близости к ним."
         onSave={(next) => { setGenres(next); setPickingGenres(false); }} onClose={() => setPickingGenres(false)} />}
       {creating && !pickingGenres && (
-        <Modal onClose={() => setCreating(false)}>
+        <Modal onClose={() => setCreating(false)} wide className="maps-win maps-win--wide" ariaLabel="Новая карта">
           <h2>Новая карта</h2>
-          <div className="stack">
-            <label>
-              Название
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Эстария" />
-            </label>
-            <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
-              <legend>Вид карты — навсегда</legend>
-              <label className="row" style={{ gap: 6 }}>
-                <input type="radio" checked={kind === "tactical"} onChange={() => pickKind("tactical")} />
-                Тактическая — подземелье, дом, двор, улица; клетка {TACTICAL_CELL}
+          {/* Доска Map-Win-New: слева — что за карта и какого размера, справа — сеттинг и наборы. */}
+          <div className="maps-win__cols">
+            <div className="maps-win__col">
+              <label>
+                Название
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Подвал таверны" autoFocus />
               </label>
-              <label className="row" style={{ gap: 6 }}>
-                <input type="radio" checked={kind === "city"} onChange={() => pickKind("city")} />
-                Город — улицы, кварталы, стены; клетка {CITY_CELL}, дом равен клетке
-              </label>
-              <label className="row" style={{ gap: 6 }}>
-                <input type="radio" checked={kind === "overview"} onChange={() => pickKind("overview")} />
-                Обзорная — край, страна, мир; клетку задаёте вы
-              </label>
-            </fieldset>
-            {kind === "overview" && (
-              <>
-                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                  {OVERVIEW_PRESETS.map((preset) => (
-                    <button key={preset.scale} type="button" aria-pressed={km === preset.km} onClick={() => pickKind("overview", preset)}>
-                      {preset.name} · {cellLoreOf(preset.km)}
-                    </button>
-                  ))}
-                </div>
+              <fieldset>
+                <legend>Вид карты — навсегда</legend>
+                {([["tactical", "Тактическая", `подземелье, дом, двор, улица · клетка ${TACTICAL_CELL}`],
+                  ["city", "Город", `улицы, кварталы, стены · клетка ${CITY_CELL}, дом равен клетке`],
+                  ["overview", "Обзорная", "край, страна, мир · клетку задаёте вы"]] as const).map(([value, title, hint]) => (
+                  <label key={value} className={`maps-kind${kind === value ? " is-on" : ""}`}>
+                    <input type="radio" name="map-kind" checked={kind === value} onChange={() => pickKind(value)} />
+                    <span><b>{title}</b><small>{hint}</small></span>
+                  </label>
+                ))}
+              </fieldset>
+              {kind === "overview" && (
+                <>
+                  <div className="maps-win__presets">
+                    {OVERVIEW_PRESETS.map((preset) => (
+                      <button key={preset.scale} type="button" className={`maps-gch${km === preset.km ? " is-on" : ""}`} aria-pressed={km === preset.km} onClick={() => pickKind("overview", preset)}>
+                        {preset.name} · {cellLoreOf(preset.km)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="maps-win__pair">
+                    <label>
+                      В клетке, км
+                      <input type="number" min={0.001} max={10000} step="any" value={km} onChange={(e) => setKm(Number(e.target.value))} />
+                    </label>
+                    <fieldset>
+                      <legend>Сетка — навсегда</legend>
+                      <div className="d-seg maps-win__seg">
+                        <button type="button" className={grid === "hex" ? "active" : undefined} aria-pressed={grid === "hex"} onClick={() => setGrid("hex")}>Гексы</button>
+                        <button type="button" className={grid === "square" ? "active" : undefined} aria-pressed={grid === "square"} onClick={() => setGrid("square")}>Квадраты</button>
+                      </div>
+                    </fieldset>
+                  </div>
+                </>
+              )}
+              <div className="maps-win__pair">
                 <label>
-                  В одной клетке, км
-                  <input type="number" min={0.001} max={10000} step="any" value={km} onChange={(e) => setKm(Number(e.target.value))} />
+                  Ширина, клеток
+                  <input type="number" min={MAP_MIN_SIDE} max={MAP_MAX_SIDE} value={width} onChange={(e) => setWidth(Number(e.target.value))} />
                 </label>
-                <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
-                  <legend>Сетка — навсегда</legend>
-                  <label className="row" style={{ gap: 6 }}>
-                    <input type="radio" checked={grid === "hex"} onChange={() => setGrid("hex")} />
-                    Гексы
-                  </label>
-                  <label className="row" style={{ gap: 6 }}>
-                    <input type="radio" checked={grid === "square"} onChange={() => setGrid("square")} />
-                    Квадраты
-                  </label>
-                </fieldset>
-              </>
-            )}
-            <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
-              <legend>Наборы ассетов</legend>
+                <label>
+                  Высота, клеток
+                  <input type="number" min={MAP_MIN_SIDE} max={MAP_MAX_SIDE} value={height} onChange={(e) => setHeight(Number(e.target.value))} />
+                </label>
+              </div>
+              <div className="maps-win__scale">
+                <span className="maps-lbl">Масштаб</span>
+                <ScalePreview metres={kind === "overview" ? km * 1000 : parseCellLore(kind === "city" ? CITY_CELL : TACTICAL_CELL)!} width={width} height={height} />
+              </div>
+            </div>
+            <div className="maps-win__col">
               <label>
                 Сеттинг
                 <select value={settingId ?? ""} onChange={(e) => { const next = Number(e.target.value) || null; setSettingId(next); setGenres(settingList?.find((entry) => entry.id === next)?.genres ?? []); }}>
@@ -486,48 +477,31 @@ export function MapsListPage() {
                   {settingList?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
                 </select>
               </label>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span>Жанры: {genreLabel(genres) || "не выбраны — показаны все наборы"}</span>
-                <button type="button" onClick={() => setPickingGenres(true)}>Выбрать жанры…</button>
+              <div>
+                <span className="maps-lbl">Жанры</span>
+                <div className="maps-win__presets">
+                  {genres.map((genre) => <span key={`${genre.genre}:${genre.subgenre ?? ""}`} className="maps-gch is-on">{genre.subgenre || genre.genre}</span>)}
+                  <button type="button" className="maps-gch maps-gch--add" onClick={() => setPickingGenres(true)}>{genres.length ? "Жанры…" : "+ Жанры — сейчас все наборы"}</button>
+                </div>
               </div>
-              {offered.map((pack) => (
-                <label key={pack.id} className="row" style={{ gap: 6 }}>
-                  <input type="checkbox" checked={!offPacks.includes(pack.id)} onChange={() => setOffPacks(offPacks.includes(pack.id) ? offPacks.filter((id) => id !== pack.id) : [...offPacks, pack.id])} />
-                  {pack.name} <small className="muted">{pack.genre} · {pack.place}</small>
-                </label>
-              ))}
-              <small className="muted">Отмеченные наборы попадут в каталог карты. Подключить или отключить набор можно и потом.</small>
-            </fieldset>
-            <ScalePreview metres={kind === "overview" ? km * 1000 : parseCellLore(kind === "city" ? CITY_CELL : TACTICAL_CELL)!} width={width} height={height} />
-            <div className="row" style={{ gap: 8 }}>
-              <label>
-                Ширина
-                <input
-                  type="number"
-                  min={MAP_MIN_SIDE}
-                  max={MAP_MAX_SIDE}
-                  value={width}
-                  onChange={(e) => setWidth(Number(e.target.value))}
-                />
-              </label>
-              <label>
-                Высота
-                <input
-                  type="number"
-                  min={MAP_MIN_SIDE}
-                  max={MAP_MAX_SIDE}
-                  value={height}
-                  onChange={(e) => setHeight(Number(e.target.value))}
-                />
-              </label>
+              <fieldset>
+                <legend>Наборы ассетов</legend>
+                {offered.map((pack) => (
+                  <label key={pack.id} className="maps-check maps-check--row">
+                    <input type="checkbox" checked={!offPacks.includes(pack.id)} onChange={() => setOffPacks(offPacks.includes(pack.id) ? offPacks.filter((id) => id !== pack.id) : [...offPacks, pack.id])} />
+                    <span>{pack.name}<small>{pack.genre} · {pack.place}</small></span>
+                  </label>
+                ))}
+              </fieldset>
+              <p className="maps-win__note">Отмеченные наборы попадут в каталог карты. Подключить или отключить набор можно и потом — «＋ Набор» в каталоге.</p>
             </div>
-            {createError && <p className="muted">{createError}</p>}
-            <div className="modal-footer row">
-              <button onClick={() => setCreating(false)}>Отмена</button>
-              <button className="primary" onClick={create}>
-                Создать и открыть
-              </button>
-            </div>
+          </div>
+          {createError && <p className="maps-win__error" role="alert">{createError}</p>}
+          <div className="modal-footer row">
+            <button onClick={() => setCreating(false)}>Отмена</button>
+            <button className="primary" onClick={create}>
+              Создать и открыть
+            </button>
           </div>
         </Modal>
       )}

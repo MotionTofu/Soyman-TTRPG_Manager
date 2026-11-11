@@ -24,6 +24,8 @@ export const mapWorkspaceApi = {
     if (!Number.isSafeInteger(body.expectedRevision)) return Promise.reject(new Error("Не удалось определить ревизию карты. Откройте её заново"));
     return write.put<MapFull>(`/maps/${id}`, body, { headers });
   },
+  /** Только миниатюра: сервер не считает её правкой — ни даты, ни ревизии. */
+  saveThumbnail: (id: number, thumbnail: string) => write.put<MapFull>(`/maps/${id}`, { thumbnail }, { headers }),
   resolveSource: (mapId: number, kind: TokenSourceRef["kind"], id: number) =>
     write.post<ResolvedTokenSource>(
       `/maps/${mapId}/token-source`, { kind, id }, { headers }),

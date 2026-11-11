@@ -9,6 +9,7 @@ import { mapKind, type MapFull } from "../mapTypes";
 import { subscribeMapImageAssets } from "../assets/registry";
 import { geometryView } from "./editDocument";
 import { mapWorkspaceApi } from "./mapApi";
+import { renderMapThumbnail } from "./pictureExport";
 
 const clone = (document: MapDocumentV6 | null) => document ? structuredClone(document) : null;
 const INCOMPATIBLE = "Некоторые элементы этой карты пока нельзя редактировать здесь. Исходник доступен для скачивания.";
@@ -16,8 +17,10 @@ const revisionError = (record: MapFull) => Number.isSafeInteger(record.revision)
   : "Сервер ещё не поддерживает безопасное сохранение. Обновите приложение перед редактированием.";
 
 /** One map's document: load, history, autosave and the guarded write path. */
-export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset, onLoaded }: {
+export function useWorkspaceDocument({ mapId, isGm, viewOnly = false, leaving, isEditing, onReset, onLoaded }: {
   mapId: number; isGm: boolean; leaving: boolean;
+  /** Телефон (гриллинг «Д» Q6): карту смотрят, правят — на компьютере. */
+  viewOnly?: boolean;
   /** A stroke in progress: autosave waits for it. */
   isEditing: () => boolean;
   onReset: () => void; onLoaded: (map: MapFull, document: MapDocumentV6) => void;
@@ -35,9 +38,9 @@ export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset,
   const history = useMapHistory({ value: document, onChange: setDocument, clone, getValue: () => documentRef.current });
   // Published old maps remain readable by the existing player flow; edit a private copy.
   const publishedOldMap = !!map && map.player_visible === 1 && map.document_version !== 6;
-  const disabled = !!compatibilityError || publishedOldMap || !isGm;
+  const disabled = !!compatibilityError || publishedOldMap || !isGm || viewOnly;
   const autosave = useMapAutosave({ map, value: document, getValue: () => documentRef.current, params, isEditing,
-    serialize: serializeMapDocumentV6, save: mapWorkspaceApi.saveBody, buildThumbnail: () => null,
+    serialize: serializeMapDocumentV6, save: mapWorkspaceApi.saveBody, buildThumbnail: renderMapThumbnail,
     disabled, onSaved: (savedId) => { setMap((record) => record?.id === savedId ? { ...record, document_version: 6 } : record); afterWrite([{ kind: "map", id: savedId, card: true }]); } });
   const writeBlocked = disabled || autosave.blocked || autosave.status.kind === "conflict";
   const callbacks = useRef({ onReset, onLoaded });
@@ -72,6 +75,18 @@ export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset,
     // Lifecycle belongs to map identity/role, not to hook return objects.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapId, isGm]);
+  // Карта, сохранённая без миниатюры (так сохранялись все до «Д», Q16), получает её при открытии — тихо, без правки.
+  useEffect(() => {
+    if (!map || map.thumbnail || !isGm) return;
+    // ponytail: 4 с на подгрузку картинок вещей; не успели — миниатюра обновится при первой правке.
+    const timer = setTimeout(() => {
+      const current = documentRef.current, url = current && renderMapThumbnail(map, current);
+      if (url) mapWorkspaceApi.saveThumbnail(map.id, url).then(() => afterWrite([{ path: `/maps/${map.id}/thumbnail` }]), () => { /* не вышло — дорисуется при сохранении */ });
+    }, 4000);
+    return () => clearTimeout(timer);
+    // Once per opened map: later record updates (after a save) must not re-run it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map?.id]);
   // Свои наборы приходят отдельно от карты, и до них вещь своего набора кажется незнакомой — карта закрывалась
   // для правки насовсем. Закрытая так карта перепроверяется, когда пополняется реестр картинок.
   useEffect(() => {

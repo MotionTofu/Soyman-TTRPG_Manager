@@ -1,3 +1,4 @@
+import "../../pages/maps-d.css";
 import { prepareCartographyStyle, subscribeMapImageAssets } from "../assets/registry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tokensOf, type MapDocumentV6, type MapDrawingStyle } from "@shared/maps/core";
@@ -60,7 +61,7 @@ export function DungeonGenerator({ open, current, seed, disabled = false, onClos
     catch (failure) { setError(failure instanceof Error ? failure.message : "Не удалось применить подземелье. Попробуйте ещё раз"); }
     finally { setBusy(false); }
   }
-  return <Modal ariaLabel="Быстрое подземелье" className="workspace-editor-label-dialog workspace-generator" wide
+  return <Modal ariaLabel="Быстрое подземелье" className="workspace-editor-label-dialog workspace-generator maps-win maps-win--wide" wide
     closeOnBackdropClick={false} onClose={() => { if (!busy) onClose(); }}>
     <div className="workspace-editor-panel-heading"><h2>Быстрое подземелье</h2><button disabled={busy} aria-label="Закрыть генератор" onClick={onClose}>×</button></div>
     <div className="workspace-generator-body">

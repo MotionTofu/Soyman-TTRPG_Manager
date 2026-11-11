@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { setPerformanceMeter, usePerformanceMeter } from "./performanceSwitch";
 import type { WorkspacePerformanceMeter } from "./performanceMeter";
 
 function percentile95(values: number[]) {
@@ -8,7 +9,7 @@ function percentile95(values: number[]) {
 }
 
 export function WorkspacePerformance({ meter }: { meter: WorkspacePerformanceMeter }) {
-  const [enabled, setEnabled] = useState(true);
+  const enabled = usePerformanceMeter();
   const [reading, setReading] = useState<{ fps: number; frameP95: number | null; drawP95: number | null; redraws: number; modelMs: number } | null>(null);
   useEffect(() => {
     meter.enabled = enabled;
@@ -36,10 +37,11 @@ export function WorkspacePerformance({ meter }: { meter: WorkspacePerformanceMet
     return () => { cancelAnimationFrame(request); document.removeEventListener("visibilitychange", reset); meter.enabled = false; meter.takeDraws(); };
   }, [enabled, meter]);
   const ms = (value: number | null) => value === null ? "—" : `${value.toFixed(1)} мс`;
+  if (!enabled) return null;
   return <div className="workspace-performance">
-    <button type="button" aria-pressed={enabled} onClick={() => { setReading(null); setEnabled(value => !value); }}
-      title="Включить или выключить измерение производительности">FPS{enabled && reading ? ` ${reading.fps.toFixed(0)}` : enabled ? " …" : ""}</button>
-    {enabled && <output aria-label="Производительность редактора" title="FPS — частота кадров окна. P95 — время, в которое укладываются 95% измерений. Отрисовка — работа Canvas, без ожидания GPU; модель — последний пересчёт геометрии. В покое карта не перерисовывается.">
+    <button type="button" aria-pressed onClick={() => { setReading(null); setPerformanceMeter(false); }}
+      title="Выключить замер скорости">FPS{reading ? ` ${reading.fps.toFixed(0)}` : " …"}</button>
+    {<output aria-label="Производительность редактора" title="FPS — частота кадров окна. P95 — время, в которое укладываются 95% измерений. Отрисовка — работа Canvas, без ожидания GPU; модель — последний пересчёт геометрии. В покое карта не перерисовывается.">
       <span>Кадр P95: {ms(reading?.frameP95 ?? null)}</span>
       <span>Карта P95: {ms(reading?.drawP95 ?? null)}</span>
       <span>Перерисовок/с: {reading?.redraws.toFixed(0) ?? "—"}</span>

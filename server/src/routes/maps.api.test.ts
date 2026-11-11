@@ -121,6 +121,17 @@ describe("maps API", () => {
     expect((await request(app).get("/api/maps/999999/thumbnail").set(gm)).status).toBe(404);
   });
 
+  it("одна миниатюра — не правка: ни ревизии, ни даты «Изменена» (гриллинг «Д» Q16)", async () => {
+    const before = (await request(app).get(`/api/maps/${visibleId}`).set(gm)).body;
+    const put = await request(app).put(`/api/maps/${visibleId}`).set(gm).send({ thumbnail: "data:image/png;base64,iVBORw0KGgoAAAA=" });
+    expect(put.status).toBe(200);
+    const after = (await request(app).get(`/api/maps/${visibleId}`).set(gm)).body;
+    expect(after.thumbnail).toBe("data:image/png;base64,iVBORw0KGgoAAAA=");
+    expect(after.revision).toBe(before.revision);
+    expect(after.updated_at).toBe(before.updated_at);
+    expect((await request(app).put(`/api/maps/${visibleId}`).set(gm).send({ thumbnail: "data:image/svg+xml;base64,PHN2Zz4=" })).status).toBe(400);
+  });
+
   it("удаление уводит карту в архив, откуда она возвращается (ToDo/08 Р32)", async () => {
     expect((await request(app).delete(`/api/maps/${hiddenId}`).set(gm)).status).toBe(200);
     expect((await request(app).get(`/api/maps/${hiddenId}`).set(gm)).status).toBe(404);

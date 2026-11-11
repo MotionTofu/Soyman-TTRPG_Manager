@@ -212,7 +212,8 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       setDraftLine([...current.points]); return;
     }
     if (current) return;
-    if (event.button === 1 || (event.button === 0 && space.current)) {
+    // Карта только для просмотра (телефон, чужая версия) — обычное перетаскивание сдвигает её.
+    if (event.button === 1 || (event.button === 0 && (space.current || doc.disabled))) {
       event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
       gesture.current = { type: "pan", start: { x: event.clientX, y: event.clientY }, ox: camera.cam.ox, oy: camera.cam.oy, pointerId: event.pointerId }; return;
     }

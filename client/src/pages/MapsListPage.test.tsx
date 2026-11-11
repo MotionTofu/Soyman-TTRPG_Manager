@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { MapsListPage } from "./MapsListPage";
+import { ENTITY_MENU_EVENT } from "../pageMenu";
+import type { ContextMenuItem } from "../components/ContextMenu";
 const mocks = vi.hoisted(() => ({ role: "gm", version: 1, post: vi.fn() }));
 vi.mock("../api/currentUser", () => ({ useCurrentUser: () => ({ user: { role: mocks.role } }) }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...await importOriginal<typeof import("@tanstack/react-query")>(), useQueries: () => [] }));
@@ -20,15 +22,30 @@ function show() {
 }
 describe("map entry points", () => {
   it.each([1, 5, 6])("ordinary GM click opens the token editor for version %i", async (version) => {
-    mocks.version = version; const shown = show(); fireEvent.click(shown.container.querySelector(".campaign-tile-cover")!);
+    mocks.version = version; show(); fireEvent.click(screen.getByRole("link", { name: "Тестовая карта" }));
     expect(await screen.findByText("Основной редактор")).toBeTruthy();
   });
+  // Доска Map-List: «Классический редактор» — пункт ⋯ плитки, и только у старой карты.
+  function menuItems() {
+    let local: ContextMenuItem[] = [];
+    const take = (e: Event) => { local = (e as CustomEvent<{ local: ContextMenuItem[] }>).detail.local; };
+    window.addEventListener(ENTITY_MENU_EVENT, take);
+    fireEvent.click(screen.getByRole("button", { name: "Действия: Тестовая карта" }));
+    window.removeEventListener(ENTITY_MENU_EVENT, take);
+    return local;
+  }
   it("classic editor remains an explicitly named fallback for old maps", async () => {
-    show(); fireEvent.click(screen.getByRole("link", { name: "Классический редактор" }));
+    show(); const classic = menuItems().find((item) => item.label === "Классический редактор");
+    expect(classic).toBeTruthy();
+    act(() => classic!.onClick!());
     expect(await screen.findByText("Классический экран")).toBeTruthy();
   });
+  it("a map of the new editor has no classic entry", () => {
+    mocks.version = 6; show();
+    expect(menuItems().map((item) => item.label)).toEqual(["Открыть редактор", "В архив"]);
+  });
   it("players keep their viewing route", async () => {
-    mocks.role = "player"; const shown = show(); fireEvent.click(shown.container.querySelector(".campaign-tile-cover")!);
+    mocks.role = "player"; show(); fireEvent.click(screen.getByRole("link", { name: "Тестовая карта" }));
     expect(await screen.findByText("Классический экран")).toBeTruthy();
   });
   it("quick draft opens the main editor", async () => {

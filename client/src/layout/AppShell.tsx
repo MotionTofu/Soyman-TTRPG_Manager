@@ -433,6 +433,10 @@ function buildCrumbs(pathname: string, isPlayer: boolean, live?: LiveCrumbNames 
   if (["beings", "communities", "locations", "artifacts", "adventures", "scenes", "events"].includes(parts[0]) && parts.length === 2) {
     return [...crumbs, { label: "Сеттинги", to: "/settings" }, { label: "…" }];
   }
+  // Наборы ассетов карт: открытый набор (свой — по id, встроенный — по ключу) — одной крошкой «Набор».
+  if (parts[0] === "maps" && parts[1] === "packs") {
+    return [...crumbs, { label: "Редактор карт", to: "/maps" }, { label: "Наборы ассетов", to: parts.length > 2 ? "/maps/packs" : undefined }, ...(parts.length > 2 ? [{ label: "Набор" }] : [])];
+  }
   let acc = "";
   for (let i = 0; i < parts.length; i++) {
     const seg = parts[i];
