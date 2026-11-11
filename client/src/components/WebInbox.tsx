@@ -85,7 +85,7 @@ export function WebInbox({ items }: { items: InboxItem[] }) {
   // «Создано» должно остаться.
   return <>
     {!items.length && <p className="web-inbox__empty">
-      Пусто. На сайте: выделить текст → ПКМ → «Во входящие SoyMan». Расширение подключается в Настройках, раздел «Расширение браузера».
+      Пусто. На сайте: выделить текст → ПКМ → SoyMan → «Во входящие». Расширение подключается в Настройках, вкладка «Расширение».
     </p>}
     {items.length > 0 && <ul className="web-inbox" aria-label="Входящие">
       {items.map((item) => <li key={item.id} className="web-inbox__row" onContextMenu={(e) => openMenu(e, item)}

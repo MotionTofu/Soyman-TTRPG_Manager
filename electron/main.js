@@ -432,6 +432,17 @@ ipcMain.on("open-window", (event, route) => {
   spawnWindow(typeof route === "string" ? route : "/", parent);
 });
 
+// «Открыть в SoyMan» из уведомления расширения браузера: сервер живёт в этом
+// процессе и шлёт событие (server/src/routes/webCapture.ts, OPEN_ROUTE_EVENT).
+// Отдельным окном — текущее Мастера не уводится со страницы, где он правит.
+process.on("soyman:open-route", (route) => {
+  if (typeof route !== "string" || !route.startsWith("/")) return;
+  const [main] = BrowserWindow.getAllWindows();
+  const win = spawnWindow(route, main && !main.isDestroyed() ? main : null);
+  win.once("ready-to-show", () => win.focus());
+  win.focus();
+});
+
 function openWindowFromFocused() {
   const focused = BrowserWindow.getFocusedWindow();
   if (!focused) return spawnWindow("/");

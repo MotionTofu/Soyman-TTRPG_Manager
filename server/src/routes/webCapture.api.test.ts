@@ -103,6 +103,39 @@ describe("web capture from the browser extension", () => {
       .get(location.body.id)).toEqual({ n: 0 });
   });
 
+  it("creates an entity straight from the browser, warning about a same-name one first", async () => {
+    const ext = (method: "get" | "post", url: string) => request(server.app)[method](`/api/web-capture/ext${url}`).auth(key, { type: "bearer" });
+    const settings = await ext("get", "/settings");
+    expect(settings.body).toContainEqual({ id: settingId, name: "Мир для захвата" });
+    const capture = { ...fragment("unused"), name: "Звездочёты", setting_id: settingId };
+    const routes = { being: "/api/setting-beings", location: "/api/setting-locations", community: "/api/setting-communities", artifact: "/api/artifacts" };
+    for (const kind of ["being", "location", "community", "artifact"] as const) {
+      const created = await ext("post", "/entities").send({ ...capture, kind, name: `Звездочёты (${kind})` });
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({ kind, setting: "Мир для захвата" });
+      // Созданное расширением открывается обычным маршрутом вида, с описанием.
+      const opened = await request(server.app).get(`${routes[kind]}/${created.body.id}`).auth(gm, { type: "bearer" });
+      expect(opened.status).toBe(200);
+      expect(opened.body).toMatchObject({ name: `Звездочёты (${kind})`, description: capture.text, setting_id: settingId });
+      const sources = await request(server.app).get(`/api/web-capture/sources/entity/${kind}/${created.body.id}`).auth(gm, { type: "bearer" });
+      expect(sources.body).toEqual([expect.objectContaining({ field_name: "description", url: capture.url, quote: capture.text })]);
+    }
+
+    // Имя уже занято другим видом того же сеттинга — регистр не важен.
+    const dup = await ext("post", "/entities").send({ ...capture, kind: "location", name: "звездочёты (COMMUNITY)" });
+    expect(dup.status).toBe(409);
+    expect(dup.body.duplicates).toEqual([expect.objectContaining({ kind: "community", name: "Звездочёты (community)", label: "Сообщество" })]);
+    const forced = await ext("post", "/entities").send({ ...capture, kind: "location", name: "звездочёты (COMMUNITY)", force: true });
+    expect(forced.status).toBe(201);
+
+    expect((await ext("post", "/entities").send({ ...capture, kind: "location", setting_id: 999_999 })).status).toBe(404);
+    expect((await ext("post", "/entities").send({ ...capture, kind: "compendium" })).status).toBe(400);
+    // Без Electron окно открыть некому — расширение откроет вкладку.
+    expect((await ext("post", "/open").send({ kind: "location", id: forced.body.id })).body)
+      .toEqual({ opened: false, route: `/locations/${forced.body.id}` });
+    expect((await ext("post", "/open").send({ kind: "location", id: 999_999 })).status).toBe(404);
+  });
+
   it("stops accepting fragments once the GM disconnects the extension", async () => {
     const [row] = (await request(server.app).get("/api/web-capture/keys").auth(gm, { type: "bearer" })).body;
     expect((await request(server.app).delete(`/api/web-capture/keys/${row.id}`).auth(gm, { type: "bearer" })).status).toBe(200);

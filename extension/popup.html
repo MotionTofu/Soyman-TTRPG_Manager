@@ -12,7 +12,7 @@
   <h1>Подключить к SoyMan</h1>
   <p id="pair-why" class="warn" hidden>Подключение снято в SoyMan. Фрагменты в очереди дождутся нового подключения.</p>
   <ol class="steps">
-    <li>В SoyMan: Настройки → Расширение браузера → «Подключить расширение».</li>
+    <li>В SoyMan: Настройки → Расширение → «Подключить расширение».</li>
     <li>Вставьте код из окна SoyMan.</li>
   </ol>
   <form id="pair-form">
@@ -21,8 +21,8 @@
     <p class="hint">Код живёт 10 минут и подходит один раз. Пароль от SoyMan расширение не спрашивает.</p>
     <details>
       <summary>Адрес SoyMan</summary>
-      <input id="base" class="field" spellcheck="false">
-      <p class="hint">Обычно менять не нужно: SoyMan слушает этот адрес на вашем компьютере.</p>
+      <input id="base" class="field" spellcheck="false" placeholder="найдётся сам">
+      <p class="hint">Обычно не нужен: расширение само найдёт SoyMan на этом компьютере. Впишите адрес, если SoyMan запущен иначе.</p>
     </details>
     <p id="pair-error" class="error" role="alert" hidden></p>
     <footer><button class="primary" type="submit">Подключить</button></footer>

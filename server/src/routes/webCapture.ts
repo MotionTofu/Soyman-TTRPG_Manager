@@ -4,13 +4,15 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { z } from "zod";
 import { db } from "../db/db";
 import { requireKind } from "../db/entityKinds";
+import { artifactFolder, beingFolder, communityFolder, locationFolder, settingGeographyRoot } from "../services/filesystem";
 
 // Захват с сайтов расширением браузера (гриллинг 2026-11-05, Q1–Q24;
 // .scratch/web-sources/extension-decisions.md).
 //
 // Два роутера. Расширение ходит со своим ключом, не с входом Мастера: ключ
 // выдаётся в обмен на одноразовый код из настроек и умеет только положить
-// фрагмент во Входящие и узнать, жив ли он. В базе — только хэши. Всё
+// фрагмент во Входящие, создать из него сущность («Разобрать сейчас»,
+// поставка 2) и узнать, жив ли он. В базе — только хэши. Всё
 // остальное (выдать код, разобрать Входящие, отключить ключ) — Мастер, за
 // общим гейтом /api.
 
@@ -22,6 +24,9 @@ const KEY_BYTES = 32;
 // Без похожих знаков (0/O, 1/I/L): код набирают руками.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
+
+/** Событие процесса для electron/main.js: открыть окно SoyMan на маршруте. */
+export const OPEN_ROUTE_EVENT = "soyman:open-route";
 
 const sha256Hex = (raw: string) => createHash("sha256").update(raw, "utf8").digest("hex");
 const nowIso = () => new Date().toISOString();
@@ -106,6 +111,101 @@ webCaptureExtRouter.post("/inbox", requireExtensionKey, (req, res) => {
     VALUES (?, ?, 'text', ?, ?, ?, ?, ?)`).run(id, item.client_id, item.url, item.page_title.trim(),
     item.heading.trim(), item.text.trim(), captured);
   res.status(201).json({ id });
+});
+
+// ── «Разобрать сейчас…» (поставка 2, Q10/Q11/Q20/Q21) ──
+// Окно расширения создаёт сущность само, не открывая SoyMan: список
+// сеттингов, проверка имени, создание с источником. Содержимое сущностей
+// ключ не читает — только имена совпавших, чтобы предупредить о дубле.
+
+const EXT_KINDS = {
+  being: { label: "Существо", route: "/beings" },
+  location: { label: "Место", route: "/locations" },
+  community: { label: "Сообщество", route: "/communities" },
+  artifact: { label: "Артефакт", route: "/artifacts" },
+} as const;
+type ExtKind = keyof typeof EXT_KINDS;
+const extKind = z.enum(["being", "location", "community", "artifact"]);
+
+webCaptureExtRouter.get("/settings", requireExtensionKey, (_req, res) => {
+  res.json(db.prepare("SELECT id, name FROM settings WHERE archived_at IS NULL ORDER BY name").all());
+});
+
+const createInput = inboxInput.omit({ client_id: true }).extend({
+  kind: extKind,
+  setting_id: z.number().int().positive(),
+  name: z.string().trim().min(1).max(120),
+  // Мастер уже видел предупреждение о дубле и выбрал «Всё равно создать».
+  force: z.boolean().optional(),
+});
+
+/** Сущности четырёх видов с тем же именем в сеттинге (Q20), без учёта регистра. */
+function sameName(settingId: number, name: string) {
+  const union = (Object.keys(EXT_KINDS) as ExtKind[])
+    .map((kind) => `SELECT '${kind}' AS kind, id, name FROM ${requireKind(kind).table}
+      WHERE setting_id = @setting AND lower_u(trim(name)) = lower_u(@name)`)
+    .join(" UNION ALL ");
+  return db.prepare(`${union} LIMIT 5`).all({ setting: settingId, name: name.trim() }) as { kind: ExtKind; id: number; name: string }[];
+}
+
+// Та же вставка, что у POST маршрута каждого вида без необязательных полей:
+// папка в хранилище только вычисляется, создаётся она при первом файле.
+function insertEntity(kind: ExtKind, settingId: number, settingFolder: string, name: string, description: string): number {
+  const run = (sql: string, ...args: unknown[]) => Number(db.prepare(sql).run(...args).lastInsertRowid);
+  switch (kind) {
+    case "being":
+      return run(`INSERT INTO setting_beings (setting_id, name, category, description, folder_path, tags)
+        VALUES (?, ?, 'bestiary', ?, ?, '[]')`, settingId, name, description, beingFolder(settingFolder, name));
+    case "location":
+      return run(`INSERT INTO setting_locations (setting_id, parent_id, name, kind, role, description, folder_path)
+        VALUES (?, NULL, ?, '', 'location', ?, ?)`, settingId, name, description,
+        locationFolder(settingGeographyRoot(settingFolder), name));
+    case "community":
+      return run(`INSERT INTO setting_communities (setting_id, parent_id, name, description, folder_path, tags)
+        VALUES (?, NULL, ?, ?, ?, '[]')`, settingId, name, description, communityFolder(settingFolder, name));
+    case "artifact":
+      return run(`INSERT INTO artifacts (setting_id, name, description, folder_path) VALUES (?, ?, ?, ?)`,
+        settingId, name, description, artifactFolder(settingFolder, name));
+  }
+}
+
+webCaptureExtRouter.post("/entities", requireExtensionKey, (req, res) => {
+  const parsed = createInput.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Не хватает вида, сеттинга, названия или текста" });
+  const input = parsed.data;
+  const setting = db.prepare("SELECT name, folder_path FROM settings WHERE id = ? AND archived_at IS NULL")
+    .get(input.setting_id) as { name: string; folder_path: string } | undefined;
+  if (!setting) return res.status(404).json({ error: "Сеттинг не найден" });
+  if (!input.force) {
+    const duplicates = sameName(input.setting_id, input.name);
+    if (duplicates.length) return res.status(409).json({ duplicates: duplicates.map((d) => ({ ...d, label: EXT_KINDS[d.kind].label })) });
+  }
+  const captured = input.captured_at && !Number.isNaN(Date.parse(input.captured_at)) ? new Date(input.captured_at).toISOString() : nowIso();
+  const text = input.text.trim();
+  // Сущность и её источник — вместе или никак.
+  const id = db.transaction(() => {
+    const entityId = insertEntity(input.kind, input.setting_id, setting.folder_path, input.name, text);
+    db.prepare(`INSERT INTO web_entity_sources (id, target_kind, target_id, field_name, url, page_title, quote, captured_at)
+      VALUES (?, ?, ?, 'description', ?, ?, ?, ?)`).run(randomUUID(), input.kind, entityId, input.url, input.page_title.trim(), text, captured);
+    return entityId;
+  })();
+  res.status(201).json({ kind: input.kind, id, name: input.name, label: EXT_KINDS[input.kind].label, setting: setting.name });
+});
+
+// «Открыть в SoyMan» из уведомления. Окно открывает Electron (сервер живёт в
+// его процессе и слушает событие); без него — например, сервер запущен из
+// репозитория — расширение откроет страницу вкладкой браузера.
+webCaptureExtRouter.post("/open", requireExtensionKey, (req, res) => {
+  const parsed = z.object({ kind: extKind, id: z.number().int().positive() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Неверная сущность" });
+  const { kind, id } = parsed.data;
+  if (!db.prepare(`SELECT 1 FROM ${requireKind(kind).table} WHERE id = ?`).get(id)) {
+    return res.status(404).json({ error: "Сущность не найдена" });
+  }
+  const route = `${EXT_KINDS[kind].route}/${id}`;
+  const bus: NodeJS.EventEmitter = process;
+  const opened = bus.listenerCount(OPEN_ROUTE_EVENT) > 0 && bus.emit(OPEN_ROUTE_EVENT, route);
+  res.json({ opened, route });
 });
 
 webCaptureExtRouter.post("/disconnect", requireExtensionKey, (req: ExtRequest, res) => {
