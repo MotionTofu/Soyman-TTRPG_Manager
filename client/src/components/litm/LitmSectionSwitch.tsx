@@ -8,6 +8,7 @@ import { LitmChallengesView } from "./LitmChallengesView";
 import { LitmGrimoireView } from "./LitmGrimoireView";
 import { LitmRulesView } from "./LitmRulesView";
 import { LitmWaysView } from "./LitmWaysView";
+import { LitmStoreView } from "./LitmStoreView";
 import { LitmThemesView } from "./LitmThemesView";
 import { LitmTropesView } from "./LitmTropesView";
 import "./litm-book.css";
@@ -15,7 +16,7 @@ import { litmCatalogOf } from "./litmBookText";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 
-/** Раздел LitM с принятой доской (Вызовы, Темы, Тропы, Гримуар, Справочник, Пути магии) показывается каталогом;
+/** Раздел LitM с принятой доской (Вызовы, Темы, Тропы, Гримуар, Справочник, Пути магии, Общая лавка) показывается каталогом;
  *  у Тем и Тропов «Список» — прежний раздел целиком, со всей правкой. Остальные
  *  разделы и системы проходят насквозь. */
 export function LitmSectionSwitch({ systemCode, systemId, section, focusEntryId, children }: {
@@ -59,6 +60,7 @@ export function LitmSectionSwitch({ systemCode, systemId, section, focusEntryId,
         {catalog === "grimoire" && <LitmGrimoireView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
         {catalog === "rules" && <LitmRulesView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
         {catalog === "ways" && <LitmWaysView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
+        {catalog === "store" && <LitmStoreView systemId={systemId} entries={entries} selectedId={focusEntryId} />}
       </section>
     </>
   );
