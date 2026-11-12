@@ -4,6 +4,10 @@ import {
   LITM_CHALLENGE_KIND,
   LITM_SCENE_KIND,
   challengeStateFromProfile,
+  journeyArrived,
+  vignetteState,
+  type LitmJourneyState,
+  type LitmVignette,
   emptySceneState,
   parseChallengeState,
   parseSceneState,
@@ -140,13 +144,37 @@ export function useLitmRibbon(sessionId: number) {
     }
   }
 
-  async function remove(row: InitiativeEntry) {
+  /**
+   * Виньетка «На ленту» (пульт v2, Q5–Q6): строка с копией угрозы и
+   * последствий. Первая виньетка путешествия открывает его полосу — число
+   * шагов спросит она сама (`steps` 0).
+   */
+  async function addVignette(v: LitmVignette, journey?: Omit<LitmJourneyState, "steps" | "gap" | "passed">) {
+    const name = numbered(v.name, challenges.map((e) => e.name));
+    const ok = await change(`«${name}» не встала на ленту`, () =>
+      write.post("/initiative-entries", {
+        session_id: sessionId,
+        name,
+        kind: LITM_CHALLENGE_KIND,
+        entity_type: v.journeyId != null ? "compendium_entry" : null,
+        entity_id: v.journeyId,
+        state: vignetteState(v),
+      })
+    );
+    if (!ok) return false;
+    recordNote(sessionId, `Виньетка «${name}» на ленте`);
+    const running = scene.journey && scene.journey.entryId === journey?.entryId && !journeyArrived(scene.journey);
+    if (journey && !running) await setScene(`Путешествие «${journey.name}»`, { ...scene, journey: { ...journey, steps: 0, gap: "часы", passed: [] } });
+    return true;
+  }
+
+  async function remove(row: InitiativeEntry, note = `«${row.name}» убран с ленты`) {
     const ok = await change(`«${row.name}» не убран с ленты`, () => write.del(`/initiative-entries/${row.id}`), (rows) => rows.filter((e) => e.id !== row.id));
-    if (ok) recordNote(sessionId, `«${row.name}» убран с ленты`);
+    if (ok) recordNote(sessionId, note);
     return ok;
   }
 
-  return { challenges, scene, sceneRow, setChallenge, setScene, add, remove, stateOf: (row: InitiativeEntry) => parseChallengeState(row.state) };
+  return { challenges, scene, sceneRow, setChallenge, setScene, add, addVignette, remove, stateOf: (row: InitiativeEntry) => parseChallengeState(row.state) };
 }
 
 export type LitmRibbon = ReturnType<typeof useLitmRibbon>;

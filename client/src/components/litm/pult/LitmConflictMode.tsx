@@ -4,13 +4,16 @@ import {
   campScene,
   challengeStateFromProfile,
   giveToLimit,
+  journeyArrived,
   limitReached,
+  passStep,
   overcomeBy,
   passSpotlight,
   reduceLimit,
   turnedLimits,
   type LitmChallengeState,
   type LitmSceneState,
+  type LitmStepOutcome,
 } from "@shared/litm/conflict";
 import { giveStatus, heroCondition, parseStatusTag, reduceStatus, sameStatus, statusTier, type LitmStatus } from "@shared/litm/status";
 import { useResource } from "../../../data/hooks";
@@ -37,6 +40,7 @@ import { LITM_RIBBON_TARGET, useLitmRibbon, type LitmRibbon, type LitmSource } f
 import { useUnloadTarget } from "../../../unloadTargets";
 import { LitmAddPanel } from "./LitmAddPanel";
 import { LitmGrimoireDrawer } from "./LitmGrimoireDrawer";
+import { LitmJourneyBar, LitmVignetteNest } from "./LitmJourney";
 import "../litm-book.css";
 import "./litm-pult.css";
 
@@ -351,6 +355,29 @@ export function LitmConflictMode({
     if (ok) await fight.end();
   }
 
+  /** Правка полосы путешествия; последний шаг — строка «окончено» в лог (Q13). */
+  async function setJourney(label: string, next: LitmSceneState["journey"]) {
+    const ok = await ribbon.setScene(label, { ...scene, journey: next });
+    if (ok && next && journeyArrived(next) && !(scene.journey && journeyArrived(scene.journey))) {
+      noteLitm(sessionId, `Путешествие «${next.name}» окончено: ${next.passed.map((p) => p.name).join(", ")}`);
+    }
+  }
+
+  /** «Одолели» / «Пройдено с последствиями» (Q7): шаг идущего путешествия, гнездо уходит с ленты. */
+  async function passVignette(row: InitiativeEntry, outcome: Exclude<LitmStepOutcome, "skip">) {
+    const said = outcome === "overcome" ? "одолели" : "пройдено с последствиями";
+    const j = scene.journey;
+    if (j && !journeyArrived(j)) await setJourney(`«${j.name}», шаг ${j.passed.length + 1}: ${row.name} — ${said}`, passStep(j, row.name, outcome));
+    await ribbon.remove(row, `Виньетка «${row.name}»: ${said}`);
+  }
+  const journey = scene.journey;
+  const currentVignette = journey
+    ? (ribbon.challenges.find((r) => {
+        const v = ribbon.stateOf(r).vignette;
+        return v && (v.journeyId === journey.entryId || v.journeyId == null);
+      })?.name ?? null)
+    : null;
+
   async function addOwn() {
     const name = (await prompt({ message: "Свой участник сцены: союзник, вещь, ворота…", defaultValue: "", confirmLabel: "На ленту" }))?.trim();
     if (name) await ribbon.add({ type: "quick", name });
@@ -443,6 +470,16 @@ export function LitmConflictMode({
         onCamp={() => void camp()}
       />
 
+      {journey && (
+        <LitmJourneyBar
+          journey={journey}
+          current={currentVignette}
+          onChange={(label, next) => void setJourney(label, next)}
+          onCamp={() => void camp()}
+          onMenu={(e, items) => setMenu({ x: e.clientX, y: e.clientY, title: journey.name, items })}
+        />
+      )}
+
       <div className="lp-heroes">
         {characters.length === 0 && <span className="lb-empty">За столом никого — герои берутся из партии кампании.</span>}
         {characters.map((c) => (
@@ -497,9 +534,22 @@ export function LitmConflictMode({
         }}
       >
         <div className="lp-track">
-          {ribbon.challenges.map((row) => (
-            <ChallengeNest key={row.id} row={row} ctx={ctx} />
-          ))}
+          {ribbon.challenges.map((row) => {
+            const v = ribbon.stateOf(row).vignette;
+            return v ? (
+              <LitmVignetteNest
+                key={row.id}
+                row={row}
+                v={v}
+                journey={journey}
+                onAction={(a, e, edit) => runAction(row, a, e, 0, edit)}
+                onPass={(outcome) => void passVignette(row, outcome)}
+                onMenu={(e) => setMenu({ x: e.clientX, y: e.clientY, title: row.name, items: nestItems(row, ctx) })}
+              />
+            ) : (
+              <ChallengeNest key={row.id} row={row} ctx={ctx} />
+            );
+          })}
           <button type="button" className="lp-nest lp-nest--new" onClick={() => setAdding(true)}>
             + Вызов
             <small>или ПКМ по пустому</small>
@@ -606,11 +656,12 @@ type Confirm = ReturnType<typeof useConfirm>[1];
 type OpenMenu = (m: { x: number; y: number; items: ContextMenuItem[]; title?: string }) => void;
 
 function nestItems(row: InitiativeEntry, { ribbon, confirm, openGive, addonMenu }: NestCtx): ContextMenuItem[] {
-  const items: ContextMenuItem[] = [{ label: "Дать статус…", onClick: () => openGive({ keys: [`row:${row.id}`] }) }, ...addonMenu(row)];
+  const vignette = ribbon.stateOf(row).vignette != null;
+  const items: ContextMenuItem[] = vignette ? [] : [{ label: "Дать статус…", onClick: () => openGive({ keys: [`row:${row.id}`] }) }, ...addonMenu(row)];
   if (row.entity_type === "compendium_entry" && row.entity_id != null) {
-    items.push({ label: "Открыть профиль", onClick: () => window.open(`/compendium/${row.entity_id}`, "_blank") });
+    items.push({ label: vignette ? "Открыть путешествие" : "Открыть профиль", onClick: () => window.open(`/compendium/${row.entity_id}`, "_blank") });
   }
-  if ((row.entity_type === "compendium_entry" || row.entity_type === "being") && row.entity_id != null) {
+  if (!vignette && (row.entity_type === "compendium_entry" || row.entity_type === "being") && row.entity_id != null) {
     const base = row.name.replace(/ \d+$/, "");
     items.push({ label: "Ещё копия", onClick: () => void ribbon.add({ type: row.entity_type as "compendium_entry" | "being", id: row.entity_id!, name: base }) });
   }

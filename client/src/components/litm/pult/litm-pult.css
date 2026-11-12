@@ -803,3 +803,260 @@
 .lp-give--log {
   border-style: dashed;
 }
+
+/* путешествие (пульт v2, доска Litm-Pult-Journey): полоса шагов над героями */
+.lp-journey.litm-book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "t e" "s s" "r r";
+  gap: var(--sp-4) var(--sp-6);
+  align-items: center;
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--card-border-width, 1px) solid var(--lb-line);
+  border-left: 6px solid var(--lb-mist);
+}
+.lp-journey--done.litm-book {
+  display: flex;
+  border-left-color: var(--lb-stat);
+}
+.lp-journey__t {
+  grid-area: t;
+}
+.lp-journey > .lp-end {
+  grid-area: e;
+}
+.lp-steps,
+.lp-jset {
+  grid-area: s;
+}
+.lp-journey__t b {
+  display: block;
+  font-family: var(--lb-serif);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: 1.05;
+}
+.lp-journey__arrived {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lp-steps {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  gap: var(--sp-5);
+}
+.lp-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 110px;
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--card-border-width, 1px) solid var(--lb-line);
+}
+.lp-step small {
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+.lp-step b {
+  display: block;
+  font-family: var(--lb-serif);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.lp-step b.is-empty {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--lb-muted);
+}
+.lp-step.is-done {
+  background: var(--lb-tab);
+}
+.lp-step.is-now {
+  border: var(--edge-width) solid var(--lb-edge);
+  box-shadow: inset 0 4px 0 var(--lb-mist);
+}
+.lp-step--goal {
+  flex: 0.6;
+  border-style: dashed;
+}
+.lp-step__gap {
+  position: absolute;
+  right: calc(-1 * var(--sp-5));
+  top: 50%;
+  width: var(--sp-5);
+  transform: translateY(-50%);
+  font-style: normal;
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  text-align: center;
+  color: var(--lb-muted);
+  writing-mode: vertical-rl;
+}
+.lp-journey__ref {
+  grid-area: r;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: var(--card-border-width, 1px) solid var(--lb-line);
+}
+.lp-journey__sep {
+  margin-left: var(--sp-5);
+}
+.lp-journey__eff {
+  font-family: var(--lb-serif);
+  font-size: var(--fs-meta);
+}
+.lp-jset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.lp-dice {
+  display: inline-flex;
+  gap: 3px;
+}
+.lp-dice button {
+  width: 28px;
+  height: 28px;
+  border: var(--card-border-width, 1px) solid var(--lb-edge);
+  background: transparent;
+  color: var(--lb-ink);
+  font-family: "JetBrains Mono", monospace;
+  cursor: pointer;
+}
+.lp-dice button.is-on {
+  background: var(--lb-ink);
+  color: var(--lb-sheet);
+}
+.lp-dice button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.lp-jset__gap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* гнездо-виньетка */
+.lp-nest.lp-vig {
+  border-top-color: var(--lb-mist);
+}
+.lp-vig__k {
+  display: inline-block;
+  margin-bottom: var(--sp-3);
+  padding: 1px var(--sp-3);
+  background: var(--lb-mist);
+  color: var(--lb-sheet);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lp-vig__thr {
+  margin: 0;
+  font-family: var(--lb-serif);
+  font-style: italic;
+  font-size: var(--fs-body);
+  line-height: 1.45;
+}
+.lp-vig__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: var(--edge-width) solid var(--lb-edge);
+}
+
+/* «Препятствия»: путешествие и общие виньетки развёрнуты под строкой */
+.lp-ov.litm-book {
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  border: var(--card-border-width, 1px) solid var(--lb-line);
+  border-left: 4px solid var(--lb-mist);
+  container-type: normal;
+}
+.lp-ov__h {
+  padding: var(--sp-3) var(--sp-4);
+}
+.lp-ov__seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+.lp-ov__seg button {
+  padding: 1px var(--sp-3);
+  border: var(--card-border-width, 1px) solid var(--lb-line);
+  background: transparent;
+  color: var(--lb-ink);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.lp-ov__seg button small {
+  margin-left: var(--sp-2);
+  color: var(--lb-muted);
+  font-family: "JetBrains Mono", monospace;
+}
+.lp-ov__seg button.is-on {
+  background: var(--lb-ink);
+  color: var(--lb-sheet);
+}
+.lp-ov__row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.6fr) minmax(0, 1.4fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-2) var(--sp-4);
+  border-top: var(--card-border-width, 1px) solid var(--lb-line);
+}
+.lp-ov__row b {
+  font-family: var(--lb-serif);
+  font-weight: 700;
+}
+.lp-ov__thr {
+  font-family: var(--lb-serif);
+  font-style: italic;
+  font-size: var(--fs-meta);
+  color: var(--lb-ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-ov__row.is-done {
+  opacity: 0.55;
+}
+.lp-ov__row.is-now {
+  box-shadow: inset 3px 0 0 var(--lb-edge);
+  background: var(--lb-tab);
+}
+
+@media (max-width: 760px) {
+  .lp-steps {
+    overflow-x: auto;
+    padding-bottom: var(--sp-2);
+  }
+  .lp-step {
+    flex: 0 0 150px;
+  }
+  .lp-journey__sep {
+    margin-left: 0;
+  }
+  .lp-ov__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .lp-ov__thr {
+    display: none;
+  }
+}

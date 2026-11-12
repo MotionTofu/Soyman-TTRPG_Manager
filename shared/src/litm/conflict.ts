@@ -35,6 +35,49 @@ export interface LitmChallengeState {
   declaredLead: string;
   /** Надстройки на гнезде — id записей «Надстройки» (Q17). */
   addons: number[];
+  /** Строка — виньетка путешествия, а не вызов: угроза и последствия
+   *  скопированы при добавлении, пределов нет (пульт v2, Q5–Q6). */
+  vignette: LitmVignette | null;
+}
+
+/** Виньетка на ленте: одно Быстрое действие с угрозой и последствиями (кн. II). */
+export interface LitmVignette {
+  name: string;
+  nameEn: string;
+  threat: string;
+  consequences: string[];
+  /** Перекрывает путь — шаг засчитывается только «Одолели» (Q7). */
+  blocksPath: boolean;
+  /** Путешествие, из которого виньетка; null — общие дорожные. */
+  journeyId: number | null;
+}
+
+/** Как пройден шаг путешествия: одолели, с последствиями или «Следующий шаг». */
+export type LitmStepOutcome = "overcome" | "consequences" | "skip";
+
+/**
+ * Путешествие на полосе «Сцена» (Q3, Q7, Q13): что пройдено и сколько шагов.
+ * Теги местности и общие последствия — справкой, копией из записи книги.
+ * `steps` 0 — число шагов ещё не выбрано.
+ */
+export interface LitmJourneyState {
+  entryId: number;
+  name: string;
+  kind: string;
+  tags: string[];
+  consequences: string[];
+  steps: number;
+  gap: string;
+  passed: { name: string; outcome: LitmStepOutcome }[];
+}
+
+export function journeyArrived(j: Pick<LitmJourneyState, "steps" | "passed">): boolean {
+  return j.steps > 0 && j.passed.length >= j.steps;
+}
+
+/** Засчитать шаг; после последнего путешествие «Прибыли». */
+export function passStep(j: LitmJourneyState, name: string, outcome: LitmStepOutcome): LitmJourneyState {
+  return journeyArrived(j) ? j : { ...j, passed: [...j.passed, { name, outcome }] };
 }
 
 /** Минимум профиля, из которого собирается строка: пределы и теги книги. */
@@ -62,7 +105,12 @@ export function challengeStateFromProfile(p: LitmProfileSource): LitmChallengeSt
     const s = parseStatusTag(t.text);
     if (s) statuses = giveStatus(statuses, s.name, s.tier);
   }
-  return { limits, statuses, declaredThreat: null, declaredLead: "", addons: [] };
+  return { limits, statuses, declaredThreat: null, declaredLead: "", addons: [], vignette: null };
+}
+
+/** Строка ленты для виньетки: без пределов и статусов. */
+export function vignetteState(v: LitmVignette): LitmChallengeState {
+  return { limits: [], statuses: [], declaredThreat: null, declaredLead: "", addons: [], vignette: v };
 }
 
 export function limitTier(l: Pick<LitmLimitState, "marks">): number {
@@ -133,10 +181,12 @@ export interface LitmSceneState {
   spotlight: LitmSpotlight;
   /** Сцена пульта, к которой относятся теги, — для плашки «Сцена сменилась» (Q11). */
   sceneId: number | null;
+  /** Идущее путешествие — полоса над лентой (пульт v2, Q3). */
+  journey: LitmJourneyState | null;
 }
 
 export function emptySceneState(): LitmSceneState {
-  return { tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null };
+  return { tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null, journey: null };
 }
 
 /**
@@ -193,6 +243,44 @@ export function parseChallengeState(raw: string | null | undefined): LitmChallen
     declaredThreat: typeof o.declaredThreat === "number" ? o.declaredThreat : null,
     declaredLead: typeof o.declaredThreat === "number" ? String(o.declaredLead ?? "") : "",
     addons: arr<number>(o.addons).filter((n) => typeof n === "number"),
+    vignette: parseVignette(o.vignette),
+  };
+}
+
+const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+
+function parseVignette(v: unknown): LitmVignette | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.name !== "string" || !o.name) return null;
+  return {
+    name: o.name,
+    nameEn: String(o.nameEn ?? ""),
+    threat: String(o.threat ?? ""),
+    consequences: strs(o.consequences),
+    blocksPath: o.blocksPath === true,
+    journeyId: typeof o.journeyId === "number" ? o.journeyId : null,
+  };
+}
+
+const OUTCOMES: LitmStepOutcome[] = ["overcome", "consequences", "skip"];
+
+function parseJourney(v: unknown): LitmJourneyState | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.entryId !== "number" || typeof o.name !== "string") return null;
+  const passed = Array.isArray(o.passed) ? (o.passed as Record<string, unknown>[]) : [];
+  return {
+    entryId: o.entryId,
+    name: o.name,
+    kind: String(o.kind ?? ""),
+    tags: strs(o.tags),
+    consequences: strs(o.consequences),
+    steps: typeof o.steps === "number" && o.steps >= 0 && o.steps <= 6 ? Math.floor(o.steps) : 0,
+    gap: String(o.gap ?? ""),
+    passed: passed
+      .filter((p) => p && typeof p.name === "string")
+      .map((p) => ({ name: String(p.name), outcome: OUTCOMES.includes(p.outcome as LitmStepOutcome) ? (p.outcome as LitmStepOutcome) : "skip" })),
   };
 }
 
@@ -210,5 +298,6 @@ export function parseSceneState(raw: string | null | undefined): LitmSceneState 
       counts: sp.counts && typeof sp.counts === "object" ? { ...sp.counts } : {},
     },
     sceneId: typeof o.sceneId === "number" ? o.sceneId : null,
+    journey: parseJourney(o.journey),
   };
 }

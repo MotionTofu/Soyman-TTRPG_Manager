@@ -19,19 +19,34 @@ const vignettes = (v: unknown): Vignette[] => arr<Record<string, unknown>>(v).ma
   name: str(x.name), nameEn: str(x.nameEn), threat: str(x.threat), consequences: strs(x.consequences), blocksPath: x.blocksPath === true,
 })).filter((x) => x.name);
 
+/** Путешествие из записи книги: теги, общие последствия, виньетки. */
+export function journeyOf(e: CompendiumEntry): Journey {
+  return {
+    entry: e, kind: str(e.data?.journeyKindRu), page: str(e.data?.page), tags: strs(e.data?.tags),
+    consequences: strs(e.data?.consequences), benefits: str(e.data?.benefits), vignettes: vignettes(e.data?.vignettes),
+  };
+}
+
+/** Наборы общих дорожных виньеток («Погода и стихия», «Злоключения»…). */
+export function vignetteGroupsOf(e: Pick<CompendiumEntry, "data">): VignetteGroup[] {
+  return arr<Record<string, unknown>>(e.data?.groups).map((x) => ({
+    name: str(x.name), nameEn: str(x.nameEn), intro: str(x.intro), page: str(x.page), vignettes: vignettes(x.vignettes),
+  })).filter((g) => g.vignettes.length);
+}
+
+/** Запись книги, которую «Препятствия» разворачивают в виньетки (пульт v2, Q5). */
+export function hasVignettes(e: Pick<CompendiumEntry, "data">): boolean {
+  return vignettes(e.data?.vignettes).length > 0 || vignetteGroupsOf(e).length > 0;
+}
+
 /** Группы в порядке книги; путешествия — дети групп. */
 export function journeysOf(entries: CompendiumEntry[]): JourneyGroup[] {
   const sorted = [...entries].sort(byPos);
   return sorted.filter((e) => e.parent_id === null).map((g) => ({
     entry: g,
     page: str(g.data?.page),
-    journeys: sorted.filter((e) => e.parent_id === g.id).map((e) => ({
-      entry: e, kind: str(e.data?.journeyKindRu), page: str(e.data?.page), tags: strs(e.data?.tags),
-      consequences: strs(e.data?.consequences), benefits: str(e.data?.benefits), vignettes: vignettes(e.data?.vignettes),
-    })),
-    vignetteGroups: arr<Record<string, unknown>>(g.data?.groups).map((x) => ({
-      name: str(x.name), nameEn: str(x.nameEn), intro: str(x.intro), page: str(x.page), vignettes: vignettes(x.vignettes),
-    })),
+    journeys: sorted.filter((e) => e.parent_id === g.id).map(journeyOf),
+    vignetteGroups: vignetteGroupsOf(g),
   }));
 }
 

@@ -13,12 +13,16 @@ import {
 import {
   challengeStateFromProfile,
   giveToLimit,
+  journeyArrived,
   overcomeBy,
   parseChallengeState,
   parseSceneState,
   passSpotlight,
+  passStep,
   reduceLimit,
   turnedLimits,
+  vignetteState,
+  type LitmJourneyState,
   type LitmSpotlight,
 } from "./conflict";
 
@@ -142,6 +146,30 @@ describe("спотлайт", () => {
   });
 
   it("сцена из пустого state — пустая", () => {
-    expect(parseSceneState("")).toEqual({ tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null });
+    expect(parseSceneState("")).toEqual({ tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null, journey: null });
+  });
+});
+
+describe("путешествие", () => {
+  const forest: LitmJourneyState = { entryId: 17130, name: "Тёмный лес", kind: "Местность", tags: ["тени повсюду"], consequences: [], steps: 2, gap: "часы", passed: [] };
+
+  it("шаги засчитываются до «Прибыли», дальше не растут", () => {
+    let j = passStep(forest, "Мшистая поляна", "consequences");
+    expect(journeyArrived(j)).toBe(false);
+    j = passStep(j, "Замёрзший ручей", "overcome");
+    expect(journeyArrived(j)).toBe(true);
+    expect(passStep(j, "лишний", "skip").passed).toHaveLength(2);
+  });
+
+  it("без выбранного числа шагов не прибывает", () => {
+    expect(journeyArrived(passStep({ ...forest, steps: 0 }, "Мшистая поляна", "overcome"))).toBe(false);
+  });
+
+  it("виньетка и путешествие переживают сохранение в колонку state", () => {
+    const v = vignetteState({ name: "Замёрзший ручей", nameEn: "Frozen Stream", threat: "*скользкий лёд*", consequences: ["Мёрзнете (*замёрз-2*)."], blocksPath: true, journeyId: 17130 });
+    expect(parseChallengeState(JSON.stringify(v))).toEqual(v);
+    const j = passStep(forest, "Мшистая поляна", "overcome");
+    expect(parseSceneState(JSON.stringify({ journey: j })).journey).toEqual(j);
+    expect(parseSceneState(JSON.stringify({ journey: { name: "без записи" } })).journey).toBeNull();
   });
 });

@@ -16,9 +16,10 @@ export function isMight(v: unknown): v is LitmMight {
   return v === "origin" || v === "adventure" || v === "greatness" || v === "variable";
 }
 
-/** Последствие угрозы: текст, а эффект из скобок в конце — хвостом без скобок. */
+/** Последствие угрозы: текст, а эффект из скобок в конце — хвостом без скобок.
+ *  Точка после скобок (так в виньетках путешествий) не мешает. */
 export function splitConsequence(text: string): { lead: string; effect: string | null } {
-  const m = /^(.*\S)\s*\(((?:[^()]|\([^()]*\))*)\)\s*$/.exec(text);
+  const m = /^(.*\S)\s*\(((?:[^()]|\([^()]*\))*)\)\.?\s*$/.exec(text);
   return m ? { lead: m[1], effect: m[2] } : { lead: text, effect: null };
 }
 
