@@ -540,3 +540,57 @@
 .lt-hero:hover:not(:disabled) { background: var(--lb-tab); }
 .lt-hero:disabled { cursor: default; color: var(--lb-muted); }
 .lt-hero small { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); white-space: nowrap; }
+
+/* Путешествия (доски Litm-Journey) */
+.lj-tags { margin: 0 0 var(--sp-5); }
+.lj-play { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); border: var(--card-border-width) solid var(--lb-line); border-left: 6px solid var(--lb-mist); padding: var(--sp-3) var(--sp-5); margin: 0 0 var(--sp-5); background: color-mix(in srgb, var(--lb-sheet) 60%, var(--lb-tab)); }
+.lj-play .lb-lbl { margin: 0; }
+.lj-dice { display: inline-flex; gap: 3px; }
+.lj-dice button { width: 28px; height: 28px; border: 1.5px solid var(--lb-edge); background: none; color: var(--lb-ink); font-family: "JetBrains Mono", monospace; font-size: var(--fs-meta); cursor: pointer; padding: 0; }
+.lj-dice button.is-on { background: var(--lb-ink); color: var(--lb-sheet); }
+.lj-gap { display: inline-flex; align-items: center; gap: var(--sp-3); }
+.lj-gap select { font: inherit; font-family: var(--lb-serif); font-size: var(--fs-data); background: var(--lb-sheet); color: var(--lb-ink); border: 1px solid var(--lb-line); padding: 1px var(--sp-2); }
+.lj-play__note { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lb-muted); }
+.lj-play__roll { margin-left: auto; }
+.lj-cons { margin: 0; padding-left: var(--sp-6); font-family: var(--lb-serif); font-size: var(--fs-data); line-height: 1.45; }
+.lj-cons li { margin: 0 0 var(--sp-1); }
+.lj-cons--common { margin: 0 0 var(--sp-5); max-width: 82ch; }
+.lj-benefit { border: 1px dashed var(--lb-line); border-left: 4px solid var(--lb-pow); padding: var(--sp-3) var(--sp-5); margin: 0 0 var(--sp-5); font-family: var(--lb-serif); font-size: var(--fs-data); line-height: 1.45; max-width: 82ch; }
+.lj-benefit b { display: block; font-family: var(--lb-sc); letter-spacing: 0.04em; margin-bottom: var(--sp-1); }
+.lj-sec { margin-top: var(--sp-6); }
+.lj-sec > h4 { margin: 0 0 var(--sp-4); }
+.lj-intro { margin: 0 0 var(--sp-4); font-family: var(--lb-serif); font-size: var(--fs-data); line-height: 1.45; color: var(--lb-ink2); max-width: 82ch; }
+.lj-rule { font-family: var(--lb-serif); font-size: var(--fs-body); line-height: 1.55; max-width: 78ch; }
+.lj-rule p { margin: 0 0 var(--sp-4); }
+.lj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-4); }
+.lj-vc { display: flex; flex-direction: column; gap: var(--sp-2); border: var(--card-border-width) solid var(--lb-line); background: var(--lb-sheet); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.lj-vc--block { border-left: 4px solid var(--lb-weak); }
+.lj-vc.is-on { box-shadow: 0 0 0 2px var(--lb-edge); }
+.lj-vc header { display: flex; align-items: baseline; gap: var(--sp-3); }
+.lj-vc h4 { margin: 0; font-family: var(--lb-sc); font-weight: 700; font-size: var(--fs-h3); letter-spacing: 0.04em; }
+.lj-vc__n { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: var(--lb-ink); background: var(--lb-tab); padding: 0 var(--sp-2); }
+.lj-vc__thr { margin: 0; padding: 0 0 var(--sp-2); border-bottom: 1px solid var(--lb-line); font-family: var(--lb-serif); font-style: italic; font-size: var(--fs-data); line-height: 1.42; }
+.lj-vc__thr::before { content: "Угроза · "; font-style: normal; font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lb-muted); }
+.lj-vc .lj-cons { font-size: var(--fs-meta); padding-left: var(--sp-5); }
+.lj-vc__acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-top: auto; padding-top: var(--sp-2); }
+.lj-blk { margin-left: auto; font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: var(--lb-muted); }
+.lj-blk.is-on { color: var(--lb-weak); }
+.lj-contents > section { margin: 0 0 var(--sp-6); }
+.lj-contents h3 { display: flex; align-items: baseline; gap: var(--sp-3); margin: 0 0 var(--sp-3); font-family: var(--lb-serif); font-size: var(--fs-h2); }
+.lj-contents h3 a { color: inherit; text-decoration: none; }
+.lj-contents h3 small { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); font-weight: 400; color: var(--lb-muted); }
+.lj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-4); margin: 0 0 var(--sp-5); }
+.lj-card { display: flex; flex-direction: column; gap: var(--sp-2); border: var(--card-border-width) solid var(--lb-line); border-top: 3px solid var(--lb-mist); padding: var(--sp-3) var(--sp-4); color: inherit; text-decoration: none; }
+.lj-card:hover { background: var(--lb-tab); }
+.lj-card h4 { margin: 0; font-family: var(--lb-serif); font-weight: 700; font-size: var(--fs-h3); letter-spacing: 0; }
+.lj-card h4 small { display: block; font-weight: 400; font-style: italic; font-size: var(--fs-label); color: var(--lb-muted); }
+.lj-card__tags { font-family: var(--lb-serif); font-size: var(--fs-meta); color: var(--lb-ink2); }
+.lj-card__n { margin-top: auto; padding-top: var(--sp-2); border-top: 1px solid var(--lb-line); font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); }
+
+/* Обзор LitM (доска Litm-Overview): состав в единицах книги — в рамке «Д», вне листа книги */
+.lo-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.lo-unit { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: var(--sp-4) var(--sp-5); border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.lo-unit:hover { background: var(--tab); }
+.lo-unit b { font-family: var(--font-ui); font-size: var(--fs-h3); font-weight: 600; }
+.lo-unit em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.lo-unit span { font-size: var(--fs-data); color: var(--ink-2); }
