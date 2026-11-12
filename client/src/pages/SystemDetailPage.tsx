@@ -21,6 +21,7 @@ import { LitmGrimoireToc } from "../components/litm/LitmGrimoireView";
 import { LitmRulesToc } from "../components/litm/LitmRulesView";
 import { LitmWaysToc } from "../components/litm/LitmWaysView";
 import { LitmJourneysToc } from "../components/litm/LitmJourneysView";
+import { LitmOverviewUnits } from "../components/litm/LitmOverviewUnits";
 import { LitmSectionSwitch } from "../components/litm/LitmSectionSwitch";
 import { litmCatalogOf } from "../components/litm/litmBookText";
 import { SectionBackground } from "../components/SectionBackground";
@@ -208,6 +209,8 @@ export function SystemDetailPage() {
   ];
   // Гримуар, Справочник, Пути магии и Путешествия LitM раскрывают своё оглавление под пунктом раздела (доски Litm-Grimoire,
   // Litm-Rules); в шторке телефона его нет — там оглавление в самом разделе.
+  // Обзор LitM (доска Litm-Overview): «Язык листа» ведёт в Справочник.
+  const litmRules = system.code === "litm" ? sections.find((s) => s.name === "Справочник") : undefined;
   const grimToc = (sec: SystemSection) => {
     if (activeTab !== String(sec.id) || searchParams.get("view") === "list") return null;
     const catalog = litmCatalogOf(system.code, sec);
@@ -303,7 +306,7 @@ export function SystemDetailPage() {
                   onSaveFields={(v) => saveName(v.name, v.code)}
                 />
               </div>
-              <dl className="sys-hero2__facts"><dt>Код</dt><dd>{system.code ? <>{system.code} — ссылки вида [[{system.code}:…]]</> : "не задан"}</dd><dt>Кампании</dt><dd>{campaigns.length || "пока нет"}</dd></dl>
+              <dl className="sys-hero2__facts"><dt>Код</dt><dd>{system.code ? <>{system.code} — ссылки вида [[{system.code}:…]]</> : "не задан"}</dd><dt>Кампании</dt><dd>{campaigns.length || "пока нет"}</dd>{litmRules && <><dt>Язык листа</dt><dd>«Сказочная книга» — <Link to={`/systems/${systemId}?section=${litmRules.id}`}>как читать теги и статусы</Link></dd></>}</dl>
             </div>
             <div className="sys-hero2__thumb">
               <div className="entity-image-slots">
@@ -325,10 +328,12 @@ export function SystemDetailPage() {
           <section>
             <div className="d-plate-row">
               <h2 className="d-plate">Состав справочника</h2>
-              <span className="d-note">{entriesLabel((countRows ?? []).reduce((sum, r) => sum + r.count, 0))} с вложенными</span>
+              {system.code === "litm" ? <span className="d-note">в единицах книги, а не в записях базы</span> : <span className="d-note">{entriesLabel((countRows ?? []).reduce((sum, r) => sum + r.count, 0))} с вложенными</span>}
             </div>
             {sections.length === 0 ? (
               <span className="muted">Разделов пока нет.</span>
+            ) : system.code === "litm" ? (
+              <LitmOverviewUnits systemId={systemId} sections={sections} onOpen={(id) => selectTab(String(id))} />
             ) : (
               <div className="sys-counts">
                 {sections.map((s) => (

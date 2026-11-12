@@ -586,3 +586,11 @@
 .lj-card h4 small { display: block; font-weight: 400; font-style: italic; font-size: var(--fs-label); color: var(--lb-muted); }
 .lj-card__tags { font-family: var(--lb-serif); font-size: var(--fs-meta); color: var(--lb-ink2); }
 .lj-card__n { margin-top: auto; padding-top: var(--sp-2); border-top: 1px solid var(--lb-line); font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); }
+
+/* Обзор LitM (доска Litm-Overview): состав в единицах книги — в рамке «Д», вне листа книги */
+.lo-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.lo-unit { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: var(--sp-4) var(--sp-5); border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.lo-unit:hover { background: var(--tab); }
+.lo-unit b { font-family: var(--font-ui); font-size: var(--fs-h3); font-weight: 600; }
+.lo-unit em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.lo-unit span { font-size: var(--fs-data); color: var(--ink-2); }
