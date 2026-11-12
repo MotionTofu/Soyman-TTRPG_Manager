@@ -17,6 +17,7 @@ import { systemPaths } from "../data/systems";
 import { notifyDataChanged } from "../dataSync";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody, LitmThemeKitBody } from "./litm/LitmCompendiumBodies";
+import { isLitmThemesSection } from "./litm/litmBookText";
 import { MentionText } from "./mentions/MentionText";
 import { OtherscapePowerSetBody } from "./otherscape/OtherscapePowerSetBody";
 import { OtherscapeChallengeBody } from "./otherscape/OtherscapeChallengeBody";
@@ -298,7 +299,7 @@ const AC_BONUS_FIELD: FieldDef = { key: "ac_bonus", label: "Бонус к КЗ",
 
 function getExtraFields(entry: CompendiumEntry, parentGroupName?: string): FieldDef[] {
   if (entry.kind === "mechanic_item") {
-    if (parentGroupName === "Могущество и Темы") {
+    if (isLitmThemesSection(parentGroupName)) {
       if (!entry.data?.level) return [];
       return [
         { key: "default_theme_types", label: "Типы тем (через запятую)", type: "textarea" },
