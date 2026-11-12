@@ -1,5 +1,5 @@
 import { readResource } from "../../data/imperative";
-import type { CompendiumEntry, LitMPower } from "../../types";
+import type { CompendiumEntry, LitMPower, LitMThemeCard } from "../../types";
 
 // Ступени Могущества по-русски — одни на карточку темы, визард и компендиум.
 // Раньше было три словаря: карточка писала по-английски, визард «Переменное»,
@@ -110,7 +110,12 @@ export interface TropeData {
   themes_fixed: string[];      // EN-имена типов тембуков
   themes_choose_one: string[];
   backpack: string[];
+  /** Наборы тропа по книге: оригинальное имя набора и его тема (тип или путь магии). */
+  kits_fixed?: KitRef[];
+  kits_choose?: KitRef[];
 }
+
+export interface KitRef { name: string; name_original: string; theme: string; page?: string }
 
 export interface LitmTrope {
   id: number;
@@ -155,12 +160,13 @@ export async function loadLitmThemeBooks(systemId: number): Promise<LitmThemeBoo
   return entries
     .filter((e) => e.kind === "themebook" && e.parent_id !== null)
     .map((e) => {
+      // Имя «Ремесло», оригинал «Skill or Trade»; старые записи — «Ремесло [Skill or Trade]».
       const match = e.name.match(/^(.+?)\s*\[(.+)\]$/);
       return {
         id: e.id,
         name: e.name,
         ruName: match?.[1] ?? e.name,
-        enName: match?.[2] ?? "",
+        enName: e.name_original || match?.[2] || "",
         data: e.data as unknown as ThemeBookData,
       };
     });
@@ -177,26 +183,83 @@ export interface ThemeKitData {
 
 export interface LitmThemeKit {
   id: number;
-  name: string;               // «Старейшина общины [Circumstance]»
-  parentId: number;           // themebook id
-  themebookEn: string;        // «Circumstance»
+  name: string;               // «Старейшина общины»
+  nameEn: string;             // «Village Elder»
+  parentId: number;           // themebook или путь магии
+  themebookEn: string;        // тема по книге: «Circumstance» или путь «Witchcraft»
+  bookEn: string;             // анкета темы: у наборов путей — «Magic»
   data: ThemeKitData;
 }
 
+/** Наборы тем и наборы путей магии (у путей тема героя — «Магия», ступень — у набора). */
 export async function loadLitmThemeKits(systemId: number): Promise<LitmThemeKit[]> {
-  const entries = await loadMightSectionEntries(systemId);
+  const sections = await readResource<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
+  const ways = sections.find((s) => s.kind === "magic_way");
+  const [themes, wayEntries] = await Promise.all([
+    loadMightSectionEntries(systemId),
+    ways ? readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${ways.id}`) : Promise.resolve([]),
+  ]);
+  return kitsOf([...themes, ...wayEntries]);
+}
+
+export function kitsOf(entries: CompendiumEntry[]): LitmThemeKit[] {
+  const byId = new Map(entries.map((e) => [e.id, e]));
   return entries
     .filter((e) => e.kind === "theme_kit")
     .map((e) => {
+      const parent = e.parent_id !== null ? byId.get(e.parent_id) : undefined;
       const match = e.name.match(/^(.+?)\s*\[(.+)\]$/);
+      const themebookEn = parent?.name_original || match?.[2] || "";
       return {
         id: e.id,
-        name: e.name,
+        name: match?.[1] ?? e.name,
+        nameEn: e.name_original ?? "",
         parentId: e.parent_id ?? 0,
-        themebookEn: match?.[2] ?? "",
+        themebookEn,
+        bookEn: parent?.kind === "magic_way" ? "Magic" : themebookEn,
         data: e.data as unknown as ThemeKitData,
       };
     });
+}
+
+/** Ключ сравнения имён книги: регистр, кавычки, апострофы и пометка в скобках не важны. */
+export const kitKey = (s: string) => s.toLowerCase().replace(/[’`]/g, "'").replace(/\s*\([^)]*\)/g, "").replace(/[“”"«»]/g, "").trim();
+
+/** Набор тропа для темы: по ссылке книги, иначе первый набор этой темы. */
+export function findKit(kits: LitmThemeKit[], themeEn: string, ref?: KitRef | null): LitmThemeKit | undefined {
+  const own = kits.filter((k) => k.themebookEn === themeEn);
+  if (ref) {
+    const key = kitKey(ref.name_original);
+    const hit = own.find((k) => kitKey(k.nameEn) === key) ?? kits.find((k) => kitKey(k.nameEn) === key);
+    if (hit) return hit;
+  }
+  return own[0];
+}
+
+/** Ссылка тропа на набор для его темы `themeEn`. */
+export function tropeKitRef(trope: LitmTrope, themeEn: string): KitRef | null {
+  return [...(trope.data.kits_fixed ?? []), ...(trope.data.kits_choose ?? [])].find((k) => k.theme === themeEn) ?? null;
+}
+
+/** Тема героя из набора: теги, квест, ступень набора; особые улучшения — из анкеты темы. */
+export function themeFromKit(themeEn: string, kit: LitmThemeKit | undefined, books: LitmThemeBook[]): LitMThemeCard {
+  const book = books.find((b) => b.enName === (kit?.bookEn ?? themeEn));
+  return {
+    power: (kit?.data.might || book?.data.might || "") as LitMPower,
+    themeType: kit?.bookEn ?? themeEn,
+    name: kit ? `${kit.name} [${themeEn}]` : book ? `${book.ruName} [${themeEn}]` : themeEn,
+    powerTags: kit?.data.powerTags ?? [],
+    weaknessTags: kit?.data.weaknessTags ?? [],
+    quest: kit?.data.quest ?? "",
+    improve: 0, abandon: 0, milestone: 0,
+    specialImprovements: (book?.data.improvements ?? []).map((i) => ({ text: `${i.name} — ${i.text}`, active: false })),
+  };
+}
+
+/** Темы героя по тропу: три постоянные и выбранная (или ни одной на выбор). */
+export function tropeThemes(trope: LitmTrope, chooseIdx: number | null, kits: LitmThemeKit[], books: LitmThemeBook[]): LitMThemeCard[] {
+  const types = [...trope.data.themes_fixed, ...(chooseIdx === null ? [] : [trope.data.themes_choose_one[chooseIdx]])];
+  return types.map((en) => themeFromKit(en, findKit(kits, en, tropeKitRef(trope, en)), books));
 }
 
 // --- Пути магии ---

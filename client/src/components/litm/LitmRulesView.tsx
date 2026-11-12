@@ -9,7 +9,7 @@ import { LitmRich, Status, type GrimLinks } from "./LitmBook";
 import { Paras } from "./LitmGrimoireView";
 import { norm, paras, plural } from "./litmBookText";
 import { grimoireHref } from "./useGrimoire";
-import { isCard, isTerm, rulesOf, searchRules, sectionText, type RuleArticle, type RuleGroup } from "./litmRules";
+import { isCard, isTerm, rulesOf, searchRules, sectionText, type RuleArticle, type RuleGroup, type RuleSection, type RuleSidebar } from "./litmRules";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 const lines = (text: string) => text.split("\n").map((s) => s.trim()).filter(Boolean);
@@ -35,21 +35,24 @@ function En({ text }: { text: string }) {
   ))}</>;
 }
 
-/** «Подробно» — полный перевод раздела книги, английский рядом по кнопке (решение 5г Q1). */
-function Detail({ a, grim }: { a: RuleArticle; grim: GrimLinks }) {
-  const size = a.sections.reduce((n, s) => n + s.text.length, 0);
-  const [open, setOpen] = useState(size < 1500);
+/** Текст книги по разделам, английский рядом по кнопке: «Подробно» Справочника (решение 5г Q1),
+ *  правила пути магии. Длинный — свёрнут, если не сказано иначе. */
+export function BookText({ sections, page, grim, title = "Подробно", sub = "полный перевод книги", open: opened }: {
+  sections: RuleSection[]; page?: string; grim: GrimLinks; title?: string; sub?: string; open?: boolean;
+}) {
+  const size = sections.reduce((n, s) => n + s.text.length, 0);
+  const [open, setOpen] = useState(opened ?? size < 1500);
   const [en, setEn] = useState(false);
-  if (!a.sections.length) return null;
-  const hasEn = a.sections.some((s) => s.textEn);
+  if (!sections.length) return null;
+  const hasEn = sections.some((s) => s.textEn);
   return (
-    <section className={`lr-detail${open ? "" : " is-closed"}${en ? " is-en" : ""}`} aria-label="Подробно">
+    <section className={`lr-detail${open ? "" : " is-closed"}${en ? " is-en" : ""}`} aria-label={title}>
       <header>
-        <h4>Подробно<small>полный перевод книги{a.page && ` · с. ${a.page}`}</small></h4>
+        <h4>{title}<small>{sub}{page && ` · с. ${page}`}</small></h4>
         {open && hasEn && <button type="button" className="d-btn d-btn--sm" aria-pressed={en} onClick={() => setEn(!en)}>{en ? "Только русский" : "Английский рядом"}</button>}
         <button type="button" className="lb-back" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Свернуть ▴" : "Развернуть ▾"}</button>
       </header>
-      {open && a.sections.map((s, i) => (
+      {open && sections.map((s, i) => (
         <div key={i} className="lr-detail__sec">
           {(s.head || s.page) && <h5>{s.head}{s.headEn && <span className="lb-orig">[{s.headEn}]</span>}{s.page && <small className="d-mono">с. {s.page}</small>}</h5>}
           <div className="lr-detail__cols">
@@ -60,6 +63,13 @@ function Detail({ a, grim }: { a: RuleArticle; grim: GrimLinks }) {
       ))}
     </section>
   );
+}
+
+/** Врезки книги: заголовок, страница, текст. */
+export function Sidebars({ items, grim }: { items: RuleSidebar[]; grim: GrimLinks }) {
+  return <>{items.map((s, i) => (
+    <aside key={i} className="lr-side">{(s.title || s.page) && <h5>{s.title}{s.page && <small className="d-mono">с. {s.page}</small>}</h5>}<Paras lines={lines(s.text)} grim={grim} /></aside>
+  ))}</>;
 }
 
 /** Примеры статусов книги по группам (доска Litm-Rules). */
@@ -113,9 +123,7 @@ function Article({ a, group, prev, next, link, grim, byName }: {
         <div className="lr-cols">
           <div>{main}</div>
           <div>
-            {a.sidebars.map((s, i) => (
-              <aside key={i} className="lr-side"><h5>{s.title}{s.page && <small className="d-mono">с. {s.page}</small>}</h5><Paras lines={lines(s.text)} grim={grim} /></aside>
-            ))}
+            <Sidebars items={a.sidebars} grim={grim} />
             {a.related.length > 0 && (
               <nav className="lr-related" aria-label="Связано">
                 <div className="lb-lbl">Связано</div>
@@ -130,7 +138,7 @@ function Article({ a, group, prev, next, link, grim, byName }: {
         </div>
       ) : <div className="lr-solo">{main}</div>}
       <Catalog group={group} />
-      <Detail key={e.id} a={a} grim={grim} />
+      <BookText key={e.id} sections={a.sections} page={a.page} grim={grim} />
       <nav className="lg-pager" aria-label="Соседние статьи">
         {prev ? <Link to={link(prev.entry.id)}><small>← Раньше</small>{prev.entry.name}</Link> : <span />}
         {next ? <Link to={link(next.entry.id)} className="lg-pager__next"><small>Дальше →</small>{next.entry.name}</Link> : <span />}

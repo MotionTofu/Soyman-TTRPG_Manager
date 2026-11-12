@@ -4,10 +4,11 @@ import {
   findLitmSystemId,
   loadLitmTropes,
   loadLitmThemeKits,
+  findKit,
+  tropeKitRef,
   type LitmTrope,
   type LitmThemeKit,
 } from "./litmCompendium";
-import { emptyTheme } from "./ThemeCard";
 
 interface Props {
   isOpen: boolean;
@@ -27,10 +28,7 @@ export function TropePickerModal({ isOpen, onClose, onPick }: Props) {
       try {
         const sysId = await findLitmSystemId();
         if (sysId) {
-          const [t, k] = await Promise.all([
-            loadLitmTropes(sysId),
-            loadLitmThemeKits(sysId),
-          ]);
+          const [t, k] = await Promise.all([loadLitmTropes(sysId), loadLitmThemeKits(sysId)]);
           setTropes(t);
           setKits(k);
         }
@@ -42,28 +40,6 @@ export function TropePickerModal({ isOpen, onClose, onPick }: Props) {
   }, [isOpen]);
 
   function applyTrope(trope: LitmTrope) {
-    const kitsByThemebook = new Map<string, LitmThemeKit[]>();
-    for (const kit of kits) {
-      const arr = kitsByThemebook.get(kit.themebookEn) ?? [];
-      arr.push(kit);
-      kitsByThemebook.set(kit.themebookEn, arr);
-    }
-
-    const allTypes = [...trope.data.themes_fixed];
-    allTypes.map((themebookEn) => {
-      const themebookKits = kitsByThemebook.get(themebookEn) ?? [];
-      const kit = themebookKits[0];
-      return {
-        ...emptyTheme(),
-        themeType: themebookEn,
-        power: kit?.data.might ?? "",
-        name: kit ? `${kit.name.split(" [")[0]} [${themebookEn}]` : themebookEn,
-        powerTags: kit?.data.powerTags ?? [],
-        weaknessTags: kit?.data.weaknessTags ?? [],
-        quest: kit?.data.quest ?? "",
-      };
-    });
-
     onPick(trope);
     onClose();
   }
@@ -95,8 +71,8 @@ export function TropePickerModal({ isOpen, onClose, onPick }: Props) {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
                 {t.data.themes_fixed.map((themebookEn: string) => {
-                  const kit = kits.find(k => k.themebookEn === themebookEn);
-                  return <span key={themebookEn} className={`tg litm-power-${kit?.data.might ?? ""}`} style={{ fontSize: "var(--fs-micro)" }}>{kit?.name.split(" [")[0] ?? themebookEn}</span>;
+                  const kit = findKit(kits, themebookEn, tropeKitRef(t, themebookEn));
+                  return <span key={themebookEn} className={`tg litm-power-${kit?.data.might ?? ""}`} style={{ fontSize: "var(--fs-micro)" }}>{kit?.name ?? themebookEn}</span>;
                 })}
               </div>
               <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)" }}>

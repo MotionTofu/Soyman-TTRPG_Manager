@@ -10,7 +10,9 @@ import { applyGroupThemeToCampaign } from "../../data/campaignActions";
 import { NavIcon } from "../NavIcons";
 import {
   findLitmSystemId,
+  loadLitmThemeBooks,
   loadLitmThemeKits,
+  tropeThemes,
 } from "./litmCompendium";
 import { TropePickerModal } from "./TropePickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -434,29 +436,9 @@ const [showTropePicker, setShowTropePicker] = useState(false);
           try {
             const sysId = await findLitmSystemId();
             if (!sysId) return;
-            const kits = await loadLitmThemeKits(sysId);
-            
-            const kitsByThemebook = new Map<string, any[]>();
-            for (const kit of kits) {
-              const arr = kitsByThemebook.get(kit.themebookEn) ?? [];
-              arr.push(kit);
-              kitsByThemebook.set(kit.themebookEn, arr);
-            }
-
-            const allTypes = [...trope.data.themes_fixed];
-            const newThemes = allTypes.map((themebookEn: string) => {
-              const themebookKits = kitsByThemebook.get(themebookEn) ?? [];
-              const kit = themebookKits[0];
-              return {
-                ...emptyTheme(),
-                themeType: themebookEn,
-                power: kit?.data.might ?? "",
-                name: kit ? `${kit.name.split(" [")[0]} [${themebookEn}]` : themebookEn,
-                powerTags: kit?.data.powerTags ?? [],
-                weaknessTags: kit?.data.weaknessTags ?? [],
-                quest: kit?.data.quest ?? "",
-              };
-            });
+            const [kits, books] = await Promise.all([loadLitmThemeKits(sysId), loadLitmThemeBooks(sysId)]);
+            // Три постоянные темы тропа; четвёртую игрок выбирает сам.
+            const newThemes = tropeThemes(trope, null, kits, books);
 
             const themes = value.themes.slice();
             for (let i = 0; i < 4; i++) {

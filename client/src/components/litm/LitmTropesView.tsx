@@ -7,6 +7,7 @@ import type { CompendiumEntry, SystemSection } from "../../types";
 import { NavIcon } from "../NavIcons";
 import { MightMark, Tag } from "./LitmBook";
 import { isMight, norm, plural } from "./litmBookText";
+import { kitKey } from "./litmCompendium";
 
 interface KitRef { name: string; name_original: string; theme: string; page?: string }
 const NO_ENTRIES: CompendiumEntry[] = [];
@@ -24,11 +25,15 @@ export function LitmTropesView({ systemId, entries, selectedId, onSelect }: {
 }) {
   const sections = useResource<SystemSection[]>(compendiumPaths.sections(systemId)).data ?? NO_SECTIONS;
   const themesSection = sections.find((s) => s.name === "Могущество и Темы" || s.name === "Темы");
+  const waysSection = sections.find((s) => s.kind === "magic_way");
   const themeEntries = useResource<CompendiumEntry[]>(themesSection ? compendiumPaths.sectionEntries(systemId, themesSection.id) : null).data ?? NO_ENTRIES;
-  const { kitByName, bookByEn } = useMemo(() => ({
-    kitByName: new Map(themeEntries.filter((e) => e.kind === "theme_kit").map((e) => [e.name_original, e])),
+  const wayEntries = useResource<CompendiumEntry[]>(waysSection ? compendiumPaths.sectionEntries(systemId, waysSection.id) : null).data ?? NO_ENTRIES;
+  // Наборы тем и наборы путей магии — по оригинальному имени книги (апострофы и пометки в скобках не важны).
+  const { kitByName, bookByEn, wayById } = useMemo(() => ({
+    kitByName: new Map([...themeEntries, ...wayEntries].filter((e) => e.kind === "theme_kit").map((e) => [kitKey(e.name_original ?? ""), e])),
     bookByEn: new Map(themeEntries.filter((e) => e.kind === "themebook").map((e) => [e.name_original, e])),
-  }), [themeEntries]);
+    wayById: new Map(wayEntries.filter((e) => e.kind === "magic_way").map((e) => [e.id, e])),
+  }), [themeEntries, wayEntries]);
 
   const [query, setQuery] = useState("");
   const needle = norm(query.trim());
@@ -48,11 +53,12 @@ export function LitmTropesView({ systemId, entries, selectedId, onSelect }: {
   const trope = selectedId !== undefined ? tropes.find((t) => t.id === selectedId) : undefined;
 
   const kitRow = (k: KitRef) => {
-    const kit = kitByName.get(k.name_original);
+    const kit = kitByName.get(kitKey(k.name_original));
     const book = bookByEn.get(k.theme);
+    const way = kit?.parent_id != null ? wayById.get(kit.parent_id) : undefined;
     const might = isMight(book?.data?.might) ? book.data.might : isMight(kit?.data?.might) ? kit.data.might : book ? undefined : "variable";
-    const themeName = book?.name ?? (k.theme === "Witchcraft" || !book ? "путь магии" : k.theme);
-    const target = kit && themesSection ? `/systems/${systemId}?section=${themesSection.id}&entry=${kit.id}` : null;
+    const themeName = book?.name ?? way?.name ?? "путь магии";
+    const target = kit ? `/systems/${systemId}?section=${kit.section_id}&entry=${kit.id}` : null;
     return (
       <div key={k.name_original} className="lb-tkit">
         <span className="lb-name">
