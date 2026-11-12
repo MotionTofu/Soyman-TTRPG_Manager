@@ -6,8 +6,8 @@ import { norm } from "./litmBookText";
 export const EFFECT_NAMES: Record<string, string> = {
   ATTACK: "Атаковать", DISRUPT: "Помешать", INFLUENCE: "Повлиять", WEAKEN: "Подорвать",
   BESTOW: "Наделить", CREATE: "Создать", ENHANCE: "Усилить", RESTORE: "Восстановить",
-  ADVANCE: "Продвинуть", SETBACK: "Отбросить", LESSEN: "Смягчить", DISCOVER: "Открыть",
-  EXTRAFEAT: "Доп. подвиг", QUICK: "Быстрый", SIMPLE: "Простой", VARIES: "По-разному",
+  ADVANCE: "Продвинуть", SETBACK: "Отбросить", LESSEN: "Смягчить", DISCOVER: "Узнать",
+  EXTRAFEAT: "Дополнительный подвиг", QUICK: "Быстрый", SIMPLE: "Простой", VARIES: "По-разному",
 };
 /** Исход, а не эффект: значок другого вида. */
 export const OUTCOMES = new Set(["QUICK", "SIMPLE", "VARIES"]);

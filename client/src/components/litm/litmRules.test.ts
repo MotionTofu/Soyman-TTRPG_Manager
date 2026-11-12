@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import type { CompendiumEntry } from "../../types";
+import { norm } from "./litmBookText";
+import { isCard, isTerm, rulesOf, searchRules, snippet } from "./litmRules";
+
+const entry = (id: number, kind: string, name: string, parent: number | null, position: number, data: Record<string, unknown> = {}, description = "") =>
+  ({ id, kind, name, name_original: name, parent_id: parent, position, data, description }) as unknown as CompendiumEntry;
+
+const sec = (head: string, text: string) => ({ head, headEn: "", page: "A1", text, textEn: "" });
+
+const groups = rulesOf([
+  entry(2, "mechanic_group", "Статусы", null, 1),
+  entry(1, "mechanic_group", "Вызовы", null, 0),
+  entry(20, "mechanic_item", "Бой", 2, 0),
+  entry(21, "mechanic_item", "ранен", 20, 0),
+  entry(22, "mechanic_item", "Статусы", 2, 1, { page: "A166", steps: ["Прибавьте уровень"], related: [{ name: "Пределы", page: "A169" }], sections: [sec("Статусы", "Статус — *ранен-3*")] }),
+  entry(10, "mechanic_item", "Агрессор", 1, 0, { sections: [sec("Что это", "x"), sec("Угрозы", "целится"), sec("Последствия", "ранит")] }),
+  entry(11, "mechanic_consequence_item", "Заблокировано", 1, 1, { related: [{ name: "Последствия" }], sections: [sec("Что это", "путь закрыт")] }),
+  entry(12, "mechanic_item", "Увядание", 1, 2, { sections: [sec("Увядание", "(с. 75) Дорожка на теме")] }),
+]);
+
+describe("Справочник LitM", () => {
+  it("keeps book order, splits articles from the status catalogue", () => {
+    expect(groups.map((g) => g.entry.name)).toEqual(["Вызовы", "Статусы"]);
+    expect(groups[1].articles.map((a) => a.entry.id)).toEqual([22]);
+    expect(groups[1].catalog.map((c) => [c.entry.name, c.items.map((s) => s.name)])).toEqual([["Бой", ["ранен"]]]);
+    expect(groups[1].articles[0].related).toEqual([{ name: "Пределы", page: "A169" }]);
+  });
+
+  it("tells cards and glossary terms from rule articles", () => {
+    const [role, cons, term] = groups[0].articles;
+    expect([isCard(role), isCard(cons), isCard(term)]).toEqual([true, true, false]);
+    expect([isTerm(role), isTerm(term), isTerm(groups[1].articles[0])]).toEqual([false, true, false]);
+  });
+
+  it("searches names first, then the full translation", () => {
+    const all = groups.flatMap((g) => g.articles);
+    expect(searchRules(all, "агрес").map((h) => h.article.entry.id)).toEqual([10]);
+    expect(searchRules(all, "дорожка")[0]).toMatchObject({ phrase: "(с. 75) Дорожка на теме", rank: 2 });
+    expect(snippet("• Статус *ранен-3* мешает", norm("ранен"))).toBe("Статус ранен-3 мешает");
+  });
+});

@@ -366,7 +366,7 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
       <TrackGroup
         tracks={[
           { label: "Рост", value: value.improve, onChange: (n) => onChange({ ...value, improve: n }) },
-          { label: "Отречение", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
+          { label: "Увядание", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
           { label: "Веха", value: value.milestone, onChange: (n) => onChange({ ...value, milestone: n }) },
         ]}
       />
@@ -438,7 +438,7 @@ export const ThemeCardView = memo(function ThemeCardView({
       <TrackGroup
         tracks={[
           { label: "Рост", value: value.improve, onChange: (n) => onQuickUpdate({ ...value, improve: n }) },
-          { label: "Отречение", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
+          { label: "Увядание", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
           { label: "Веха", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
         ]}
       />

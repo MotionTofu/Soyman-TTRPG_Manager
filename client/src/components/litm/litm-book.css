@@ -389,3 +389,61 @@
   .lg-cols { grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
   .lg-art, .lg-intro { margin-left: 0; margin-right: 0; }
 }
+
+/* Справочник (доски Litm-Rules, Litm-Rules-Cards; «Подробно» — решение 5г Q1) */
+.lr-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: var(--sp-7); }
+.lr-solo { max-width: 78ch; }
+.lr-short { font-family: var(--lb-serif); font-size: var(--fs-h3); line-height: 1.5; margin: 0 0 var(--sp-5); padding: var(--sp-1) 0 var(--sp-1) var(--sp-6); border-left: 3px solid var(--lb-mist); max-width: 70ch; }
+.lr-short p { margin: 0 0 var(--sp-3); }
+.lr-steps { counter-reset: lr; list-style: none; margin: 0 0 var(--sp-5); padding: 0; }
+.lr-steps li { counter-increment: lr; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--sp-3); padding: var(--sp-3) 0; border-top: 1px solid var(--lb-line); font-family: var(--lb-serif); font-size: var(--fs-body); line-height: 1.5; }
+.lr-steps li::before { content: counter(lr); font-family: var(--lb-sc); font-weight: 700; font-size: var(--fs-h3); color: var(--lb-mist); text-align: center; }
+.lr-side { border-left: 3px solid var(--lb-mist); background: color-mix(in srgb, var(--lb-tab) 55%, var(--lb-sheet)); padding: var(--sp-3) var(--sp-5); margin: 0 0 var(--sp-4); font-family: var(--lb-serif); font-size: var(--fs-meta); line-height: 1.45; }
+.lr-side h5, .lr-detail__sec h5, .lr-catalog h5 { margin: 0 0 var(--sp-2); font-family: var(--lb-sc); font-weight: 700; font-size: var(--fs-data); letter-spacing: 0.04em; }
+.lr-side h5 small, .lr-detail__sec h5 small { margin-left: var(--sp-3); font-weight: 400; color: var(--lb-muted); letter-spacing: 0; }
+.lr-side p, .lr-side li { margin: 0 0 var(--sp-2); }
+.lr-related { display: flex; flex-direction: column; margin-top: var(--sp-4); }
+.lr-related .lb-lbl { margin-bottom: var(--sp-1); }
+.lr-related a, .lr-related > span { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--lb-line); font-family: var(--lb-serif); font-size: var(--fs-meta); color: inherit; text-decoration: none; }
+.lr-related > span { color: var(--lb-muted); }
+.lr-related small { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); white-space: nowrap; }
+.lr-related a:hover { background: var(--lb-tab); }
+.lr-catalog { margin-top: var(--sp-6); }
+.lr-catalog__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-4); }
+.lr-catalog__grid > div { border: var(--card-border-width) solid var(--lb-line); padding: var(--sp-3) var(--sp-4); }
+.lr-catalog__grid h5 { color: var(--lb-mist); font-size: var(--fs-label); letter-spacing: 0.06em; }
+.lr-catalog .lb-tags { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.lr-detail { margin-top: var(--sp-6); border-top: var(--edge-width) solid var(--lb-ink); padding-top: var(--sp-4); }
+.lr-detail > header { display: flex; gap: var(--sp-4); align-items: baseline; flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.lr-detail > header h4 { margin: 0; font-family: var(--lb-serif); font-weight: 700; font-size: var(--fs-h3); letter-spacing: 0; }
+.lr-detail > header h4 small { margin-left: var(--sp-3); font-family: "JetBrains Mono", monospace; font-weight: 400; font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lb-muted); }
+.lr-detail > header .d-btn { margin-left: auto; }
+.lr-detail > header .d-btn + .lb-back { margin-left: 0; }
+.lr-detail > header h4 + .lb-back { margin-left: auto; }
+.lr-detail.is-closed > header { margin-bottom: 0; }
+.lr-detail__sec { margin-bottom: var(--sp-5); }
+.lr-detail__sec h5 { font-size: var(--fs-body); }
+.lr-detail.is-en .lr-detail__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-7); }
+.lr-detail:not(.is-en) .lr-detail__cols { max-width: 78ch; }
+.lr-en { font-family: var(--lb-serif); font-size: var(--fs-meta); line-height: 1.5; color: var(--lb-ink2); border-left: 1px solid var(--lb-line); padding-left: var(--sp-5); }
+.lr-en p { margin: 0 0 var(--sp-3); }
+.lr-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-4); margin: var(--sp-5) 0; }
+.lr-card { display: flex; flex-direction: column; gap: var(--sp-2); border: var(--card-border-width) solid var(--lb-line); border-top: 3px solid var(--lb-mist); background: var(--lb-sheet); padding: var(--sp-3) var(--sp-4) var(--sp-4); color: inherit; text-decoration: none; }
+.lr-card:hover { background: var(--lb-tab); }
+.lr-card h4 { margin: 0; font-family: var(--lb-serif); font-weight: 700; font-size: var(--fs-h3); line-height: 1.15; letter-spacing: 0; }
+.lr-card h4 small { margin-left: var(--sp-3); font-weight: 400; font-style: italic; font-size: var(--fs-label); color: var(--lb-muted); }
+.lr-card p { margin: 0; font-family: var(--lb-serif); font-size: var(--fs-meta); line-height: 1.4; color: var(--lb-ink2); }
+.lr-card__k { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lb-muted); margin-top: var(--sp-1); }
+.lr-card__n { margin-top: auto; padding-top: var(--sp-2); border-top: 1px solid var(--lb-line); font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); }
+.lr-terms { margin: var(--sp-5) 0 0; display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 0 var(--sp-6); }
+.lr-terms dt, .lr-terms dd { margin: 0; padding: var(--sp-3) 0; border-top: 1px solid var(--lb-line); font-family: var(--lb-serif); line-height: 1.45; }
+.lr-terms dt { font-weight: 700; font-size: var(--fs-body); }
+.lr-terms dt a { color: inherit; text-decoration: none; }
+.lr-terms dt .lb-orig { display: block; margin: 0; }
+.lr-terms dd { font-size: var(--fs-meta); color: var(--lb-ink2); max-width: 78ch; }
+@container (max-width: 760px) {
+  .lr-cols, .lr-detail.is-en .lr-detail__cols { grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
+  .lr-en { border-left: 0; padding-left: 0; border-top: 1px solid var(--lb-line); padding-top: var(--sp-3); }
+  .lr-terms { grid-template-columns: minmax(0, 1fr); }
+  .lr-terms dd { border-top: 0; padding-top: 0; }
+}

@@ -7,7 +7,7 @@ import type { CompendiumEntry } from "../../types";
 import { NavIcon } from "../NavIcons";
 import { LitmRich, Tag, type GrimLinks } from "./LitmBook";
 import { grimoireHref, useGrimoire } from "./useGrimoire";
-import { plural, splitConsequence } from "./litmBookText";
+import { paras, plural, splitConsequence } from "./litmBookText";
 import {
   EFFECT_NAMES, OUTCOMES, articleEffects, articleOutcome, grimoireOf, searchGrimoire,
   type GrimArticle, type GrimChapter, type GrimIntro,
@@ -16,7 +16,7 @@ import {
 const NO_ENTRIES: CompendiumEntry[] = [];
 
 /** Абзацы книги: «• …» — пункты списка, строка целиком **так** — подзаголовок. */
-function Paras({ lines, grim }: { lines: string[]; grim: GrimLinks }) {
+export function Paras({ lines, grim }: { lines: string[]; grim: GrimLinks }) {
   const out: ReactNode[] = [];
   let list: string[] = [];
   const flush = (k: number) => {
@@ -41,8 +41,6 @@ function Cq({ text, grim }: { text: string; grim: GrimLinks }) {
   const named = /^\*\*[^*]+\*\*/.test(effect);
   return <><LitmRich text={lead} grim={grim} /> {named ? <LitmRich text={effect} grim={grim} /> : <span className="lb-eff"><LitmRich text={effect} grim={grim} /></span>}</>;
 }
-
-const paras = (text: string) => text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
 
 export function Effect({ k, tips }: { k: string; tips: Map<string, string> }) {
   return <span className={OUTCOMES.has(k) ? "lg-eff lg-eff--out" : "lg-eff"} title={tips.get(k)}>{EFFECT_NAMES[k] ?? k}</span>;
@@ -122,7 +120,7 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
             {a.success.map((s, i) => (
               <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} />{acts?.success(s.text)}</p>
             ))}
-            {a.feats.length > 0 && <><div className="lb-lbl lg-sub">Доп. подвиги</div><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
+            {a.feats.length > 0 && <><div className="lb-lbl lg-sub">Дополнительные подвиги</div><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
             {a.consequences.length > 0 && <><div className="lb-lbl lg-sub">Последствия</div><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} />{acts?.consequence(t)}</li>)}</ul></>}
           </div>
         </div>

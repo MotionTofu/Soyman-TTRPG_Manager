@@ -74,6 +74,8 @@ function RichRun({ text, grim }: { text: string; grim?: GrimLinks }) {
         ? <span key={at} className="lb-cq">{m[1]}</span>
         : rule ? <Link key={at} className="lb-ref lb-link" to={rule}>{m[1]}</Link>
         : <b key={at} className="lb-ref">{m[1]}</b>);
+    } else if (/^[A-Z][a-z]/.test(m[2])) {
+      out.push(<i key={at}>{m[2]}</i>); // *Legend in the Mist* — название, не тег
     } else if (grim) {
       const mark = grimMark(m[2], text.slice(Math.max(0, at - 24), at));
       out.push(mark.kind === "tag" ? <Tag key={at}>{mark.name}</Tag> : <Status key={at} name={mark.name} tier={mark.tier} />);

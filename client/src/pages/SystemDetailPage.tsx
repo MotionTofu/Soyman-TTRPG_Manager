@@ -18,6 +18,7 @@ import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityPage } from "../components/EntityPage";
 import { ContextMenu } from "../components/ContextMenu";
 import { LitmGrimoireToc } from "../components/litm/LitmGrimoireView";
+import { LitmRulesToc } from "../components/litm/LitmRulesView";
 import { LitmSectionSwitch } from "../components/litm/LitmSectionSwitch";
 import { litmCatalogOf } from "../components/litm/litmBookText";
 import { SectionBackground } from "../components/SectionBackground";
@@ -203,10 +204,14 @@ export function SystemDetailPage() {
     { label: "Импорт", onClick: () => importInputRef.current?.click() },
     { label: "Архивировать", danger: true, onClick: archiveSystem },
   ];
-  // Гримуар LitM раскрывает своё оглавление под пунктом раздела (доска Litm-Grimoire);
-  // в шторке телефона его нет — там оглавление в самом разделе.
-  const grimToc = (sec: SystemSection) => activeTab === String(sec.id) && searchParams.get("view") !== "list" && litmCatalogOf(system.code, sec) === "grimoire"
-    ? <LitmGrimoireToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} /> : null;
+  // Гримуар и Справочник LitM раскрывают своё оглавление под пунктом раздела (доски Litm-Grimoire,
+  // Litm-Rules); в шторке телефона его нет — там оглавление в самом разделе.
+  const grimToc = (sec: SystemSection) => {
+    if (activeTab !== String(sec.id) || searchParams.get("view") === "list") return null;
+    const catalog = litmCatalogOf(system.code, sec);
+    return catalog === "grimoire" ? <LitmGrimoireToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
+      : catalog === "rules" ? <LitmRulesToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} /> : null;
+  };
   const tocNav = (withGrim: boolean) => <nav className="sys-toc__items" aria-label="Разделы системы">
     <button type="button" className={activeTab === "overview" ? "active" : ""} aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectTab("overview")}>Обзор</button>
     <div className="sys-toc__label d-mono">Разделы · {sections.length}</div>

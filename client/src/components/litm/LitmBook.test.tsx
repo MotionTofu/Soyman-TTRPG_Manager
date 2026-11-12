@@ -31,7 +31,7 @@ describe("«сказочная книга» LitM", () => {
     expect(litmCatalogOf("litm", section("monster"))).toBe("challenges");
     expect(litmCatalogOf("litm", section("trope"))).toBe("tropes");
     expect(litmCatalogOf("litm", section("mechanics", "Могущество и Темы"))).toBe("themes");
-    expect(litmCatalogOf("litm", section("mechanics", "Справочник"))).toBeNull();
+    expect(litmCatalogOf("litm", section("mechanics", "Справочник"))).toBe("rules");
     expect(litmCatalogOf("phb", section("monster"))).toBeNull();
   });
 
