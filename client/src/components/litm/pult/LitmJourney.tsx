@@ -255,7 +255,7 @@ export function LitmVignetteNest({
           type="button"
           className="d-btn d-btn--sm"
           disabled={v.blocksPath}
-          title={v.blocksPath ? "Виньетка перекрывает путь — дальше только «Одолели»" : undefined}
+          title={v.blocksPath ? "Заблокировано — путь перекрыт, дальше только «Одолели»" : undefined}
           onClick={() => onPass("consequences")}
         >
           Пройдено с последствиями

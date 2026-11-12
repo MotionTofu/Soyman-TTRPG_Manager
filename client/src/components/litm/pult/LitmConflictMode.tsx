@@ -251,6 +251,11 @@ export function LitmConflictMode({
     const st = ribbon.stateOf(row);
     const settle = (next: LitmChallengeState) => (next.declaredThreat === threat ? { ...next, declaredThreat: null, declaredLead: "" } : next);
     if (a.kind === "named") {
+      // «Заблокировано» на виньетке перекрывает путь: шаг дальше только «Одолели» (Q7, вариант «а» 2026-11-13).
+      if (a.name === "Заблокировано" && st.vignette && !st.vignette.blocksPath) {
+        void ribbon.setChallenge(row, `${row.name}: Заблокировано — путь перекрыт`, settle({ ...st, vignette: { ...st.vignette, blocksPath: true } }));
+        return;
+      }
       noteLitm(sessionId, `${row.name}: ${a.name}`);
       if (st.declaredThreat === threat) void ribbon.setChallenge(row, `${row.name}: угроза разрешена`, settle(st));
       return;
