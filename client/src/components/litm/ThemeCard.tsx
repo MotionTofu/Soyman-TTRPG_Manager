@@ -2,12 +2,10 @@ import { memo, useState, useEffect } from "react";
 import type { LitMPower, LitMThemeCard } from "../../types";
 import { TagList } from "./TagList";
 import { TrackGroup } from "./TrackGroup";
-import { readResource } from "../../data/imperative";
-import type { CompendiumEntry } from "../../types";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
-import { mightLabel } from "./litmCompendium";
+import { findLitmSystemId, loadLitmThemeKits, mightLabel, type LitmThemeKit, type LitmTreasure } from "./litmCompendium";
 
 const POWER_CLASS: Record<LitMPower, string> = {
   "": "",
@@ -41,14 +39,14 @@ function ThemeKitPicker({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onPick: (kit: CompendiumEntry) => void;
-  themeTypeFilter?: string; // optional filter by themebook type (e.g. "Personality")
+  onPick: (kit: LitmThemeKit) => void;
+  themeTypeFilter?: string; // optional filter by themebook type (e.g. "Personality"); «Magic» — и наборы путей
 }): React.ReactElement | null {
   // Хуки идут до любого возврата: `if (!isOpen) return null` стоял выше них,
   // и при открытии модалки число хуков менялось между рендерами. Закрытая
   // модалка теперь тоже проходит через хуки, но ничего не грузит — за это
   // отвечает ранний выход внутри эффекта.
-  const [kits, setKits] = useState<CompendiumEntry[]>([]);
+  const [kits, setKits] = useState<LitmThemeKit[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -56,17 +54,10 @@ function ThemeKitPicker({
     if (!isOpen) return;
     async function load() {
       try {
-        const systems = await readResource<{ id: number; name: string }[]>("/systems");
-        const litm = systems.find(s => s.name === "Legend in the Mist");
-        if (!litm) return;
-        const sections = await readResource<{ id: number; name: string; kind: string }[]>(`/systems/${litm.id}/sections`);
-        const sec = sections.find(s => s.name === "Могущество и Темы");
-        if (!sec) return;
-        const entries = await readResource<CompendiumEntry[]>(`/systems/${litm.id}/entries?section_id=${sec.id}`);
-        const filtered = entries
-          .filter(e => e.kind === "theme_kit")
-          .filter(e => !themeTypeFilter || e.parent_id === getThemebookId(entries, themeTypeFilter));
-        setKits(filtered);
+        const systemId = await findLitmSystemId();
+        if (!systemId) return;
+        const all = await loadLitmThemeKits(systemId);
+        setKits(all.filter(k => !themeTypeFilter || k.bookEn === themeTypeFilter || k.themebookEn === themeTypeFilter));
       } catch (err) {
         console.error(err);
       } finally {
@@ -76,14 +67,9 @@ function ThemeKitPicker({
     load();
   }, [themeTypeFilter, isOpen]);
 
-  function getThemebookId(entries: CompendiumEntry[], themebookEn: string): number | null {
-    const tb = entries.find(e => e.kind === "themebook" && e.name.includes(`[${themebookEn}]`));
-    return tb?.id ?? null;
-  }
-
   const filtered = kits.filter(k => 
     k.name.toLowerCase().includes(search.toLowerCase()) ||
-    (k.data.powerTags as string[] | undefined)?.some(t => t.toLowerCase().includes(search.toLowerCase()))
+    k.data.powerTags?.some(t => t.toLowerCase().includes(search.toLowerCase()))
   );
 
   if (!isOpen) return null;
@@ -116,20 +102,20 @@ function ThemeKitPicker({
                 }}
               >
                 <div className="litm-theme-subtitle" style={{ fontSize: "var(--fs-meta)", marginBottom: 6 }}>
-                  {kit.name.split(" [")[1]?.replace("]", "") ?? ""}
+                  {kit.themebookEn}
                 </div>
                 <div style={{ fontWeight: "bold", fontSize: "var(--fs-meta)", marginBottom: 8 }}>
-                  {kit.name.split(" [")[0]}
+                  {kit.name}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, fontSize: "var(--fs-meta)" }}>
-                  {(kit.data.powerTags as string[] | undefined)?.slice(0, 3).map(t => (
+                  {kit.data.powerTags?.slice(0, 3).map(t => (
                     <span key={t} className="tg tg-pow" style={{ fontSize: "var(--fs-micro)" }}>{t}</span>
                   ))}
-                  {(kit.data.weaknessTags as string[] | undefined)?.slice(0, 2).map(t => (
+                  {kit.data.weaknessTags?.slice(0, 2).map(t => (
                     <span key={t} className="tg tg-weak" style={{ fontSize: "var(--fs-micro)" }}>{t}</span>
                   ))}
                 </div>
-                {(kit.data.quest as string | undefined) && (
+                {kit.data.quest && (
                   <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 6 }}>
                     {(() => {
                       const q = String(kit.data.quest);
@@ -219,14 +205,15 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
   const [showTreasurePicker, setShowTreasurePicker] = useState(false);
   const [showMagicWayPicker, setShowMagicWayPicker] = useState(false);
 
-  function handleKitPick(kit: CompendiumEntry) {
-    const pt = (kit.data.powerTags as string[] | undefined) ?? [];
-    const wt = (kit.data.weaknessTags as string[] | undefined) ?? [];
-    const q = (kit.data.quest as string | undefined) ?? "";
-    const might = (kit.data.might as string | undefined) ?? "";
-    const name = kit.name.split(" [")[0];
-    const themeType = kit.name.split(" [")[1]?.replace("]", "") ?? "";
-    
+  function handleKitPick(kit: LitmThemeKit) {
+    const pt = kit.data.powerTags ?? [];
+    const wt = kit.data.weaknessTags ?? [];
+    const q = kit.data.quest ?? "";
+    const might = kit.data.might ?? "";
+    const name = kit.name;
+    // у набора пути магии тема героя — «Магия» (доска Litm-Way)
+    const themeType = kit.bookEn;
+
     onChange({
       ...value,
       name,
@@ -239,14 +226,12 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
     setShowKitPicker(false);
   }
 
-  function handleTreasurePick(treasure: any) {
-    const tags = (treasure.data?.tags ?? treasure.tags ?? []) as string[];
-    const name = treasure.name;
-    
+  function handleTreasurePick(treasure: LitmTreasure) {
     onChange({
       ...value,
-      name,
-      powerTags: tags.length ? tags : value.powerTags,
+      name: treasure.name,
+      powerTags: treasure.powerTags.length ? treasure.powerTags : value.powerTags,
+      weaknessTags: treasure.weakness ? [treasure.weakness] : value.weaknessTags,
     });
     setShowTreasurePicker(false);
   }
@@ -366,7 +351,7 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
       <TrackGroup
         tracks={[
           { label: "Рост", value: value.improve, onChange: (n) => onChange({ ...value, improve: n }) },
-          { label: "Отречение", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
+          { label: "Увядание", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
           { label: "Веха", value: value.milestone, onChange: (n) => onChange({ ...value, milestone: n }) },
         ]}
       />
@@ -438,7 +423,7 @@ export const ThemeCardView = memo(function ThemeCardView({
       <TrackGroup
         tracks={[
           { label: "Рост", value: value.improve, onChange: (n) => onQuickUpdate({ ...value, improve: n }) },
-          { label: "Отречение", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
+          { label: "Увядание", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
           { label: "Веха", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
         ]}
       />

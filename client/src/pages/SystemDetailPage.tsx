@@ -1,5 +1,5 @@
 import "./system-d.css";
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
@@ -17,7 +17,11 @@ import type { Campaign, CompendiumEntry, System, SystemGroup, SystemSection } fr
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityPage } from "../components/EntityPage";
 import { ContextMenu } from "../components/ContextMenu";
+import { LitmGrimoireToc } from "../components/litm/LitmGrimoireView";
+import { LitmRulesToc } from "../components/litm/LitmRulesView";
+import { LitmWaysToc } from "../components/litm/LitmWaysView";
 import { LitmSectionSwitch } from "../components/litm/LitmSectionSwitch";
+import { litmCatalogOf } from "../components/litm/litmBookText";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
@@ -201,11 +205,21 @@ export function SystemDetailPage() {
     { label: "Импорт", onClick: () => importInputRef.current?.click() },
     { label: "Архивировать", danger: true, onClick: archiveSystem },
   ];
-  const toc = <nav className="sys-toc__items" aria-label="Разделы системы">
+  // Гримуар, Справочник и Пути магии LitM раскрывают своё оглавление под пунктом раздела (доски Litm-Grimoire,
+  // Litm-Rules); в шторке телефона его нет — там оглавление в самом разделе.
+  const grimToc = (sec: SystemSection) => {
+    if (activeTab !== String(sec.id) || searchParams.get("view") === "list") return null;
+    const catalog = litmCatalogOf(system.code, sec);
+    return catalog === "grimoire" ? <LitmGrimoireToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
+      : catalog === "rules" ? <LitmRulesToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
+      : catalog === "ways" ? <LitmWaysToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} /> : null;
+  };
+  const tocNav = (withGrim: boolean) => <nav className="sys-toc__items" aria-label="Разделы системы">
     <button type="button" className={activeTab === "overview" ? "active" : ""} aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectTab("overview")}>Обзор</button>
     <div className="sys-toc__label d-mono">Разделы · {sections.length}</div>
-    {sections.map((sec) => <button key={sec.id} type="button" className={activeTab === String(sec.id) ? "active" : ""} aria-current={activeTab === String(sec.id) ? "page" : undefined} onClick={() => selectTab(String(sec.id))}><span>{sec.name}</span>{" "}<b>{sectionCounts[sec.id] ?? "…"}</b></button>)}
+    {sections.map((sec) => <Fragment key={sec.id}><button type="button" className={activeTab === String(sec.id) ? "active" : ""} aria-current={activeTab === String(sec.id) ? "page" : undefined} onClick={() => selectTab(String(sec.id))}><span>{sec.name}</span>{" "}<b>{sectionCounts[sec.id] ?? "…"}</b></button>{withGrim && grimToc(sec)}</Fragment>)}
   </nav>;
+  const toc = tocNav(false);
 
   return (
     <EntityPage
@@ -216,7 +230,7 @@ export function SystemDetailPage() {
       // вовсе: попасть на обзор можно было только щелчком по названию
       // системы — приём, о котором неоткуда узнать.
       systemNavigation={<>
-        <aside className="sys-toc"><div className="sys-toc__head"><div className="sys-toc__name">{system.name}</div><div className="row">{system.code && <span className="sys-stamp">{system.code}</span>}<button type="button" className="sys-toc__more" aria-label="Ещё действия" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }); }}>⋯</button></div></div>{toc}</aside>
+        <aside className="sys-toc"><div className="sys-toc__head"><div className="sys-toc__name">{system.name}</div><div className="row">{system.code && <span className="sys-stamp">{system.code}</span>}<button type="button" className="sys-toc__more" aria-label="Ещё действия" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }); }}>⋯</button></div></div>{tocNav(true)}</aside>
         <div className="sys-toc-mobile"><button type="button" className="d-btn" aria-haspopup="dialog" onClick={() => setTocOpen(true)}><span>{currentSection?.name ?? "Обзор"}{currentSection ? ` ${sectionCounts[currentSection.id] ?? "…"}` : ""}</span><span>Разделы ▾</span></button></div>
       </>}
       sheet
