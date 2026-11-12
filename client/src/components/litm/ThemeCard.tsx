@@ -5,7 +5,7 @@ import { TrackGroup } from "./TrackGroup";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
-import { findLitmSystemId, loadLitmThemeKits, mightLabel, type LitmThemeKit } from "./litmCompendium";
+import { findLitmSystemId, loadLitmThemeKits, mightLabel, type LitmThemeKit, type LitmTreasure } from "./litmCompendium";
 
 const POWER_CLASS: Record<LitMPower, string> = {
   "": "",
@@ -226,14 +226,12 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
     setShowKitPicker(false);
   }
 
-  function handleTreasurePick(treasure: any) {
-    const tags = (treasure.data?.tags ?? treasure.tags ?? []) as string[];
-    const name = treasure.name;
-    
+  function handleTreasurePick(treasure: LitmTreasure) {
     onChange({
       ...value,
-      name,
-      powerTags: tags.length ? tags : value.powerTags,
+      name: treasure.name,
+      powerTags: treasure.powerTags.length ? treasure.powerTags : value.powerTags,
+      weaknessTags: treasure.weakness ? [treasure.weakness] : value.weaknessTags,
     });
     setShowTreasurePicker(false);
   }

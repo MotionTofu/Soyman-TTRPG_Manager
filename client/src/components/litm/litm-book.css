@@ -517,3 +517,26 @@
   .ls-row { grid-template-columns: minmax(0, 1fr); }
   .ls-row__name small, .ls-row__name i { display: inline; margin: 0 0 0 var(--sp-3); }
 }
+
+/* Сокровищница (доска Litm-Treasury) */
+.lt-how { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--sp-5); margin: 0 0 var(--sp-6); }
+.lt-how > div { border-left: 3px solid var(--lb-mist); padding: var(--sp-1) 0 var(--sp-1) var(--sp-5); }
+.lt-how b { font-family: var(--lb-sc); font-size: var(--fs-data); letter-spacing: 0.04em; }
+.lt-how p { margin: var(--sp-1) 0 0; font-family: var(--lb-serif); font-size: var(--fs-data); line-height: 1.4; color: var(--lb-ink2); }
+.lt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-4); }
+.lt-card { --lt-k: var(--lb-adventure); position: relative; display: flex; flex-direction: column; gap: var(--sp-3); border: var(--card-border-width) solid var(--lb-line); border-top: 3px solid var(--lt-k); background: var(--lb-sheet); padding: var(--sp-4) var(--sp-5); }
+.lt-card--inf { --lt-k: var(--lb-variable); }
+.lt-card.is-on { box-shadow: 0 0 0 2px var(--lb-edge); }
+.lt-card__ty { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); letter-spacing: 0.08em; text-transform: uppercase; color: var(--lt-k); }
+.lt-card h4 { margin: 0; font-family: var(--lb-serif); font-weight: 700; font-size: var(--fs-h3); line-height: 1.15; letter-spacing: 0; }
+.lt-card h4 small { display: block; margin-top: var(--sp-1); font-weight: 400; font-style: italic; font-size: var(--fs-label); color: var(--lb-muted); }
+.lt-card > p { margin: 0; font-family: var(--lb-serif); font-size: var(--fs-meta); line-height: 1.4; color: var(--lb-ink2); }
+.lt-card .lb-tg, .lt-card .lb-tw { white-space: normal; }
+.lt-card__acts { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-3); border-top: 1px solid var(--lb-line); }
+.lt-give { position: absolute; left: -1px; right: -1px; top: calc(100% - var(--sp-2)); z-index: 4; min-width: 240px; background: var(--lb-sheet); border: var(--edge-width) solid var(--lb-edge); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28); padding: var(--sp-3) var(--sp-4); }
+.lt-camp + .lt-camp { margin-top: var(--sp-3); }
+.lt-camp .lb-lbl { margin: 0 0 var(--sp-2); }
+.lt-hero { display: flex; justify-content: space-between; gap: var(--sp-4); align-items: baseline; width: 100%; padding: var(--sp-2) var(--sp-1); border: 0; border-bottom: 1px solid var(--lb-line); background: none; color: var(--lb-ink); font-family: var(--lb-serif); font-size: var(--fs-data); text-align: left; cursor: pointer; }
+.lt-hero:hover:not(:disabled) { background: var(--lb-tab); }
+.lt-hero:disabled { cursor: default; color: var(--lb-muted); }
+.lt-hero small { font-family: "JetBrains Mono", monospace; font-size: var(--fs-micro); color: var(--lb-muted); white-space: nowrap; }

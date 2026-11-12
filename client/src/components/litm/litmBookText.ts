@@ -39,7 +39,7 @@ export function norm(s: string): string {
   return s.toLocaleLowerCase("ru").replace(/ё/g, "е");
 }
 
-export type LitmCatalog = "challenges" | "themes" | "tropes" | "grimoire" | "rules" | "ways" | "store";
+export type LitmCatalog = "challenges" | "themes" | "tropes" | "grimoire" | "rules" | "ways" | "store" | "treasury";
 
 /** Какой каталог «сказочной книги» у раздела LitM — или никакого. */
 export function litmCatalogOf(systemCode: string | null | undefined, section: SystemSection): LitmCatalog | null {
@@ -48,6 +48,7 @@ export function litmCatalogOf(systemCode: string | null | undefined, section: Sy
   if (section.kind === "trope") return "tropes";
   if (section.kind === "magic_way") return "ways";
   if (section.kind === "mechanic_backpack_category") return "store";
+  if (section.kind === "treasure") return "treasury";
   if (section.name === "Могущество и Темы" || section.name === "Темы") return "themes";
   if (section.name === "Гримуар действий") return "grimoire";
   if (section.name === "Справочник") return "rules";

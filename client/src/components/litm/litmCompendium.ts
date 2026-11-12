@@ -290,6 +290,8 @@ export interface LitmTreasure {
   id: number;
   name: string;
   tags: string[];
+  powerTags: string[];
+  weakness: string;
 }
 
 export async function loadLitmTreasures(systemId: number): Promise<LitmTreasure[]> {
@@ -303,5 +305,7 @@ export async function loadLitmTreasures(systemId: number): Promise<LitmTreasure[
       id: e.id,
       name: e.name,
       tags: ((e.data.tags as string[]) ?? []),
+      powerTags: Array.isArray(e.data.powerTags) ? (e.data.powerTags as string[]) : ((e.data.tags as string[]) ?? []),
+      weakness: typeof e.data.weakness === "string" ? e.data.weakness : "",
     }));
 }

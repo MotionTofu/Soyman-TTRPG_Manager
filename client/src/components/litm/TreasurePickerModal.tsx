@@ -56,12 +56,13 @@ export function TreasurePickerModal({ isOpen, onClose, onPick }: Props) {
                 {t.name}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
-                {t.tags.map((tag, i) => (
+                {t.powerTags.map((tag, i) => (
                   <span key={i} className="tg tg-story" style={{ fontSize: "var(--fs-meta)" }}>{tag}</span>
                 ))}
+                {t.weakness && <span style={{ fontSize: "var(--fs-meta)", fontStyle: "italic", color: "var(--ink-soft)" }}>слабость: {t.weakness}</span>}
               </div>
               <div style={{ fontSize: "var(--fs-meta)", color: "var(--ink-soft)" }}>
-                Теги станут ключами силы темы
+                Имя, теги силы и слабость станут темой
               </div>
             </button>
           ))}
