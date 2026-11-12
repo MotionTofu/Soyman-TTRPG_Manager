@@ -643,6 +643,8 @@ export interface LitMThemeCard {
   /** Вычеркнутые теги силы (и имя темы как её главный тег) — по тексту тега.
    *  Возвращаются на Привале (Q10–Q11 пульта LitM, Backlog Д33). */
   scratchedTags?: string[];
+  /** Размышление в передышке (A181): улучшение положено, игрок выбирает его на листе. */
+  improvementPending?: boolean;
 }
 
 export interface LitMCharacterData {
@@ -664,6 +666,14 @@ export interface LitMCharacterData {
   fellowshipTheme: LitMThemeCard;
   /** Статусы героя — карточки учёта 1–6 (Q5): пишет пульт, правит игрок. */
   statuses?: LitmStatus[];
+  /** Теги отношений Содружества с другими героями (A181) — по одному на героя. */
+  relationships?: LitMRelationship[];
+}
+
+export interface LitMRelationship {
+  characterId: number;
+  name: string;
+  tag: string;
 }
 
 export interface LitMChallengeData {

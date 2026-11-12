@@ -10,6 +10,10 @@ import { DETAIL_ROUTES } from "../entityTypes";
 import type { SearchResult, SessionUnionRow, SettingBeing } from "../types";
 import { ToInitiativeButton } from "./ToInitiativeButton";
 import { Modal } from "./Modal";
+import { readEntity } from "../data/imperative";
+import { hasVignettes } from "./litm/litmJourneys";
+import { LitmObstacleVignettes } from "./litm/pult/LitmJourney";
+import type { CompendiumEntry } from "../types";
 
 // "Препятствия" — broader than the old "Противники" (enemies-only, beings-only)
 // block: any existing entity can represent an obstacle (a creature, an NPC,
@@ -18,7 +22,8 @@ import { Modal } from "./Modal";
 // isn't orphaned by the rename.
 // compendium_entry is accepted too, but only for kind "monster" (checked in
 // handleDrop) — a system Бестиарий template dropped straight in, without
-// needing a per-setting being row.
+// needing a per-setting being row. Ещё — путешествие LitM или общие дорожные
+// виньетки (пульт v2, Q5): запись ложится целиком и разворачивается в виньетки.
 const ACCEPT_TYPES = ["being", "character", "location", "artifact", "community", "compendium_entry"];
 
 interface GenericLink {
@@ -41,6 +46,8 @@ interface Entry {
   /** Пришёл объединением по сценам сессии, а не связью. */
   fromScenes?: string[];
   inScene?: boolean;
+  /** Запись книги с виньетками — строка разворачивается, «На ленту» у виньеток. */
+  vignettes?: boolean;
 }
 
 interface Props {
@@ -98,6 +105,10 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
               origin: l.origin,
               qty: l.qty ?? null,
             };
+          }
+          if (other.type === "compendium_entry") {
+            const entry = await readEntity<CompendiumEntry>("compendium_entry", other.id);
+            return { linkId: l.id, type: other.type, id: other.id, label: entry.name, origin: l.origin, qty: l.qty ?? null, vignettes: hasVignettes(entry) };
           }
           const label = await resolveEntityLabel(other.type, other.id);
           return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null };
@@ -189,7 +200,10 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       return;
     }
     if (!ACCEPT_TYPES.includes(result.type)) return;
-    if (result.type === "compendium_entry" && result.kind !== "monster") return;
+    if (result.type === "compendium_entry" && result.kind !== "monster") {
+      const entry = await readEntity<CompendiumEntry>("compendium_entry", result.id).catch(() => null);
+      if (!entry || !hasVignettes(entry)) return;
+    }
     await addLink(result);
   }
 
@@ -226,8 +240,8 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
       {entries.length > 0 && filteredEntries.length === 0 && <span className="muted">Ничего не найдено по фильтру.</span>}
       <div className="stack" style={{ gap: 0 }}>
         {filteredEntries.map((entry) => (
+          <div key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}>
           <div
-            key={`${entry.type}:${entry.id}:${entry.linkId ?? "union"}`}
             className="resource-row row"
             data-type={entry.type}
             data-initial={entry.label.trim().charAt(0).toUpperCase()}
@@ -282,7 +296,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
                 </span>
               )}
             </div>
-            {toInitiative && (
+            {toInitiative && !entry.vignettes && (
               <ToInitiativeButton item={{ type: entry.type, id: entry.id, title: entry.label } as SearchResult} />
             )}
             {/* Строку объединения удалить нельзя: она не связь сессии, а состав
@@ -292,6 +306,8 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
                 ✕
               </button>
             )}
+          </div>
+          {entry.vignettes && !pills && <LitmObstacleVignettes sessionId={sessionId} entryId={entry.id} />}
           </div>
         ))}
       </div>

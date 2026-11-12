@@ -1,5 +1,6 @@
 import { readResource } from "../../data/imperative";
 import type { CompendiumEntry, LitMPower, LitMThemeCard } from "../../types";
+import { isLitmThemesSection } from "./litmBookText";
 
 // Ступени Могущества по-русски — одни на карточку темы, визард и компендиум.
 // Раньше было три словаря: карточка писала по-английски, визард «Переменное»,
@@ -28,7 +29,7 @@ export async function findLitmSystemId(): Promise<number | null> {
 // below resolve that section by name instead of assuming a fixed section kind.
 async function loadMightSectionEntries(systemId: number): Promise<CompendiumEntry[]> {
   const sections = await readResource<{ id: number; name: string; kind: string }[]>(`/systems/${systemId}/sections`);
-  const sec = sections.find((s) => s.name === "Могущество и Темы");
+  const sec = sections.find((s) => isLitmThemesSection(s.name));
   if (!sec) return [];
   return readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
 }
@@ -78,7 +79,7 @@ export async function loadLitmRefItems(systemId: number): Promise<LitmRefItem[]>
 // directly; other groups resolve by name as before.
 export async function loadLitmRefItemsByGroup(systemId: number, groupName: string): Promise<LitmRefItem[]> {
   const entries = await loadMightSectionEntries(systemId);
-  if (groupName === "Могущество и Темы") {
+  if (isLitmThemesSection(groupName)) {
     return entries
       .filter((e) => e.kind === "mechanic_item" && e.parent_id === null)
       .map((e) => ({

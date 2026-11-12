@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  campScene,
   challengeStateFromProfile,
   giveToLimit,
+  journeyArrived,
   limitReached,
+  passStep,
   overcomeBy,
+  startCamp,
   passSpotlight,
   reduceLimit,
   turnedLimits,
   type LitmChallengeState,
   type LitmSceneState,
+  type LitmStepOutcome,
 } from "@shared/litm/conflict";
 import { giveStatus, heroCondition, parseStatusTag, reduceStatus, sameStatus, statusTier, type LitmStatus } from "@shared/litm/status";
 import { useResource } from "../../../data/hooks";
@@ -26,7 +29,7 @@ import { LitmStatusCards } from "../LitmStatusCards";
 import { LitmChallengeProfile } from "../LitmChallengeProfile";
 import { LitmRich, MightMark, Rating, Status } from "../LitmBook";
 import { challengeProfile, mightOf, type LitmChallengeProfileData } from "../litmChallenge";
-import { patchLitmSheet, restoreScratched, toggleScratch } from "./litmSheetWrite";
+import { patchLitmSheet, toggleScratch, useLitmSheet } from "./litmSheetWrite";
 import { noteLitm, useLitmBattle } from "./litmLog";
 import { lastLiveTurn, undoableIds, type BattleLogLine } from "../../../combat/battleLog";
 import { limitFor, type ConsequenceAction } from "./consequence";
@@ -37,6 +40,9 @@ import { LITM_RIBBON_TARGET, useLitmRibbon, type LitmRibbon, type LitmSource } f
 import { useUnloadTarget } from "../../../unloadTargets";
 import { LitmAddPanel } from "./LitmAddPanel";
 import { LitmGrimoireDrawer } from "./LitmGrimoireDrawer";
+import { LitmJourneyBar, LitmVignetteNest } from "./LitmJourney";
+import { LitmCampBar } from "./LitmCamp";
+import { LitmRewardsDrawer } from "./LitmRewardsDrawer";
 import "../litm-book.css";
 import "./litm-pult.css";
 
@@ -125,6 +131,8 @@ export function LitmConflictMode({
   const [adding, setAdding] = useState(false);
   const [grimOpen, setGrimOpen] = useState(false);
   const closeGrim = useCallback(() => setGrimOpen(false), []);
+  const [rewardsOpen, setRewardsOpen] = useState(false);
+  const closeRewards = useCallback(() => setRewardsOpen(false), []);
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, prompt] = usePrompt();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[]; title?: string } | null>(null);
@@ -335,10 +343,9 @@ export function LitmConflictMode({
   // Сцена сменилась, а на полосе теги прежней (Q11) — спросить.
   const stale = current && scene.sceneId != null && scene.sceneId !== current.id && (scene.tags.length > 0 || scene.statuses.length > 0);
 
-  async function camp() {
-    if (!(await confirm({ message: "Привал: снять сюжетные теги сцены и вернуть героям вычеркнутые теги силы?", confirmLabel: "Привал" }))) return;
-    await ribbon.setScene("Привал", campScene(scene));
-    for (const c of characters) await sheet(c.id, `${c.character_name}: вычеркнутое не вернулось`, restoreScratched);
+  /** «Привал» (Q8, Q13): открыть пошаговую полосу; сама не запускается. */
+  function camp() {
+    if (!scene.camp) void ribbon.setScene("Привал", { ...scene, camp: startCamp() });
   }
 
   async function endConflict() {
@@ -350,6 +357,29 @@ export function LitmConflictMode({
     });
     if (ok) await fight.end();
   }
+
+  /** Правка полосы путешествия; последний шаг — строка «окончено» в лог (Q13). */
+  async function setJourney(label: string, next: LitmSceneState["journey"]) {
+    const ok = await ribbon.setScene(label, { ...scene, journey: next });
+    if (ok && next && journeyArrived(next) && !(scene.journey && journeyArrived(scene.journey))) {
+      noteLitm(sessionId, `Путешествие «${next.name}» окончено: ${next.passed.map((p) => p.name).join(", ")}`);
+    }
+  }
+
+  /** «Одолели» / «Пройдено с последствиями» (Q7): шаг идущего путешествия, гнездо уходит с ленты. */
+  async function passVignette(row: InitiativeEntry, outcome: Exclude<LitmStepOutcome, "skip">) {
+    const said = outcome === "overcome" ? "одолели" : "пройдено с последствиями";
+    const j = scene.journey;
+    if (j && !journeyArrived(j)) await setJourney(`«${j.name}», шаг ${j.passed.length + 1}: ${row.name} — ${said}`, passStep(j, row.name, outcome));
+    await ribbon.remove(row, `Виньетка «${row.name}»: ${said}`);
+  }
+  const journey = scene.journey;
+  const currentVignette = journey
+    ? (ribbon.challenges.find((r) => {
+        const v = ribbon.stateOf(r).vignette;
+        return v && (v.journeyId === journey.entryId || v.journeyId == null);
+      })?.name ?? null)
+    : null;
 
   async function addOwn() {
     const name = (await prompt({ message: "Свой участник сцены: союзник, вещь, ворота…", defaultValue: "", confirmLabel: "На ленту" }))?.trim();
@@ -440,8 +470,20 @@ export function LitmConflictMode({
         sceneName={current?.name ?? null}
         onChange={(label, s) => void ribbon.setScene(label, { ...s, sceneId: s.sceneId ?? current?.id ?? null })}
         onMenu={setMenu}
-        onCamp={() => void camp()}
+        onCamp={camp}
+        onRewards={() => setRewardsOpen((o) => !o)}
+        rewardsOpen={rewardsOpen}
       />
+
+      {journey && (
+        <LitmJourneyBar
+          journey={journey}
+          current={currentVignette}
+          onChange={(label, next) => void setJourney(label, next)}
+          onCamp={camp}
+          onMenu={(e, items) => setMenu({ x: e.clientX, y: e.clientY, title: journey.name, items })}
+        />
+      )}
 
       <div className="lp-heroes">
         {characters.length === 0 && <span className="lb-empty">За столом никого — герои берутся из партии кампании.</span>}
@@ -459,6 +501,17 @@ export function LitmConflictMode({
           />
         ))}
       </div>
+
+      {scene.camp && (
+        <LitmCampBar
+          camp={scene.camp}
+          heroes={characters}
+          sceneTags={scene.tags}
+          onChange={(label, next, tags) => void ribbon.setScene(label, { ...scene, camp: next, tags: tags ?? scene.tags })}
+          sheet={sheet}
+          note={(text) => noteLitm(sessionId, text)}
+        />
+      )}
 
       {declared.length > 0 && (
         <div className="lp-threats" role="status">
@@ -497,9 +550,22 @@ export function LitmConflictMode({
         }}
       >
         <div className="lp-track">
-          {ribbon.challenges.map((row) => (
-            <ChallengeNest key={row.id} row={row} ctx={ctx} />
-          ))}
+          {ribbon.challenges.map((row) => {
+            const v = ribbon.stateOf(row).vignette;
+            return v ? (
+              <LitmVignetteNest
+                key={row.id}
+                row={row}
+                v={v}
+                journey={journey}
+                onAction={(a, e, edit) => runAction(row, a, e, 0, edit)}
+                onPass={(outcome) => void passVignette(row, outcome)}
+                onMenu={(e) => setMenu({ x: e.clientX, y: e.clientY, title: row.name, items: nestItems(row, ctx) })}
+              />
+            ) : (
+              <ChallengeNest key={row.id} row={row} ctx={ctx} />
+            );
+          })}
           <button type="button" className="lp-nest lp-nest--new" onClick={() => setAdding(true)}>
             + Вызов
             <small>или ПКМ по пустому</small>
@@ -527,6 +593,18 @@ export function LitmConflictMode({
           onScratch={(e) => void scratchMenu(e.clientX, e.clientY)}
           onPick={(e, items) => setMenu({ x: e.clientX, y: e.clientY, items })}
           onClose={closeGrim}
+        />
+      )}
+      {rewardsOpen && systemId != null && (
+        <LitmRewardsDrawer
+          sessionId={sessionId}
+          systemId={systemId}
+          heroes={characters}
+          union={union}
+          sheet={sheet}
+          onPay={(ids, tier) => void applyGive({ keys: ids.map((id) => `hero:${id}`), name: "при-деньгах", tier, mode: "give", limit: null })}
+          onPick={(e, items) => setMenu({ x: e.clientX, y: e.clientY, title: "Дать герою", items })}
+          onClose={closeRewards}
         />
       )}
       {give && <LitmGiveStatus targets={giveTargets} initial={give} onClose={() => setGive(null)} onApply={applyGive} />}
@@ -606,11 +684,12 @@ type Confirm = ReturnType<typeof useConfirm>[1];
 type OpenMenu = (m: { x: number; y: number; items: ContextMenuItem[]; title?: string }) => void;
 
 function nestItems(row: InitiativeEntry, { ribbon, confirm, openGive, addonMenu }: NestCtx): ContextMenuItem[] {
-  const items: ContextMenuItem[] = [{ label: "Дать статус…", onClick: () => openGive({ keys: [`row:${row.id}`] }) }, ...addonMenu(row)];
+  const vignette = ribbon.stateOf(row).vignette != null;
+  const items: ContextMenuItem[] = vignette ? [] : [{ label: "Дать статус…", onClick: () => openGive({ keys: [`row:${row.id}`] }) }, ...addonMenu(row)];
   if (row.entity_type === "compendium_entry" && row.entity_id != null) {
-    items.push({ label: "Открыть профиль", onClick: () => window.open(`/compendium/${row.entity_id}`, "_blank") });
+    items.push({ label: vignette ? "Открыть путешествие" : "Открыть профиль", onClick: () => window.open(`/compendium/${row.entity_id}`, "_blank") });
   }
-  if ((row.entity_type === "compendium_entry" || row.entity_type === "being") && row.entity_id != null) {
+  if (!vignette && (row.entity_type === "compendium_entry" || row.entity_type === "being") && row.entity_id != null) {
     const base = row.name.replace(/ \d+$/, "");
     items.push({ label: "Ещё копия", onClick: () => void ribbon.add({ type: row.entity_type as "compendium_entry" | "being", id: row.entity_id!, name: base }) });
   }
@@ -625,19 +704,23 @@ function nestItems(row: InitiativeEntry, { ribbon, confirm, openGive, addonMenu 
   return items;
 }
 
-/** Полоса «Сцена» (Q11): общие сюжетные теги, статусы сцены, пределы-счётчики, «Привал». */
+/** Полоса «Сцена» (Q11): общие сюжетные теги, статусы сцены, пределы-счётчики, «Награда →», «Привал». */
 function SceneStrip({
   scene,
   sceneName,
   onChange,
   onMenu,
   onCamp,
+  onRewards,
+  rewardsOpen,
 }: {
   scene: LitmSceneState;
   sceneName: string | null;
   onChange: (label: string, s: LitmSceneState) => void;
   onMenu: OpenMenu;
   onCamp: () => void;
+  onRewards: () => void;
+  rewardsOpen: boolean;
 }) {
   const [tag, setTag] = useState("");
   const [status, setStatus] = useState("");
@@ -734,7 +817,10 @@ function SceneStrip({
         ))}
         <input className="lp-in lp-in--sm" value={progress} placeholder="+ счётчик 4" aria-label="Новый предел-счётчик сцены" onChange={(e) => setProgress(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addProgress()} />
       </div>
-      <button type="button" className="d-btn d-btn--sm lp-camp" onClick={onCamp}>
+      <button type="button" className={`d-btn d-btn--sm lp-camp${rewardsOpen ? " active" : ""}`} aria-expanded={rewardsOpen} onClick={onRewards}>
+        Награда →
+      </button>
+      <button type="button" className="d-btn d-btn--sm" onClick={onCamp}>
         Привал
       </button>
     </section>
@@ -803,16 +889,7 @@ function HeroCard({
   patch: (label: string, fields: Parameters<typeof patchLitmSheet>[2]) => Promise<void>;
   onDown: (down: boolean) => void;
 }) {
-  const rows = useResource<Statblock[]>(statblockListPath("character", character.id)).data ?? NO_STATBLOCKS;
-  const sb = rows.find((s) => s.format === "litm_character");
-  const sheet = useMemo<LitMCharacterData | null>(() => {
-    if (!sb) return null;
-    try {
-      return normalizeCharacter(JSON.parse(sb.content || "{}"));
-    } catch {
-      return normalizeCharacter({});
-    }
-  }, [sb]);
+  const sheet = useLitmSheet(character.id);
   const statuses = sheet?.statuses ?? [];
   const isDown = !!heroCondition(statuses).overcome;
   useEffect(() => onDown(isDown), [isDown, onDown]);
@@ -846,7 +923,7 @@ function HeroCard({
           <small>×{count}</small>
         </span>
       </div>
-      {!sb ? (
+      {!sheet ? (
         <span className="lb-empty">Нет листа LitM — «Создать» на странице героя.</span>
       ) : (
         <>

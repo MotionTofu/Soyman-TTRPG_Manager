@@ -1,4 +1,5 @@
-import { write } from "../../../data/hooks";
+import { useMemo } from "react";
+import { useResource, write } from "../../../data/hooks";
 import { afterWriteAnywhere, readResource } from "../../../data/imperative";
 import { showSaveError } from "../../../data/notices";
 import { statblockAffects, statblockListPath } from "../../../data/statblocks";
@@ -59,12 +60,78 @@ async function patchNow(
   }
 }
 
-/** Привал (Q11, A179): вычеркнутые теги силы всех тем героя возвращаются. */
-export function restoreScratched(d: LitMCharacterData): Partial<LitMCharacterData> | null {
-  const clear = <T extends { scratchedTags?: string[] }>(t: T): T => (t.scratchedTags?.length ? { ...t, scratchedTags: [] } : t);
-  const any = [...d.themes, ...d.storyThemes, d.fellowshipTheme].some((t) => t.scratchedTags?.length);
-  if (!any) return null;
-  return { themes: d.themes.map(clear), storyThemes: d.storyThemes.map(clear), fellowshipTheme: clear(d.fellowshipTheme) };
+const NO_STATBLOCKS: Statblock[] = [];
+
+/** Лист героя LitM для пульта: читается сам, `null` — листа нет. */
+export function useLitmSheet(characterId: number): LitMCharacterData | null {
+  const rows = useResource<Statblock[]>(statblockListPath("character", characterId)).data ?? NO_STATBLOCKS;
+  const sb = rows.find((s) => s.format === "litm_character");
+  return useMemo(() => {
+    if (!sb) return null;
+    try {
+      return normalizeCharacter(JSON.parse(sb.content || "{}"));
+    } catch {
+      return normalizeCharacter({});
+    }
+  }, [sb]);
+}
+
+/** Ключ вычеркнутого тега своей или сюжетной темы: «themes:0:тег». */
+export const scratchKey = (kind: "themes" | "storyThemes", index: number, tag: string) => `${kind}:${index}:${tag}`;
+
+/** Привал, шаг «Рюкзак» (A179): отмеченные сюжетные теги рюкзака истекают. */
+export function expireBackpack(tags: string[]) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> | null => {
+    const backpack = d.backpack.filter((t) => !tags.includes(t));
+    return backpack.length === d.backpack.length ? null : { backpack };
+  };
+}
+
+/** Отдых (A181): отмеченные статусы истекают, отмеченные вычеркнутые теги (`scratchKey`) возвращаются. */
+export function restHero(statuses: string[], tags: string[]) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> | null => {
+    if (!statuses.length && !tags.length) return null;
+    const back = (kind: "themes" | "storyThemes") =>
+      d[kind].map((t, i) => {
+        const s = (t.scratchedTags ?? []).filter((x) => !tags.includes(scratchKey(kind, i, x)));
+        return s.length === (t.scratchedTags ?? []).length ? t : { ...t, scratchedTags: s };
+      });
+    return { statuses: (d.statuses ?? []).filter((s) => !statuses.includes(s.name)), themes: back("themes"), storyThemes: back("storyThemes") };
+  };
+}
+
+/** Размышление (A181): +1 Рост теме («themes:0», «storyThemes:1», «fellowshipTheme»); в передышке — «улучшение ждёт». */
+export function reflectOn(ref: string, sojourn: boolean) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> => {
+    const bump = (t: LitMThemeCard): LitMThemeCard => (sojourn ? { ...t, improvementPending: true } : { ...t, improve: Math.min(3, t.improve + 1) });
+    if (ref === "fellowshipTheme") return { fellowshipTheme: bump(d.fellowshipTheme) };
+    const [kind, i] = ref.split(":") as ["themes" | "storyThemes", string];
+    return { [kind]: d[kind].map((t, k) => (k === Number(i) ? bump(t) : t)) };
+  };
+}
+
+/** Вещь из «Наград» — сюжетный тег в рюкзак (пульт v2, Q16); если уже есть — ничего. */
+export function giveBackpackTag(tag: string) {
+  return (d: Pick<LitMCharacterData, "backpack">): Partial<LitMCharacterData> | null => (d.backpack.includes(tag) ? null : { backpack: [...d.backpack, tag] });
+}
+
+/** Время Содружества (A181): вернуть вычеркнутый тег темы Содружества. */
+export function recoverFellowshipTag(tag: string) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> => ({
+    fellowshipTheme: { ...d.fellowshipTheme, scratchedTags: (d.fellowshipTheme.scratchedTags ?? []).filter((x) => x !== tag) },
+  });
+}
+
+/** …или новый тег отношений с другим героем — в список отношений листа, по одному на героя. */
+export function addRelationship(other: { id: number; name: string }, tag: string) {
+  return (d: LitMCharacterData): Partial<LitMCharacterData> => ({
+    relationships: [...(d.relationships ?? []).filter((r) => r.characterId !== other.id), { characterId: other.id, name: other.name, tag }],
+  });
+}
+
+/** С кем у героя уже есть тег отношений: список и старое место спутника. */
+export function relatedIds(d: LitMCharacterData): number[] {
+  return [...(d.relationships ?? []).map((r) => r.characterId), ...(d.companionCharacterType === "character" && d.companionCharacterId != null ? [d.companionCharacterId] : [])];
 }
 
 /** Вычеркнуть или вернуть тег силы темы героя (Q10, «вычеркнуть тег» Q12). */

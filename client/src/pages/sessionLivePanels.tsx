@@ -16,6 +16,7 @@ import { secretStateAffects, sessionPaths } from "../data/sessions";
 import { ToInitiativeButton } from "../components/ToInitiativeButton";
 import { CampaignRevealList, RevealList } from "../components/RevealList";
 import { campaignPaths } from "../data/campaigns";
+import { useSessionSystemCode } from "../components/litm/pult/useLitmRibbon";
 import { kindLabel } from "../compendium";
 import type {
   CampaignDetail,
@@ -34,6 +35,9 @@ import type {
 const PLOT_CHARACTER_TYPES = ["being", "character"];
 const LOCATION_TYPES = ["location"];
 const LOOT_TYPES = ["resource", "artifact"];
+// В кампании LitM панель — «Награды» (пульт v2, Q9): ещё и сокровища книги.
+const LITM_LOOT_TYPES = [...LOOT_TYPES, "compendium_entry"];
+const LITM_LOOT_KINDS = ["treasure"];
 
 // Место на пульте — в докстанцию, а не превью-модалкой (решения 2026-09-11,
 // §2): модалка закрывает пульт и требует закрытия перед следующей сценой.
@@ -141,13 +145,15 @@ function ObstaclesContent({ sessionId, union }: PanelProps) {
 
 function LootContent({ sessionId, union }: PanelProps) {
   const rows = useMemo(() => forPanel(union, "loot"), [union]);
+  const litm = useSessionSystemCode(sessionId) === "litm";
   return (
     <SectionDropZone
       entityType="session"
       entityId={sessionId}
       section="loot"
-      acceptTypes={LOOT_TYPES}
-      placeholder="Перетащите сюда ресурс или артефакт из поиска"
+      acceptTypes={litm ? LITM_LOOT_TYPES : LOOT_TYPES}
+      acceptCompendiumKinds={litm ? LITM_LOOT_KINDS : undefined}
+      placeholder={litm ? "Перетащите сюда сокровище из Сокровищницы, ресурс или артефакт" : "Перетащите сюда ресурс или артефакт из поиска"}
       origin="live"
       unionRows={rows}
     />
@@ -497,8 +503,9 @@ export function ObstaclesPanel(props: PanelProps) {
 }
 
 export function LootPanel(props: PanelProps) {
+  const litm = useSessionSystemCode(props.sessionId) === "litm";
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.loot} summaryClassName="pult-drag-handle" className="card stack sp-card--loot" defaultOpen>
+    <LazyDetails title={litm ? "Награды" : SESSION_PANEL_TITLES.loot} summaryClassName="pult-drag-handle" className="card stack sp-card--loot" defaultOpen>
       <LootContent {...props} />
     </LazyDetails>
   );

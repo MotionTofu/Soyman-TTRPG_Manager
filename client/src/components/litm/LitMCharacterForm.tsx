@@ -81,6 +81,7 @@ export function normalizeTheme(raw: unknown): LitMThemeCard {
     milestone: typeof t.milestone === "number" ? t.milestone : t.milestone === true ? 3 : 0,
     specialImprovements: normalizeImprovements(t.specialImprovements),
     ...(scratchedTags.length ? { scratchedTags } : {}),
+    ...(t.improvementPending === true ? { improvementPending: true } : {}),
   };
 }
 
@@ -152,6 +153,11 @@ export function normalizeCharacter(raw: unknown): LitMCharacterData {
         ? legacyGroupTheme
         : fellowshipTheme,
     statuses: normalizeStatuses(d.statuses),
+    relationships: Array.isArray(d.relationships)
+      ? (d.relationships as Record<string, unknown>[])
+          .filter((r) => r && typeof r.characterId === "number" && typeof r.tag === "string" && r.tag)
+          .map((r) => ({ characterId: r.characterId as number, name: String(r.name ?? ""), tag: r.tag as string }))
+      : [],
   };
 }
 
@@ -499,6 +505,26 @@ export function LitMCharacterView({
           {value.companionRelationshipTag && (
             <span className="litm-tag litm-tag-companion">{value.companionRelationshipTag}</span>
           )}
+        </div>
+      )}
+      {(value.relationships ?? []).length > 0 && (
+        <div>
+          <strong>Отношения</strong>
+          <div className="row">
+            {(value.relationships ?? []).map((r) => (
+              <span key={r.characterId} className="litm-tag litm-tag-companion">
+                {r.name}: {r.tag}{" "}
+                <button
+                  type="button"
+                  className="litm-rel-x"
+                  aria-label={`Убрать тег отношений с ${r.name}`}
+                  onClick={() => onQuickUpdate({ ...value, relationships: (value.relationships ?? []).filter((x) => x.characterId !== r.characterId) })}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
       )}
       {value.quintessences && (

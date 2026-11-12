@@ -11,14 +11,22 @@ import {
   statusTier,
 } from "./status";
 import {
+  campDo,
+  campPeriod,
+  campStep,
   challengeStateFromProfile,
   giveToLimit,
+  journeyArrived,
   overcomeBy,
   parseChallengeState,
   parseSceneState,
   passSpotlight,
+  passStep,
   reduceLimit,
+  startCamp,
   turnedLimits,
+  vignetteState,
+  type LitmJourneyState,
   type LitmSpotlight,
 } from "./conflict";
 
@@ -142,6 +150,51 @@ describe("спотлайт", () => {
   });
 
   it("сцена из пустого state — пустая", () => {
-    expect(parseSceneState("")).toEqual({ tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null });
+    expect(parseSceneState("")).toEqual({ tags: [], statuses: [], progress: [], spotlight: { current: null, acted: [], counts: {} }, sceneId: null, journey: null, camp: null });
+  });
+});
+
+describe("путешествие", () => {
+  const forest: LitmJourneyState = { entryId: 17130, name: "Тёмный лес", kind: "Местность", tags: ["тени повсюду"], consequences: [], steps: 2, gap: "часы", passed: [] };
+
+  it("шаги засчитываются до «Прибыли», дальше не растут", () => {
+    let j = passStep(forest, "Мшистая поляна", "consequences");
+    expect(journeyArrived(j)).toBe(false);
+    j = passStep(j, "Замёрзший ручей", "overcome");
+    expect(journeyArrived(j)).toBe(true);
+    expect(passStep(j, "лишний", "skip").passed).toHaveLength(2);
+  });
+
+  it("без выбранного числа шагов не прибывает", () => {
+    expect(journeyArrived(passStep({ ...forest, steps: 0 }, "Мшистая поляна", "overcome"))).toBe(false);
+  });
+
+  it("виньетка и путешествие переживают сохранение в колонку state", () => {
+    const v = vignetteState({ name: "Замёрзший ручей", nameEn: "Frozen Stream", threat: "*скользкий лёд*", consequences: ["Мёрзнете (*замёрз-2*)."], blocksPath: true, journeyId: 17130 });
+    expect(parseChallengeState(JSON.stringify(v))).toEqual(v);
+    const j = passStep(forest, "Мшистая поляна", "overcome");
+    expect(parseSceneState(JSON.stringify({ journey: j })).journey).toEqual(j);
+    expect(parseSceneState(JSON.stringify({ journey: { name: "без записи" } })).journey).toBeNull();
+  });
+});
+
+describe("привал (A180)", () => {
+  it("Отдых и Размышление — по разу за привал, Действие — сколько угодно", () => {
+    let c = campStep(startCamp(), 3);
+    expect(campPeriod(c)).toBe(true);
+    c = campDo(campDo(c, 7, "rest"), 8, "action");
+    expect(c.done).toEqual([7, 8]);
+    c = campStep(c, 4);
+    expect(c.done).toEqual([]);
+    c = campDo(campDo(c, 7, "reflect"), 8, "action");
+    expect(c.used).toEqual({ 7: ["rest", "reflect"] });
+    expect(campPeriod(campStep(c, 6))).toBe(false);
+  });
+
+  it("шаг не выходит за 1–7 и переживает сохранение в колонку state", () => {
+    expect(campStep(startCamp(), 9).step).toBe(7);
+    const c = campDo(campStep(startCamp(true), 3), 7, "rest");
+    expect(parseSceneState(JSON.stringify({ camp: c })).camp).toEqual(c);
+    expect(parseSceneState(JSON.stringify({ camp: { step: 0, used: { x: ["rest"], 5: ["sleep", "reflect"] } } })).camp).toEqual({ sojourn: false, step: 1, used: { 5: ["reflect"] }, done: [] });
   });
 });

@@ -23,6 +23,7 @@ describe("«сказочная книга» LitM", () => {
 
   it("moves the effect in trailing brackets out of the consequence", () => {
     expect(splitConsequence("Пригрозить смертью (*запуган-4*)")).toEqual({ lead: "Пригрозить смертью", effect: "*запуган-4*" });
+    expect(splitConsequence("Переход занимает время, и вы мёрзнете (*замёрз-2*).")).toEqual({ lead: "Переход занимает время, и вы мёрзнете", effect: "*замёрз-2*" });
     expect(splitConsequence("Ударить (*ранен-3* и, если не смягчено (полностью), ещё *прижат-2*)").effect).toBe("*ранен-3* и, если не смягчено (полностью), ещё *прижат-2*");
     expect(splitConsequence("Обезоружить врага")).toEqual({ lead: "Обезоружить врага", effect: null });
   });
@@ -35,6 +36,7 @@ describe("«сказочная книга» LitM", () => {
     expect(litmCatalogOf("litm", section("treasure"))).toBe("treasury");
     expect(litmCatalogOf("litm", section("journey"))).toBe("journeys");
     expect(litmCatalogOf("litm", section("mechanics", "Могущество и Темы"))).toBe("themes");
+    expect(litmCatalogOf("litm", section("mechanics", "Темы"))).toBe("themes");
     expect(litmCatalogOf("litm", section("mechanics", "Справочник"))).toBe("rules");
     expect(litmCatalogOf("phb", section("monster"))).toBeNull();
   });

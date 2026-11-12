@@ -1112,8 +1112,47 @@ playerRouter.get("/campaigns/:id/party", (req: AuthedRequest, res) => {
   res.json(party.map((m) => ({ ...m, avatar_image_url: m.avatar_image_path ? toFileUrl(m.avatar_image_path) : null })));
 });
 
+function jsonObj(raw: string | null): Record<string, unknown> {
+  try {
+    const v = JSON.parse(raw || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Путешествие и привал для стола игрока (пульт LitM v2, Q15): полоса шагов и
+ * угроза текущей виньетки — без её последствий; у привала — номер шага.
+ * Поля берутся из состояния полосы «Сцена» по месту: игроку уходит только
+ * это, а не копия состояния Мастера.
+ */
+function litmTableTrip(sceneRaw: string, sessionId: number) {
+  const o = jsonObj(sceneRaw);
+  const j = o.journey as Record<string, unknown> | null | undefined;
+  const c = o.camp as Record<string, unknown> | null | undefined;
+  let journey = null;
+  if (j && typeof j === "object" && typeof j.name === "string") {
+    const rows = db
+      .prepare("SELECT name, state FROM initiative_entries WHERE session_id = ? AND kind = 'litm_challenge' ORDER BY id")
+      .all(sessionId) as { name: string; state: string | null }[];
+    const vig = rows.map((r) => ({ name: r.name, v: jsonObj(r.state).vignette as Record<string, unknown> | undefined })).find((r) => r.v && typeof r.v === "object");
+    journey = {
+      name: j.name,
+      kind: String(j.kind ?? ""),
+      steps: typeof j.steps === "number" ? j.steps : 0,
+      gap: String(j.gap ?? ""),
+      passed: Array.isArray(j.passed) ? j.passed.length : 0,
+      now: vig ? { name: vig.name, threat: String(vig.v!.threat ?? "") } : null,
+    };
+  }
+  const camp = c && typeof c === "object" ? { step: typeof c.step === "number" ? c.step : 1, sojourn: !!c.sojourn } : null;
+  return { journey, camp };
+}
+
 // Стол LitM для листа игрока (Д33, Q19): кто в спотлайте и сюжетные теги
-// сцены идущей сессии. Вызовы игрокам не уходят; прогон Мастера — тоже.
+// сцены идущей сессии, путешествие и шаг привала (пульт v2, Q15). Вызовы
+// игрокам не уходят; прогон Мастера — тоже.
 playerRouter.get("/campaigns/:id/litm-table", (req: AuthedRequest, res) => {
   const campaignId = Number(req.params.id);
   if (!myCampaignIds(req.user!.playerId!).includes(campaignId)) {
@@ -1121,13 +1160,13 @@ playerRouter.get("/campaigns/:id/litm-table", (req: AuthedRequest, res) => {
   }
   const row = db
     .prepare(
-      `SELECT ie.state FROM sessions s JOIN initiative_entries ie ON ie.session_id = s.id AND ie.kind = 'litm_scene'
+      `SELECT s.id AS session_id, ie.state FROM sessions s JOIN initiative_entries ie ON ie.session_id = s.id AND ie.kind = 'litm_scene'
        WHERE s.campaign_id = ? AND s.live_mode = 'live' AND s.archived_at IS NULL ORDER BY s.id DESC LIMIT 1`
     )
-    .get(campaignId) as { state: string } | undefined;
+    .get(campaignId) as { session_id: number; state: string } | undefined;
   if (!row) return res.json(null);
   const scene = parseSceneState(row.state);
-  res.json({ spotlight: scene.spotlight.current, tags: scene.tags, statuses: scene.statuses });
+  res.json({ spotlight: scene.spotlight.current, tags: scene.tags, statuses: scene.statuses, ...litmTableTrip(row.state, row.session_id) });
 });
 
 // Корабли кампании (спека profiles-paper-2, «Корабль кампании»): вкладка

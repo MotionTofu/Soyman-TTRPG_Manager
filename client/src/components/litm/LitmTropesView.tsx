@@ -6,7 +6,7 @@ import { useResource } from "../../data/hooks";
 import type { CompendiumEntry, SystemSection } from "../../types";
 import { NavIcon } from "../NavIcons";
 import { MightMark, Tag } from "./LitmBook";
-import { isMight, norm, plural } from "./litmBookText";
+import { isLitmThemesSection, isMight, norm, plural } from "./litmBookText";
 import { kitKey } from "./litmCompendium";
 
 interface KitRef { name: string; name_original: string; theme: string; page?: string }
@@ -24,7 +24,7 @@ export function LitmTropesView({ systemId, entries, selectedId, onSelect }: {
   onSelect: (id: number | undefined) => void;
 }) {
   const sections = useResource<SystemSection[]>(compendiumPaths.sections(systemId)).data ?? NO_SECTIONS;
-  const themesSection = sections.find((s) => s.name === "Могущество и Темы" || s.name === "Темы");
+  const themesSection = sections.find((s) => isLitmThemesSection(s.name));
   const waysSection = sections.find((s) => s.kind === "magic_way");
   const themeEntries = useResource<CompendiumEntry[]>(themesSection ? compendiumPaths.sectionEntries(systemId, themesSection.id) : null).data ?? NO_ENTRIES;
   const wayEntries = useResource<CompendiumEntry[]>(waysSection ? compendiumPaths.sectionEntries(systemId, waysSection.id) : null).data ?? NO_ENTRIES;

@@ -16,9 +16,10 @@ export function isMight(v: unknown): v is LitmMight {
   return v === "origin" || v === "adventure" || v === "greatness" || v === "variable";
 }
 
-/** Последствие угрозы: текст, а эффект из скобок в конце — хвостом без скобок. */
+/** Последствие угрозы: текст, а эффект из скобок в конце — хвостом без скобок.
+ *  Точка после скобок (так в виньетках путешествий) не мешает. */
 export function splitConsequence(text: string): { lead: string; effect: string | null } {
-  const m = /^(.*\S)\s*\(((?:[^()]|\([^()]*\))*)\)\s*$/.exec(text);
+  const m = /^(.*\S)\s*\(((?:[^()]|\([^()]*\))*)\)\.?\s*$/.exec(text);
   return m ? { lead: m[1], effect: m[2] } : { lead: text, effect: null };
 }
 
@@ -39,6 +40,11 @@ export function norm(s: string): string {
   return s.toLocaleLowerCase("ru").replace(/ё/g, "е");
 }
 
+/** Раздел тем LitM: прежнее имя «Могущество и Темы» и новое «Темы» (владелец, 2026-11-13). */
+export function isLitmThemesSection(name: string | null | undefined): boolean {
+  return name === "Могущество и Темы" || name === "Темы";
+}
+
 export type LitmCatalog = "challenges" | "themes" | "tropes" | "grimoire" | "rules" | "ways" | "store" | "treasury" | "journeys";
 
 /** Какой каталог «сказочной книги» у раздела LitM — или никакого. */
@@ -50,7 +56,7 @@ export function litmCatalogOf(systemCode: string | null | undefined, section: Sy
   if (section.kind === "mechanic_backpack_category") return "store";
   if (section.kind === "treasure") return "treasury";
   if (section.kind === "journey") return "journeys";
-  if (section.name === "Могущество и Темы" || section.name === "Темы") return "themes";
+  if (isLitmThemesSection(section.name)) return "themes";
   if (section.name === "Гримуар действий") return "grimoire";
   if (section.name === "Справочник") return "rules";
   return null;

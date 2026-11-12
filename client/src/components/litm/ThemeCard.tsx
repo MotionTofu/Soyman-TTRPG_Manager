@@ -427,6 +427,16 @@ export const ThemeCardView = memo(function ThemeCardView({
           { label: "Веха", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
         ]}
       />
+      {value.improvementPending && (
+        <button
+          type="button"
+          className="litm-pending"
+          title="Положено после передышки: отметьте улучшение темы и снимите метку"
+          onClick={() => onQuickUpdate({ ...value, improvementPending: undefined })}
+        >
+          Улучшение ждёт ✕
+        </button>
+      )}
       {value.specialImprovements.some((imp) => imp.active) && (
         <ul className="litm-improvements">
           {value.specialImprovements
