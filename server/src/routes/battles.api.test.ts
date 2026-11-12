@@ -166,6 +166,18 @@ describe("«Вызовы вечера» LitM (Д33, Q15)", () => {
       spotlight: hero,
       tags: [{ name: "ливень", hindering: true }],
       statuses: [],
+      journey: null,
+      camp: null,
     });
+
+    // Путешествие и привал (пульт v2, Q15): угроза виньетки — без последствий.
+    const journey = { entryId: 17130, name: "Тёмный лес", kind: "Местность", tags: [], consequences: ["тайное"], steps: 4, gap: "часы", passed: [{ name: "Мшистая поляна", outcome: "overcome" }] };
+    db.prepare("UPDATE initiative_entries SET state = ? WHERE session_id = ? AND kind = 'litm_scene'").run(JSON.stringify({ ...lit, journey, camp: { sojourn: false, step: 3, used: { [hero]: ["rest"] }, done: [hero] } }), ses);
+    const vignette = { name: "Замёрзший ручей", nameEn: "", threat: "*скользкий лёд*", consequences: ["Падаете (*ушиб-2*)."], blocksPath: true, journeyId: 17130 };
+    insert("INSERT INTO initiative_entries (session_id, name, kind, state) VALUES (?, 'Замёрзший ручей', 'litm_challenge', ?)", ses, JSON.stringify({ limits: [], statuses: [], vignette }));
+    const table = (await request(papp).get(`/api/player/campaigns/${camp}/litm-table`)).body;
+    expect(table.journey).toEqual({ name: "Тёмный лес", kind: "Местность", steps: 4, gap: "часы", passed: 1, now: { name: "Замёрзший ручей", threat: "*скользкий лёд*" } });
+    expect(table.camp).toEqual({ step: 3, sojourn: false });
+    expect(JSON.stringify(table)).not.toContain("ушиб");
   });
 });

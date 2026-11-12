@@ -103,17 +103,17 @@ export function LitmJourneyBar({
             const done = j.passed[k];
             const now = k === j.passed.length;
             return (
-              <div key={k} className={`lp-step${done ? " is-done" : now ? " is-now" : ""}`}>
+              <div key={k} className={`lp-jstep${done ? " is-done" : now ? " is-now" : ""}`}>
                 <small>
                   Шаг {k + 1}
                   {done ? ` · ${OUTCOME[done.outcome]}` : now && current ? " · на ленте" : ""}
                 </small>
                 <b className={done || (now && current) ? "" : "is-empty"}>{done ? done.name : now && current ? current : "виньетка не выбрана"}</b>
-                {k < cells.length - 1 && <i className="lp-step__gap">{j.gap}</i>}
+                {k < cells.length - 1 && <i className="lp-jstep__gap">{j.gap}</i>}
               </div>
             );
           })}
-          <div className="lp-step lp-step--goal">
+          <div className="lp-jstep lp-jstep--goal">
             <small>Цель</small>
             <b>Прибыли</b>
           </div>
