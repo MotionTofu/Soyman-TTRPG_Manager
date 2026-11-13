@@ -1,0 +1,334 @@
+/* Лист героя LitM в «Д» (доски Litm-Sheet-Status, Litm-Sheet-Edit): карты тем
+   сеткой, справа — стол, статусы, рюкзак, отношения и поля листа. Правка —
+   тот же вид с полями на месте. Цвета — «сказочная книга» (--lb-*). */
+.lsh.litm-book {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  border: 0;
+  container-type: inline-size;
+}
+.lsh-editbar {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--lb-ink);
+  color: var(--lb-sheet);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lsh-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-6);
+}
+.lsh-name {
+  margin: 0;
+  font-family: var(--lb-serif);
+  font-weight: 700;
+  font-size: var(--fs-h1);
+  line-height: 1;
+  color: var(--lb-ink);
+}
+input.lsh-name {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--sp-3);
+  border: var(--edge-width) solid var(--lb-edge);
+  background: var(--field, var(--lb-sheet));
+}
+.lsh-meta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+.lsh-meta input {
+  width: 160px;
+  padding: 0 var(--sp-2);
+  border: var(--card-border-width) solid var(--lb-line);
+  background: transparent;
+  color: var(--lb-ink);
+  font: inherit;
+}
+.lsh-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sp-6);
+  align-items: start;
+}
+.lsh-col,
+.lsh-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.lsh-sub {
+  margin: var(--sp-4) 0 0;
+}
+.lsh-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+/* карта темы */
+.lsh-tc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-5) var(--sp-6);
+  border: var(--card-border-width) solid var(--lb-line);
+  border-top: 4px solid var(--lsh-m, var(--lb-line));
+  background: var(--lb-sheet);
+}
+.lsh-m--origin {
+  --lsh-m: var(--lb-origin);
+}
+.lsh-m--adventure {
+  --lsh-m: var(--lb-adventure);
+}
+.lsh-m--greatness {
+  --lsh-m: var(--lb-greatness);
+}
+.lsh-m--variable {
+  --lsh-m: var(--lb-variable);
+}
+.lsh-m--story {
+  --lsh-m: var(--lb-story);
+}
+.lsh-m--fellowship {
+  --lsh-m: var(--lb-mist);
+}
+.lsh-tc-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 24px;
+}
+.lsh-might,
+.lsh-type {
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width) solid var(--lb-line);
+  background: var(--lb-sheet);
+  color: var(--lb-ink2);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+}
+.lsh-type {
+  min-width: 0;
+  flex: 1;
+}
+.lsh-x {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--lb-muted);
+  cursor: pointer;
+}
+.lsh-tname {
+  margin: 0;
+  font-family: var(--lb-serif);
+  font-weight: 700;
+  font-size: var(--fs-h3);
+  line-height: 1.15;
+}
+input.lsh-tname {
+  width: 100%;
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--edge-width) solid var(--lb-edge);
+  background: var(--field, var(--lb-sheet));
+  color: var(--lb-ink);
+}
+.lsh-tl {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.lsh-tags {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.lsh-side .lsh-tags {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.lsh-tl button.lb-tg,
+.lsh-tags button.lb-tg,
+.lsh-tags button.lb-tw,
+.lsh-tags button.lb-ts {
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  white-space: normal;
+}
+.lsh .lb-tg,
+.lsh .lb-tw {
+  white-space: normal;
+}
+.lb-tg.is-title {
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 var(--lb-pow), 0 0 0 1px var(--lb-pow);
+}
+.lsh .is-x {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  opacity: 0.6;
+}
+.lsh-tagx {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lsh-tagx > button:last-child:not(:first-child) {
+  border: 0;
+  padding: 0 var(--sp-2);
+  background: transparent;
+  color: var(--lb-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.lsh-add {
+  height: 24px;
+  padding: 0 var(--sp-4);
+  border: var(--card-border-width) dashed var(--lb-muted);
+  background: transparent;
+  color: var(--lb-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+.lsh-inl {
+  height: 30px;
+  min-width: 180px;
+  padding: 0 var(--sp-4);
+  border: var(--edge-width) solid var(--lb-edge);
+  background: var(--field, var(--lb-sheet));
+  color: var(--lb-ink);
+  font-family: var(--lb-serif);
+  font-style: italic;
+  font-size: var(--fs-lead);
+  box-shadow: 0 0 0 3px var(--accent, var(--lb-pow));
+}
+.lsh-q {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: var(--card-border-width) solid var(--lb-line);
+  font-family: var(--lb-serif);
+  font-style: italic;
+  font-size: var(--fs-data);
+  color: var(--lb-ink2);
+}
+.lsh-q input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: var(--card-border-width) solid var(--lb-line);
+  background: var(--field, var(--lb-sheet));
+  color: var(--lb-ink);
+  font: inherit;
+}
+.lsh-imps {
+  margin: 0;
+  padding-left: var(--sp-6);
+  font-size: var(--fs-label);
+  color: var(--lb-ink2);
+}
+.lsh-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+.lsh-pickers > button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--lb-ink2);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* правый столбец */
+.lsh-blk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-5);
+  border: var(--card-border-width) solid var(--lb-line);
+  border-top: 3px solid var(--lb-edge);
+  background: var(--lb-sheet);
+}
+.lsh-blk .lb-lbl {
+  margin: 0;
+}
+.lsh-text {
+  font-family: var(--lb-serif);
+  font-size: var(--fs-lead);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.lsh-plus {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--sp-5);
+  border: var(--card-border-width) dashed var(--lb-muted);
+  background: transparent;
+  color: var(--lb-ink2);
+  font-family: var(--lb-serif);
+  font-size: var(--fs-lead);
+  text-align: left;
+  cursor: pointer;
+}
+.lsh-plus b {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 500;
+  color: var(--lb-muted);
+}
+.lsh-plus small {
+  margin-left: auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+
+/* узкий лист: одна колонка, столбец листа сверху */
+@container (max-width: 960px) {
+  .lsh-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lsh-side {
+    order: -1;
+  }
+}
+@container (max-width: 560px) {
+  .lsh-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lsh-name {
+    font-size: var(--fs-h2);
+  }
+}
