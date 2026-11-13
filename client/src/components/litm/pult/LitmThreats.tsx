@@ -1,8 +1,7 @@
 import type { MouseEvent } from "react";
 import { Consequence, LitmRich } from "../LitmBook";
-import { splitConsequence } from "../litmBookText";
 import type { LitmThreat } from "../litmChallenge";
-import { actionLabel, consequenceActions, type ConsequenceAction } from "./consequence";
+import { actionLabel, consequenceTextActions, type ConsequenceAction } from "./consequence";
 
 /**
  * Угрозы гнезда с кнопками (Q12): зачин — «объявить» (плашка «⚠» над лентой
@@ -45,7 +44,7 @@ export function LitmThreats({
             </h4>
             <ul>
               {t.consequences.map((c, k) => {
-                const actions = consequenceActions(splitConsequence(c).effect);
+                const actions = consequenceTextActions(c);
                 return (
                   <li key={k}>
                     <Consequence text={c} />

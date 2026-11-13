@@ -5,7 +5,7 @@ import type { CompendiumEntry, InitiativeEntry } from "../../../types";
 import { Consequence, LitmRich } from "../LitmBook";
 import { splitConsequence } from "../litmBookText";
 import { journeyOf, vignetteGroupsOf, type Vignette } from "../litmJourneys";
-import { actionLabel, consequenceActions, type ConsequenceAction } from "./consequence";
+import { actionLabel, consequenceTextActions, type ConsequenceAction } from "./consequence";
 import { useLitmRibbon } from "./useLitmRibbon";
 import "../litm-book.css";
 import "./litm-pult.css";
@@ -217,7 +217,7 @@ export function LitmVignetteNest({
           </div>
           <ul>
             {v.consequences.map((c, k) => {
-              const actions = consequenceActions(splitConsequence(c).effect);
+              const actions = consequenceTextActions(c);
               return (
                 <li key={k}>
                   <Consequence text={c} />
