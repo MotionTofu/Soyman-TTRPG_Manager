@@ -38,6 +38,11 @@ export function consequenceActions(effect: string | null): ConsequenceAction[] {
   return out;
 }
 
+/** Действия из всех скобок последствия: «… (**Заблокировано**), или … (**Новый вызов:** …)» — обе. */
+export function consequenceTextActions(text: string): ConsequenceAction[] {
+  return [...text.matchAll(/\(((?:[^()]|\([^()]*\))*)\)/g)].flatMap((m) => consequenceActions(m[1]));
+}
+
 export function actionLabel(a: ConsequenceAction): string {
   if (a.kind === "status") return `${a.name}-${a.tier}${a.self ? " себе" : a.all ? " всем" : ""}`;
   if (a.kind === "reduce") return `−${a.by} ${a.name}`;

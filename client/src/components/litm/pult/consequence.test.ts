@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionLabel, consequenceActions, limitFor } from "./consequence";
+import { actionLabel, consequenceActions, consequenceTextActions, limitFor } from "./consequence";
 
 const labels = (effect: string) => consequenceActions(effect).map(actionLabel);
 
@@ -22,6 +22,12 @@ describe("consequenceActions", () => {
     expect(labels("**Разоблачение**")).toEqual(["Разоблачение"]);
     expect(labels("добавить тег *указ*")).toEqual([]);
     expect(consequenceActions(null)).toEqual([]);
+  });
+
+  it("все скобки последствия, не только последняя", () => {
+    const text = "Костёр слепит (**Заблокировано**), или привлекает гостей (**Новый вызов:** паук).";
+    expect(consequenceTextActions(text).map(actionLabel)).toEqual(["Заблокировано", "Новый вызов:"]);
+    expect(consequenceTextActions("(Привал) Мешают спать (*устал-1*).").map(actionLabel)).toEqual(["устал-1"]);
   });
 });
 
