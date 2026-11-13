@@ -1737,6 +1737,19 @@ function StatblockCard({
     setEditMode(false);
   }
 
+  // «Отмена» полной формы: правка шла в локальное состояние (litmValue и др.),
+  // и без отката удалённая тема и прочее оставались на экране и уходили
+  // со следующей быстрой правкой. Откат — к сохранённому содержимому.
+  function cancelEdit() {
+    setContent(statblock.content);
+    setNote(statblock.note);
+    if (isLitm) setLitmValue(parseLitm(statblock.content));
+    if (isDnd) setDndValue(parseDnd(statblock.content));
+    if (isZip) setZipValue(parseZip(statblock.content));
+    setSaveError(null);
+    setEditMode(false);
+  }
+
   // Lets tag add/remove in the collapsed view persist immediately, without
   // making the user open full edit mode first.
   //
@@ -1851,7 +1864,7 @@ function StatblockCard({
           <div className="row" style={{ justifyContent: "space-between" }}><h3 style={{ margin: 0 }}>{(zipValue as import("../types").ZipCreatureData).name || "Существо ЗиП"}</h3>{headerExtraZip}</div>
           {editMode ? <ZipCreatureEdit value={zipValue as import("../types").ZipCreatureData} onChange={(v) => { setZipValue(v); setContent(JSON.stringify(v)); }} /> : <ZipCreatureView value={zipValue as import("../types").ZipCreatureData} onQuickUpdate={quickSaveZipCreature} />}
           <div className="row" style={{ gap: 8 }}>
-            {editMode ? <><button className="primary" onClick={save}>Сохранить</button><button onClick={() => setEditMode(false)}>Отмена</button></> : <button onClick={() => setEditMode(true)}>Редактировать</button>}
+            {editMode ? <><button className="primary" onClick={save}>Сохранить</button><button onClick={cancelEdit}>Отмена</button></> : <button onClick={() => setEditMode(true)}>Редактировать</button>}
           </div>
           {saveError && <p className="sb-save-error">{saveError}</p>}
         </div>
@@ -2010,7 +2023,8 @@ function StatblockCard({
             aria-label={`Редактировать: ${summaryTitle || FORMAT_LABELS[statblock.format]}`}
             onClick={(e) => {
               e.preventDefault();
-              setEditMode((v) => !v);
+              if (editMode) cancelEdit();
+              else setEditMode(true);
               setExpanded(true);
             }}
           >
@@ -2082,7 +2096,7 @@ function StatblockCard({
               <button className="primary" onClick={save}>
                 Сохранить
               </button>
-              <button onClick={() => setEditMode(false)}>Отмена</button>
+              <button onClick={cancelEdit}>Отмена</button>
             </div>
             {saveError && <p className="sb-save-error">{saveError}</p>}
           </>
