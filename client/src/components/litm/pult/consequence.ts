@@ -1,4 +1,6 @@
 import { parseStatusTag } from "@shared/litm/status";
+import { namedConsequence } from "../litmBookText";
+import { COMPOUND_EFFECTS, type CompoundEffect } from "@shared/litm/compound";
 
 /**
  * Что пульт умеет выполнить из скобок последствия (Q12): статус — герою в
@@ -7,10 +9,11 @@ import { parseStatusTag } from "@shared/litm/status";
  * «вычеркнуть тег» — у героя. Именованное (**Разоблачение**) — строкой в лог.
  */
 export type ConsequenceAction =
-  | { kind: "status"; name: string; tier: number; self: boolean; all: boolean }
-  | { kind: "reduce"; name: string; by: number }
+  | { kind: "compound"; effect: CompoundEffect }
+  | { kind: "status"; name: string; tier: number; self: boolean; all: boolean; limit?: string; chooseTarget?: boolean }
+  | { kind: "reduce"; name: string; by: number; chooseTarget?: boolean }
   | { kind: "scratch" }
-  | { kind: "named"; name: string };
+  | { kind: "named"; name: string; type: NonNullable<ReturnType<typeof namedConsequence>>["key"] };
 
 const COUNT: Record<string, number> = { один: 1, одна: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5 };
 
@@ -34,7 +37,10 @@ export function consequenceActions(effect: string | null): ConsequenceAction[] {
     out.push({ kind: "status", name: s.name, tier: s.tier, self: /получить\s*$/i.test(before), all });
   }
   if (/вычеркнуть\s+тег/i.test(effect)) out.push({ kind: "scratch" });
-  for (const m of effect.matchAll(/\*\*([^*]+)\*\*/g)) out.push({ kind: "named", name: m[1].trim() });
+  for (const m of effect.matchAll(/\*\*([^*]+)\*\*/g)) {
+    const type = namedConsequence(m[1]);
+    if (type) out.push({ kind: "named", name: type.name, type: type.key });
+  }
   return out;
 }
 
@@ -44,8 +50,9 @@ export function consequenceTextActions(text: string): ConsequenceAction[] {
 }
 
 export function actionLabel(a: ConsequenceAction): string {
-  if (a.kind === "status") return `${a.name}-${a.tier}${a.self ? " себе" : a.all ? " всем" : ""}`;
-  if (a.kind === "reduce") return `−${a.by} ${a.name}`;
+  if (a.kind === "compound") return COMPOUND_EFFECTS[a.effect].label;
+  if (a.kind === "status") return `${a.name}-${a.tier}${a.limit ? ` · ${a.limit}` : a.chooseTarget ? " · выбрать цель" : a.self ? " себе" : a.all ? " всем" : ""}`;
+  if (a.kind === "reduce") return `−${a.by} ${a.name}${a.chooseTarget ? " · выбрать цель" : ""}`;
   if (a.kind === "named") return a.name;
   return "вычеркнуть тег";
 }
@@ -55,15 +62,16 @@ export function actionLabel(a: ConsequenceAction): string {
  * имя с ним одного корня — «напуган» → «Напугать», «изгнан» → «Изгнать».
  * ponytail: общий префикс ≥ 60% короткого слова; не угадает «ранен» → «Убить».
  */
-export function limitFor(limits: readonly { name: string; status: string }[], status: string): number | null {
+export function limitFor(limits: readonly { name: string; status: string; sides?: readonly { status: string }[] }[], status: string): number | null {
   const norm = (s: string) => s.trim().toLocaleLowerCase("ru").replace(/ё/g, "е");
   const a = norm(status);
   if (!a) return null;
-  const same = limits.findIndex((l) => l.status && norm(l.status) === a);
+  const same = limits.findIndex((l) => l.sides?.some((side) => norm(side.status) === a) || (!l.sides?.length && l.status && norm(l.status) === a));
   if (same >= 0) return same;
   let best: number | null = null;
   let bestLen = 0;
   limits.forEach((l, i) => {
+    if (l.sides?.length) return;
     const b = norm(l.name);
     let k = 0;
     while (k < a.length && k < b.length && a[k] === b[k]) k++;

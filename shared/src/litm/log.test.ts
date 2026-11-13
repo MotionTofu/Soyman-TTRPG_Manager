@@ -24,6 +24,17 @@ describe("лог «Вызовов»", () => {
     expect(back.themes[0].scratchedTags).toEqual([]);
   });
 
+  it("отменяет сюжетные теги Последствия в рюкзаке, сохраняя более поздний тег", () => {
+    const before = { ...sheet(), backpack: ["карта"] };
+    const after = { ...before, backpack: ["дурная слава"] };
+    const changes: LogChange[] = [{ target: { t: "sheet", cid: 15, name: "Воин", party: true }, ops: diffValues(sheetView(before), sheetView(after)) }];
+    const latest = { ...after, backpack: [...after.backpack, "ключ"] };
+    const result = undoChanges(changes, () => ({ ...sheetView(latest) }));
+    expect(result.conflict).toBeNull();
+    const restored = sheetFromView(latest, result.next.get("sheet:15")!.view as never);
+    expect(restored.backpack.sort()).toEqual(["карта", "ключ"]);
+  });
+
   it("итоги: преодолённый вызов, статусы героев, спотлайт без отменённых строк", () => {
     const st = challengeStateFromProfile({ limitList: [{ name: "Изгнать", max: "2" }, { name: "Задобрить", max: "3", arrow: true }] });
     const beaten = giveToLimit(st, 0, "изгнан", 2);

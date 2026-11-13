@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
-import { readResource } from "../data/imperative";
 import { showSaveError } from "../data/notices";
 import {
   applySavedStatblock,
@@ -19,7 +18,6 @@ import { EmptyState } from "./EmptyState";
 import { Modal } from "./Modal";
 import { ContextMenu } from "./ContextMenu";
 import type {
-  Campaign,
   DndCharacterData,
   DndCreatureData,
   LitMCharacterData,
@@ -36,7 +34,6 @@ import {
   LitMCharacterEdit,
   LitMCharacterView,
   normalizeCharacter,
-  normalizeTheme,
 } from "./litm/LitMCharacterForm";
 import { normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { CreatureCardLoader } from "./CreatureCard";
@@ -59,6 +56,7 @@ import { DndCreatureWizard } from "./dnd/DndCreatureWizard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
+import { randomUUID } from "../utils/uuid";
 
 // Пока список грузится — пустой, и один и тот же массив: новый на каждой
 // отрисовке сбивал бы мемоизацию всего, что от списка зависит.
@@ -348,8 +346,7 @@ export function StatblockList({
     }
   }
   const [showDndCreatureWizard, setShowDndCreatureWizard] = useState(false);
-  const [showLitmWizard, setShowLitmWizard] = useState(false);
-  const [litmWizardStatblockId, setLitmWizardStatblockId] = useState<number | null>(null);
+  const [litmCreationKey, setLitmCreationKey] = useState<string | null>(null);
   const [activeStatblockId, setActiveId] = useState<number | null>(null);
   // Профиль персонажа: первый таб — менеджер чарников, дальше по табу на
   // чарник. По умолчанию открыт менеджер. В табах с чарниками — только сам
@@ -432,6 +429,11 @@ export function StatblockList({
   }
 
   async function addStatblock(chosen: StatblockFormat = format) {
+    if (chosen === "litm_character") {
+      setLitmCreationKey((key) => key ?? randomUUID());
+      return;
+    }
+
     // Создание не повторяется кнопкой плашки: ответ мог потеряться уже после
     // того, как сервер статблок завёл, и повтор сделал бы второй.
     const create = (body: { format: StatblockFormat; content: string; kind?: string }) =>
@@ -439,26 +441,6 @@ export function StatblockList({
         () => write.post<{ id: number }>("/statblocks", { owner_type: ownerType, owner_id: ownerId, kind: "full", ...body }),
         { affects: statblockAffects(ownerType, ownerId), retry: false }
       );
-
-    if (chosen === "litm_character") {
-      const character = emptyCharacter();
-      character.characterName = ownerName ?? "";
-      if (campaignId) {
-        try {
-          const campaign = await readResource<Campaign>(`/campaigns/${campaignId}`);
-          if (campaign.group_theme_litm) {
-            character.fellowshipTheme = normalizeTheme(JSON.parse(campaign.group_theme_litm));
-          }
-        } catch {
-          // no campaign group theme available — leave the empty default
-        }
-      }
-      const res = await create({ format: chosen, content: JSON.stringify(character) });
-      if (!res) return;
-      setLitmWizardStatblockId(res.id);
-      setShowLitmWizard(true);
-      return;
-    }
 
     let created: { id: number } | undefined;
     if (chosen === "litm_challenge") {
@@ -487,6 +469,30 @@ export function StatblockList({
     setAdding(false);
     setFormat("text");
   }
+
+  const litmWizard = litmCreationKey && (
+    <LitmHeroWizard
+      ownerId={ownerId}
+      ownerName={ownerName}
+      ownerPlayerName={ownerPlayerName}
+      campaignId={campaignId}
+      onComplete={async (fields) => {
+        await write.post("/statblocks", {
+          owner_type: ownerType,
+          owner_id: ownerId,
+          kind: "full",
+          format: "litm_character",
+          content: JSON.stringify({ ...emptyCharacter(), ...fields }),
+          creation_key: litmCreationKey,
+        });
+        setLitmCreationKey(null);
+        setAdding(false);
+        setFormat("text");
+        afterWrite(statblockAffects(ownerType, ownerId));
+      }}
+      onCancel={() => setLitmCreationKey(null)}
+    />
+  );
 
   // Чарник — часы работы или импорт из LSS, а сносился он по одному
   // `confirm("удалить ЭТО?")` и физическому DELETE, без отката. Теперь: модалка
@@ -987,25 +993,7 @@ export function StatblockList({
             }}
           />
         )}
-        {showLitmWizard && (
-          <LitmHeroWizard
-            ownerId={ownerType === "character" ? ownerId : undefined}
-            ownerName={ownerName}
-            ownerPlayerName={ownerPlayerName}
-            campaignId={campaignId}
-            onComplete={(patch) => {
-              setShowLitmWizard(false);
-              if (litmWizardStatblockId) {
-                // Патчем: тема Содружества кампании, положенная при создании листа, остаётся.
-                void run(
-                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { contentPatch: patch }),
-                  { affects: statblockAffects(ownerType, ownerId) }
-                );
-              }
-            }}
-            onCancel={() => setShowLitmWizard(false)}
-          />
-        )}
+        {litmWizard}
       </div>
     );
   }
@@ -1399,25 +1387,7 @@ export function StatblockList({
           }}
         />
       )}
-        {showLitmWizard && (
-          <LitmHeroWizard
-            ownerId={ownerType === "character" ? ownerId : undefined}
-            ownerName={ownerName}
-            ownerPlayerName={ownerPlayerName}
-            campaignId={campaignId}
-            onComplete={(patch) => {
-              setShowLitmWizard(false);
-              if (litmWizardStatblockId) {
-                // Патчем: тема Содружества кампании, положенная при создании листа, остаётся.
-                void run(
-                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { contentPatch: patch }),
-                  { affects: statblockAffects(ownerType, ownerId) }
-                );
-              }
-            }}
-            onCancel={() => setShowLitmWizard(false)}
-          />
-        )}
+      {litmWizard}
 
       {showDndCreatureWizard && (
         <DndCreatureWizard
@@ -1506,7 +1476,7 @@ function NoSheetScreen({
           )}
           {litm && (
             <button type="button" className="no-sheet-choice is-ink" onClick={() => onEmpty("litm_character")}>
-              Лист LitM<span>Пустой лист, дальше — мастер тем по шагам</span>
+              Лист LitM<span>Создание героя по шагам</span>
             </button>
           )}
           {zip && (

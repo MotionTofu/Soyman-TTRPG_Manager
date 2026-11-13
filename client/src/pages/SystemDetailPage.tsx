@@ -22,7 +22,7 @@ import { LitmRulesToc } from "../components/litm/LitmRulesView";
 import { LitmWaysToc } from "../components/litm/LitmWaysView";
 import { LitmJourneysToc } from "../components/litm/LitmJourneysView";
 import { LitmOverviewUnits } from "../components/litm/LitmOverviewUnits";
-import { LitmSectionSwitch } from "../components/litm/LitmSectionSwitch";
+import { LitmSection } from "../components/litm/LitmSection";
 import { litmCatalogOf } from "../components/litm/litmBookText";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
@@ -212,7 +212,7 @@ export function SystemDetailPage() {
   // Обзор LitM (доска Litm-Overview): «Язык листа» ведёт в Справочник.
   const litmRules = system.code === "litm" ? sections.find((s) => s.name === "Справочник") : undefined;
   const grimToc = (sec: SystemSection) => {
-    if (activeTab !== String(sec.id) || searchParams.get("view") === "list") return null;
+    if (activeTab !== String(sec.id)) return null;
     const catalog = litmCatalogOf(system.code, sec);
     return catalog === "grimoire" ? <LitmGrimoireToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
       : catalog === "rules" ? <LitmRulesToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
@@ -404,7 +404,7 @@ export function SystemDetailPage() {
 
       {activeTab !== "overview" &&
         (currentSection ? (
-          <LitmSectionSwitch systemCode={system.code} systemId={systemId} section={currentSection} focusEntryId={focusEntryId}>
+          <LitmSection systemCode={system.code} systemId={systemId} section={currentSection} focusEntryId={focusEntryId}>
           {currentSection.kind === "monster" ? (
             <MonsterSection
               key={currentSection.id}
@@ -432,7 +432,7 @@ export function SystemDetailPage() {
               focusEntryId={focusEntryId}
             />
           )}
-          </LitmSectionSwitch>
+          </LitmSection>
         ) : (
           <p className="muted">Раздел не найден.</p>
         ))}

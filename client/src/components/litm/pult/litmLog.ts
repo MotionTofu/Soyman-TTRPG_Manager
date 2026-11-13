@@ -92,6 +92,14 @@ function parseSheet(sb: Statblock): LitMCharacterData {
 /** Отменить строку: обратная разница к свежим строкам ленты и листам героев. Нельзя — причина. */
 export async function undoLitmLine(sessionId: number, line: BattleLogLine): Promise<string | null> {
   await flushBattleLog(sessionId);
+  if (line.author === "litm-compound") {
+    const result = await write.post<{ conflict: string | null; characterIds: number[] }>(`/battles/log/${line.id}/litm-undo`, {});
+    afterWriteAnywhere([
+      { path: initiativePath(sessionId) }, { path: battleLogPath(line.battle_id) }, { path: battlePath(sessionId) },
+      ...result.characterIds.flatMap((id) => statblockAffects("character", id)),
+    ]);
+    return result.conflict;
+  }
   const rows = await readResource<InitiativeEntry[]>(initiativePath(sessionId), { fresh: true });
   const sheets = new Map<number, Statblock>();
   for (const c of line.changes) {

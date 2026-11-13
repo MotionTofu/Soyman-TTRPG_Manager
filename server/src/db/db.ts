@@ -7640,6 +7640,10 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "gallery_images", "source_image_id")) {
     database.exec("ALTER TABLE gallery_images ADD COLUMN source_image_id INTEGER");
   }
+  if (!columnExists(database, "statblocks", "creation_key")) {
+    database.exec("ALTER TABLE statblocks ADD COLUMN creation_key TEXT");
+  }
+  database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_statblocks_creation_key ON statblocks(owner_type, owner_id, creation_key)");
 }
 
 /**

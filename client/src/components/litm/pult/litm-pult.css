@@ -427,6 +427,9 @@
 .lp-lim.is-hit {
   background: color-mix(in srgb, var(--lb-stat) 12%, transparent);
 }
+.lp-lim__sides {
+  grid-column: 1 / -1;
+}
 .lp-lim__nm {
   font-family: var(--lb-sc);
   font-weight: 700;
@@ -615,6 +618,31 @@
 .lp-give__name input {
   flex: 1;
 }
+.lp-effect .lp-give__name {
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.lp-effect .lp-give__name input,
+.lp-effect select {
+  min-width: 0;
+  max-width: 100%;
+}
+.lp-give__targets {
+  max-height: 26vh;
+  overflow-y: auto;
+  align-content: start;
+}
+.lp-give__might {
+  min-width: 0;
+  border: var(--edge-width) solid var(--edge);
+  margin: 0 0 var(--sp-5);
+  padding: var(--sp-4);
+}
+.lp-give__preview {
+  display: block;
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-meta);
+}
 .lp-give__tiers {
   display: inline-flex;
   border: var(--card-border-width, 1px) solid var(--edge);
@@ -716,8 +744,19 @@
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-.lp-grim > header > .lp-mono {
-  white-space: nowrap;
+.lp-compendium.litm-book {
+  padding: 0;
+}
+.lp-compendium .lp-ghit em {
+  max-width: 12ch;
+  text-align: right;
+}
+.lp-compendium .lb-tg,
+.lp-compendium .lb-tw,
+.lp-compendium .lb-st {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .lp-grim__body {
   flex: 1;
@@ -742,10 +781,6 @@
   font-family: var(--lb-serif);
   font-size: var(--fs-h3);
 }
-.lp-grim__ch h3 a {
-  color: inherit;
-  text-decoration: none;
-}
 .lp-ghits {
   max-height: 16rem;
   overflow-y: auto;
@@ -763,7 +798,7 @@
   text-align: left;
   cursor: pointer;
 }
-.lp-ghit.is-on {
+.lp-ghit:hover {
   background: var(--lb-tab);
   box-shadow: inset 3px 0 0 var(--lb-edge);
 }
@@ -784,7 +819,7 @@
   font-size: var(--fs-meta);
   color: var(--lb-ink2);
 }
-.lp-give {
+button.lp-give {
   display: inline-flex;
   align-items: center;
   margin-left: var(--sp-3);

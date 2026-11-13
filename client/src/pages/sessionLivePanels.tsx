@@ -17,6 +17,8 @@ import { ToInitiativeButton } from "../components/ToInitiativeButton";
 import { CampaignRevealList, RevealList } from "../components/RevealList";
 import { campaignPaths } from "../data/campaigns";
 import { useSessionSystemCode } from "../components/litm/pult/useLitmRibbon";
+import { LitmCompendiumDrawer } from "../components/litm/pult/LitmCompendiumDrawer";
+import { useLitmCompendium, type LitmArticleTarget } from "../components/litm/pult/useLitmCompendium";
 import { kindLabel } from "../compendium";
 import type {
   CampaignDetail,
@@ -362,31 +364,45 @@ function sectionOf(context: string | null | undefined): string | null {
   return i < 0 ? null : context.slice(i + 3).trim() || null;
 }
 
-function CompendiumContent({ campaign }: PanelProps) {  const [q, setQ] = useState("");
+function CompendiumContent({ campaign, sessionId }: PanelProps) {
+  const [q, setQ] = useState("");
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
+  const [article, setArticle] = useState<LitmArticleTarget | null>(null);
+  const systemCode = useSessionSystemCode(sessionId);
+  const query = q.trim();
+  const book = useLitmCompendium(systemCode === "litm" ? campaign.system_id : null, query.length >= 2 ? query : "");
   const search = useSearch(
-    campaign.system_id && q.trim().length >= 2
-      ? `/search?q=${encodeURIComponent(q.trim())}&types=compendium_entry&system_id=${campaign.system_id}`
+    campaign.system_id && query.length >= 2
+      ? `/search?q=${encodeURIComponent(query)}&types=compendium_entry&system_id=${campaign.system_id}`
       : null,
     250
   );
-  const items = search.results.slice(0, 12);
-  const loading = search.searching;
+  const hits = book.hits.map(({ entry, phrase }) => ({
+    type: "compendium_entry", id: entry.id, title: entry.name, section_id: entry.section_id, kind: entry.kind, phrase,
+  }));
+  const bookIds = new Set(hits.map((hit) => hit.id));
+  const otherHits = book.loading ? [] : search.results.filter((r) => !bookIds.has(r.id)).slice(0, 12);
+  const items = [...hits, ...otherHits];
+  const loading = search.searching || (query.length >= 2 && book.loading);
 
   if (!campaign.system_id) return <span className="muted">Система не выбрана.</span>;
 
   return (
     <div className="stack">
       <Link to={`/systems/${campaign.system_id}`}>Компендиум «{campaign.system_name}» →</Link>
-      <input placeholder="Поиск в компендиуме — 2+ символа" value={q} onChange={(e) => setQ(e.target.value)} />
-      {loading && <span className="muted">Поиск…</span>}
-      {!loading && q.trim().length >= 2 && items.length === 0 && <span className="muted">Ничего не найдено.</span>}
+      <input aria-label="Поиск в Компендиуме" placeholder="Поиск в компендиуме — 2+ символа" value={q} onChange={(e) => setQ(e.target.value)} />
+      {loading && <span className="muted" role="status">Поиск…</span>}
+      {query.length >= 2 && book.error && <div role="alert">Не удалось загрузить Справочник или Гримуар. <button type="button" className="d-btn d-btn--sm" onClick={book.reload}>Повторить</button></div>}
+      {search.error && <span className="muted" role="alert">Ошибка поиска в Компендиуме.</span>}
+      {!loading && !search.error && !book.error && query.length >= 2 && items.length === 0 && <span className="muted">Ничего не найдено.</span>}
       {items.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>
           {items.map((r) => {
-            const section = sectionOf(r.context);
+            const source = book.bookEntryIds.has(r.id) ? book.sections.find((s) => s?.id === r.section_id) : undefined;
+            const section = source?.name ?? ("context" in r ? sectionOf(r.context) : null);
+            const phrase = "phrase" in r ? r.phrase : null;
             return (
-              <button key={`${r.type}:${r.id}`} type="button" className="sp-comp-hit" style={{ textAlign: "left", border: "1px solid var(--line)", padding: "6px 8px", background: "var(--paper)", cursor: "pointer" }} onClick={() => setPreview({ type: r.type, id: r.id })}>
+              <button key={`${r.type}:${r.id}`} type="button" className={`sp-comp-hit${source ? " sp-comp-hit--book" : ""}`} onClick={() => source ? setArticle({ sectionId: source.id, entryId: r.id }) : setPreview({ type: r.type, id: r.id })}>
                 <span className="sp-comp-hit__title"><strong>{r.title}</strong></span>
                 {section ? (
                   <span className="muted sp-comp-hit__section">{section}</span>
@@ -394,13 +410,15 @@ function CompendiumContent({ campaign }: PanelProps) {  const [q, setQ] = useSta
                   // Пустая ячейка держит колонки: без неё чип уедет в середину.
                   <span aria-hidden="true" />
                 )}
-                <span className="sp-comp-hit__chip">{r.kind === "mechanic_item" ? "механ" : kindLabel(r.kind ?? r.type)}</span>
+                {!source && <span className="sp-comp-hit__chip">{r.kind === "mechanic_item" ? "механ" : kindLabel(r.kind ?? r.type)}</span>}
+                {phrase && <small className="muted sp-comp-hit__phrase">{phrase}</small>}
               </button>
             );
           })}
         </div>
       )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
+      {article && <LitmCompendiumDrawer systemId={campaign.system_id} initialArticle={article} onClose={() => setArticle(null)} />}
     </div>
   );
 }

@@ -1269,7 +1269,15 @@ details.sp-card--loot .entry-title {
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--sp-3);
   align-items: baseline;
+  text-align: left;
+  border: 1px solid var(--line);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--paper);
+  cursor: pointer;
 }
+.sp-comp-hit__phrase { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.sp-comp-hit--book { grid-template-columns: minmax(0, 1fr) auto; }
+.sp-comp-hit--book .sp-comp-hit__title { white-space: normal; overflow-wrap: anywhere; }
 .sp-comp-hit__title {
   min-width: 0;
   overflow: hidden;

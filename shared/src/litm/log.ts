@@ -13,6 +13,7 @@ interface ThemeLike {
 }
 export interface LitmSheetLike {
   statuses?: LitmStatus[];
+  backpack?: string[];
   themes: ThemeLike[];
   storyThemes: ThemeLike[];
   fellowshipTheme: ThemeLike;
@@ -21,6 +22,7 @@ export interface LitmSheetLike {
 /** Вид листа для разницы: статусы и вычеркнутое плоским списком «тема/номер/тег». */
 export interface LitmSheetView {
   statuses: LitmStatus[];
+  backpack: string[];
   scratched: string[];
 }
 
@@ -28,20 +30,22 @@ export function sheetView(d: LitmSheetLike): LitmSheetView {
   const marks = (kind: string, list: ThemeLike[]) => list.flatMap((t, i) => (t.scratchedTags ?? []).map((tag) => `${kind}/${i}/${tag}`));
   return {
     statuses: d.statuses ?? [],
+    backpack: d.backpack ?? [],
     scratched: [...marks("themes", d.themes), ...marks("storyThemes", d.storyThemes), ...marks("fellowshipTheme", [d.fellowshipTheme])],
   };
 }
 
 /** Обратно в поля листа — для отмены: статусы и вычеркнутое каждой темы. */
-export function sheetFromView<T extends LitmSheetLike>(d: T, view: LitmSheetView): Pick<T, "statuses" | "themes" | "storyThemes" | "fellowshipTheme"> {
+export function sheetFromView<T extends LitmSheetLike>(d: T, view: LitmSheetView): Pick<T, "statuses" | "backpack" | "themes" | "storyThemes" | "fellowshipTheme"> {
   const of = (kind: string, i: number) =>
     view.scratched.filter((s) => s.startsWith(`${kind}/${i}/`)).map((s) => s.slice(`${kind}/${i}/`.length));
   return {
     statuses: view.statuses,
+    backpack: view.backpack,
     themes: d.themes.map((t, i) => ({ ...t, scratchedTags: of("themes", i) })),
     storyThemes: d.storyThemes.map((t, i) => ({ ...t, scratchedTags: of("storyThemes", i) })),
     fellowshipTheme: { ...d.fellowshipTheme, scratchedTags: of("fellowshipTheme", 0) },
-  } as Pick<T, "statuses" | "themes" | "storyThemes" | "fellowshipTheme">;
+  } as Pick<T, "statuses" | "backpack" | "themes" | "storyThemes" | "fellowshipTheme">;
 }
 
 type Item = Record<string, unknown>;
@@ -73,8 +77,13 @@ export function describeLitm(changes: LogChange[]): string {
         const tag = (s: string) => s.split("/").slice(2).join("/");
         for (const s of op.add) say(`вычеркнут «${tag(s)}»`);
         for (const s of op.del) say(`вернулся «${tag(s)}»`);
+      } else if (op.k === "list" && at === "backpack") {
+        for (const s of op.add) say(`+тег «${s}»`);
+        for (const s of op.del) say(`снят тег «${s}»`);
       } else if (op.k === "set" && at === "state.declaredThreat") {
         say(op.to == null ? "угроза разрешена" : "угроза объявлена");
+      } else if (op.k === "set" && at === "state.guardLost") {
+        say(op.to ? "утрачено «Под охраной»" : "восстановлено «Под охраной»");
       }
     }
   }

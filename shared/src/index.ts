@@ -28,4 +28,5 @@ export * from "./playerDisplay";
 export * from "./cutscenes/index";
 export * from "./litm/status";
 export * from "./litm/conflict";
+export * from "./litm/compound";
 export * from "./litm/log";

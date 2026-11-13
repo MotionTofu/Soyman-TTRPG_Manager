@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { appendLog, type LogRow } from "../services/battles";
+import { LitmActionError, undoLitmCompound } from "../services/litmCompound";
+import { broadcastCharacterUpdate } from "../services/realtime";
 
 // Лог боя (боевой режим, шаг 4): строки пишет пульт, отмену считает клиент
 // (shared/battleLog.ts) и отмечает здесь — «отменено» или почему нельзя.
@@ -21,6 +23,17 @@ function present(row: LogRow) {
 battlesRouter.get("/:id/log", (req, res) => {
   const rows = db.prepare("SELECT * FROM battle_log WHERE battle_id = ? ORDER BY id").all(req.params.id) as LogRow[];
   res.json(rows.map(present));
+});
+
+battlesRouter.post("/log/:lineId/litm-undo", (req, res) => {
+  try {
+    const result = undoLitmCompound(Number(req.params.lineId));
+    for (const id of result.characterIds) broadcastCharacterUpdate(id, "sheet");
+    res.json(result);
+  } catch (error) {
+    if (!(error instanceof LitmActionError)) throw error;
+    res.status(409).json({ error: error.message });
+  }
 });
 
 battlesRouter.post("/:id/log", (req, res) => {

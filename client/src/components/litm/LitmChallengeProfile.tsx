@@ -28,7 +28,7 @@ export function LitmChallengeProfile({
           {p.threatList.length > 0 && <div className="lb-lbl">Угрозы и последствия<small>Threats &amp; Consequences</small></div>}
           {renderThreats ? renderThreats(p.threatList) : p.threatList.map((t, i) => (
             <div key={i} className="lb-thr">
-              <h4>{t.name && <b>{t.name}</b>}<span><LitmRich text={t.lead} /></span></h4>
+              <h4>{t.withoutThreat ? <b>Последствия без Угрозы</b> : <>{t.name && <b>{t.name}</b>}<span><LitmRich text={t.lead} /></span></>}</h4>
               <ul>
                 {t.consequences.map((c, k) => <li key={k}><Consequence text={c} /></li>)}
               </ul>
@@ -53,6 +53,7 @@ export function LitmChallengeProfile({
                   <i aria-hidden="true">{/^\d+$/.test(l.max) ? Array.from({ length: Number(l.max) }, (_, k) => <u key={k} />) : null}</i>
                   <span className="lb-lim__num">{l.max}{l.arrow && <sup title="Когда предел достигнут">↻</sup>}</span>
                   {l.note && <p>↻ <LitmRich text={l.note} /></p>}
+                  {l.sides?.map((side) => <p key={side.status}><LitmRich text={side.outcome} /></p>)}
                 </div>
               ))}
             </div>
@@ -93,6 +94,7 @@ function TagLines({ tags }: { tags: LitmChallengeTag[] }) {
           {t.group && t.group !== tags[i - 1]?.group && <div className="lb-tgroup">{t.group}</div>}
           <div className={`lb-tagline${t.weakness ? " lb-tagline--weak" : ""}`}>
             <LitmRich text={t.text} />
+            {t.object && <small> · {t.object}</small>}
             {t.weakness && <span className="lb-weak-note">слабость</span>}
           </div>
         </Fragment>

@@ -679,6 +679,7 @@ export interface LitMRelationship {
 export interface LitMChallengeData {
   title: string;
   role: string;
+  roles?: string[];
   mightLevel: "origin" | "adventure" | "greatness" | "variable";
   might: number;
   tagsAndStatuses: string;

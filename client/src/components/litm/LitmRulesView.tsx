@@ -7,25 +7,12 @@ import type { CompendiumEntry } from "../../types";
 import { NavIcon } from "../NavIcons";
 import { LitmRich, Status, type GrimLinks } from "./LitmBook";
 import { Paras } from "./LitmGrimoireView";
-import { norm, paras, plural } from "./litmBookText";
-import { grimoireHref } from "./useGrimoire";
-import { isCard, isTerm, rulesOf, searchRules, sectionText, type RuleArticle, type RuleGroup, type RuleSection, type RuleSidebar } from "./litmRules";
+import { paras, plural } from "./litmBookText";
+import { useRules } from "./useRules";
+import { isCard, isTerm, searchRules, sectionText, type RuleArticle, type RuleGroup, type RuleSection, type RuleSidebar } from "./litmRules";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 const lines = (text: string) => text.split("\n").map((s) => s.trim()).filter(Boolean);
-
-/** Группы, статьи и ссылки Справочника — для раздела и его оглавления. */
-function useRules(systemId: number, sectionId: number, entries: CompendiumEntry[]) {
-  const groups = useMemo(() => rulesOf(entries), [entries]);
-  const articles = useMemo(() => groups.flatMap((g) => g.articles), [groups]);
-  const link = (id: number) => grimoireHref(systemId, sectionId, id);
-  const byName = useMemo(() => new Map(articles.map((a) => [norm(a.entry.name), a.entry.id])), [articles]);
-  const grim = useMemo<GrimLinks>(() => ({
-    article: () => null,
-    rule: (name) => { const id = byName.get(norm(name)); return id === undefined ? null : grimoireHref(systemId, sectionId, id); },
-  }), [byName, systemId, sectionId]);
-  return { groups, articles, link, grim, byName };
-}
 
 /** Английский текст книги — как есть, только курсив и полужирный. */
 function En({ text }: { text: string }) {
@@ -88,9 +75,9 @@ function Catalog({ group }: { group: RuleGroup }) {
   );
 }
 
-function Article({ a, group, prev, next, link, grim, byName }: {
+function Article({ a, group, prev, next, link, grim }: {
   a: RuleArticle; group: RuleGroup; prev: RuleArticle | null; next: RuleArticle | null;
-  link: (id: number) => string; grim: GrimLinks; byName: Map<string, number>;
+  link: (id: number) => string; grim: GrimLinks;
 }) {
   const e = a.entry;
   const side = a.sidebars.length > 0 || a.related.length > 0;
@@ -111,7 +98,6 @@ function Article({ a, group, prev, next, link, grim, byName }: {
             onClick={() => addToBag({ type: "compendium_entry", id: e.id, title: e.name, kind: e.kind, system_id: e.system_id, section_id: e.section_id })}>
             В мешок
           </button>
-          <Link className="d-btn d-btn--sm" to={`/compendium/${e.id}`}>Править</Link>
         </span>
       </div>
       <div className="lb-file">
@@ -128,9 +114,10 @@ function Article({ a, group, prev, next, link, grim, byName }: {
               <nav className="lr-related" aria-label="Связано">
                 <div className="lb-lbl">Связано</div>
                 {a.related.map((r) => {
-                  const id = byName.get(norm(r.name));
+                  const href = grim.rule(r.name, r.page);
                   const body = <>{r.name}{r.page && <small>{r.page}</small>}</>;
-                  return id === undefined ? <span key={r.name}>{body}</span> : <Link key={r.name} to={link(id)}>{body}</Link>;
+                  const key = `${r.name}:${r.page}`;
+                  return href ? <Link key={key} to={href}>{body}</Link> : <span key={key}>{body}</span>;
                 })}
               </nav>
             )}
@@ -210,6 +197,20 @@ function groupOf(groups: RuleGroup[], id: number | undefined): RuleGroup | null 
     || g.catalog.some((c) => c.entry.id === id || c.items.some((s) => s.id === id))) ?? null;
 }
 
+export function RulePage({ book, selectedId, grim = book.grim }: {
+  book: ReturnType<typeof useRules>;
+  selectedId: number;
+  grim?: GrimLinks;
+}) {
+  const { groups, articles, link } = book;
+  const group = groupOf(groups, selectedId);
+  if (!group) return null;
+  const at = articles.findIndex((a) => a.entry.id === selectedId);
+  return at < 0 ? <GroupPage group={group} link={link} grim={grim} /> : (
+    <Article a={articles[at]} group={group} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} />
+  );
+}
+
 /** Оглавление Справочника под пунктом раздела в оглавлении системы (как у Гримуара). */
 export function LitmRulesToc({ systemId, sectionId, selectedId }: { systemId: number; sectionId: number; selectedId: number | undefined }) {
   const entries = useResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, sectionId)).data ?? NO_ENTRIES;
@@ -236,11 +237,10 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
   entries: CompendiumEntry[];
   selectedId: number | undefined;
 }) {
-  const { groups, articles, link, grim, byName } = useRules(systemId, sectionId, entries);
+  const book = useRules(systemId, sectionId, entries);
+  const { groups, articles, link } = book;
   const [query, setQuery] = useState("");
   const hits = useMemo(() => searchRules(articles, query), [articles, query]);
-  const at = articles.findIndex((a) => a.entry.id === selectedId);
-  const article = at >= 0 ? articles[at] : null;
   const group = groupOf(groups, selectedId);
   return (
     <div className="lg lr">
@@ -265,10 +265,8 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
           ))}
           {!hits.length && <p className="lb-empty">Ничего не найдено.</p>}
         </div>
-      ) : article && group ? (
-        <Article a={article} group={group} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} byName={byName} />
-      ) : group ? (
-        <GroupPage group={group} link={link} grim={grim} />
+      ) : group && selectedId !== undefined ? (
+        <RulePage book={book} selectedId={selectedId} />
       ) : (
         <div className="lg-contents">
           {groups.map((g) => {

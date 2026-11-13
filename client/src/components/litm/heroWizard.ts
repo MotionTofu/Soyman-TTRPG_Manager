@@ -209,7 +209,7 @@ export function draftTheme(t: ThemeDraft, book: WizardBook): LitMThemeCard {
   };
 }
 
-/** Поля листа, которые пишет визард, — патчем поверх созданного листа (тема Содружества кампании остаётся). */
+/** Поля нового листа, которые заполняет мастер героя. */
 export function buildHero(d: HeroDraft, book: WizardBook, heroes: { id: number; name: string }[]): Partial<LitMCharacterData> {
   return {
     characterName: d.name.trim(),

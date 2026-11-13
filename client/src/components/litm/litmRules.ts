@@ -7,6 +7,14 @@ export interface RuleSection { head: string; headEn: string; page: string; text:
 export interface RuleSidebar { title: string; titleEn: string; page: string; text: string; textEn: string }
 export interface RuleRef { name: string; page: string }
 
+/** Имена правил и словарных статей могут совпадать. Номер страницы различает их при импорте в любую базу. */
+export function ruleEntry(entries: readonly CompendiumEntry[], name: string, page?: string): CompendiumEntry | undefined {
+  const named = entries.filter((e) => norm(e.name) === norm(name));
+  return named.find((e) => page && str(e.data?.page).split(/[\s–;]+/, 1)[0] === page)
+    ?? named.find((e) => /^[AB]\d/.test(str(e.data?.page)))
+    ?? named[0];
+}
+
 export interface RuleArticle {
   entry: CompendiumEntry;
   groupId: number;
@@ -74,7 +82,10 @@ export function searchRules(articles: RuleArticle[], query: string, limit = 40):
   for (const a of articles) {
     const name = norm(a.entry.name);
     if (name.startsWith(q)) { hits.push({ article: a, phrase: null, rank: 0 }); continue; }
-    if (name.includes(q) || norm(a.entry.name_original ?? "").includes(q)) { hits.push({ article: a, phrase: null, rank: 1 }); continue; }
+    if (name.includes(q) || norm(a.entry.name_original ?? "").includes(q) || a.entry.aliases?.some((alias) => norm(alias).includes(q))) {
+      hits.push({ article: a, phrase: null, rank: 1 });
+      continue;
+    }
     const line = [a.entry.description, ...a.steps, ...a.sections.map((s) => s.text), ...a.sidebars.map((s) => s.text)]
       .flatMap((t) => (t ?? "").split("\n")).find((t) => norm(t).includes(q));
     if (line) hits.push({ article: a, phrase: snippet(line, q), rank: 2 });

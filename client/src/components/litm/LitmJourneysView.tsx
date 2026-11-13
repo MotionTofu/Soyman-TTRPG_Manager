@@ -60,7 +60,6 @@ function JourneyPage({ j, back, backLabel }: { j: Journey; back: string; backLab
       <div className="lb-crumbs"><Link className="lb-back" to={back}>← {backLabel}</Link></div>
       <div className="lb-art__head">
         <h3>{e.name}{e.name_original && <span className="lb-orig">[{e.name_original}]</span>}</h3>
-        <span className="d-end"><Link className="d-btn d-btn--sm" to={`/compendium/${e.id}`}>Править</Link></span>
       </div>
       <div className="lb-file">
         <span className="lb-kind">Путешествие</span>

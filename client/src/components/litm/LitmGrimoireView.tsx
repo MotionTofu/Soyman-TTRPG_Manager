@@ -70,7 +70,7 @@ function IntroCard({ title, titleEn, limits, sections, grim, closed }: GrimIntro
 
 /** Кнопки пульта у строк статьи (шторка «Гримуар», Q8): за успехом и последствием. */
 export interface GrimActs {
-  success: (text: string) => ReactNode;
+  success: (text: string, effects: string[]) => ReactNode;
   consequence: (text: string) => ReactNode;
 }
 
@@ -92,7 +92,6 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
             onClick={() => addToBag({ type: "compendium_entry", id: e.id, title: e.name, kind: e.kind, system_id: e.system_id, section_id: e.section_id })}>
             В мешок
           </button>
-          <Link className="d-btn d-btn--sm" to={`/compendium/${e.id}`}>Править</Link>
         </span>
       </div>
       <div className="lb-file">
@@ -118,7 +117,7 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
           <div>
             <div className="lb-lbl lg-colhead">Что выходит<small>Success · Extra Feats · Consequences</small></div>
             {a.success.map((s, i) => (
-              <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} />{acts?.success(s.text)}</p>
+              <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} />{acts?.success(s.text, s.effects)}</p>
             ))}
             {a.feats.length > 0 && <><div className="lb-lbl lg-sub">Дополнительные подвиги</div><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
             {a.consequences.length > 0 && <><div className="lb-lbl lg-sub">Последствия</div><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} />{acts?.consequence(t)}</li>)}</ul></>}

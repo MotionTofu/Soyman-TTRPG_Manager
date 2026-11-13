@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { addToBag } from "../../bag";
 import { campaignPaths } from "../../data/campaigns";
 import { useResource } from "../../data/hooks";
@@ -92,7 +91,6 @@ function TreasureCard({ t, systemId, focus }: { t: Treasure; systemId: number; f
         <button type="button" className="d-btn d-btn--sm" aria-expanded={giving} onClick={() => setGiving((v) => !v)}>Дать герою…</button>
         <button type="button" className="d-btn d-btn--sm d-btn--quiet"
           onClick={() => addToBag({ type: "compendium_entry", id: e.id, title: e.name, kind: e.kind, system_id: e.system_id, section_id: e.section_id })}>В мешок</button>
-        <Link className="d-btn d-btn--sm d-btn--quiet" to={`/compendium/${e.id}`}>Править</Link>
       </div>
       {giving && <GiveBox t={t} systemId={systemId} onClose={() => setGiving(false)} />}
     </div>

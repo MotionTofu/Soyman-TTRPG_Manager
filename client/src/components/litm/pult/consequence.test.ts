@@ -19,15 +19,22 @@ describe("consequenceActions", () => {
   });
 
   it("именованное — строкой в лог, теги — без действий", () => {
-    expect(labels("**Разоблачение**")).toEqual(["Разоблачение"]);
+    expect(labels("**Разоблачение**")).toEqual(["Обнаружение"]);
     expect(labels("добавить тег *указ*")).toEqual([]);
     expect(consequenceActions(null)).toEqual([]);
   });
 
   it("все скобки последствия, не только последняя", () => {
     const text = "Костёр слепит (**Заблокировано**), или привлекает гостей (**Новый вызов:** паук).";
-    expect(consequenceTextActions(text).map(actionLabel)).toEqual(["Заблокировано", "Новый вызов:"]);
+    expect(consequenceTextActions(text).map(actionLabel)).toEqual(["Возможность закрыта", "Новый вызов"]);
     expect(consequenceTextActions("(Привал) Мешают спать (*устал-1*).").map(actionLabel)).toEqual(["устал-1"]);
+  });
+
+  it("старое и новое название перекрытия пути дают один тип", () => {
+    for (const name of ["Заблокировано", "Возможность закрыта"]) {
+      expect(consequenceActions(`**${name}**`)).toEqual([{ kind: "named", name: "Возможность закрыта", type: "blocked" }]);
+    }
+    expect(labels("**«Да, но…»**")).toEqual(["Да, но…"]);
   });
 });
 

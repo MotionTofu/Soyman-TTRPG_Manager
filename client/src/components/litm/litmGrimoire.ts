@@ -1,7 +1,7 @@
 /** Гримуар действий LitM (пачка 4, доски Litm-Grimoire*): статьи из записей раздела,
  *  эффекты глаголами (Q7), ссылки «Название» (с. N) и поиск по указателю книги (Q1). */
 import type { CompendiumEntry } from "../../types";
-import { norm } from "./litmBookText";
+import { namedConsequence, norm } from "./litmBookText";
 
 export const EFFECT_NAMES: Record<string, string> = {
   ATTACK: "Атаковать", DISRUPT: "Помешать", INFLUENCE: "Повлиять", WEAKEN: "Подорвать",
@@ -161,6 +161,9 @@ export function grimGive(text: string): GrimGive {
   return {
     statuses,
     scratch: /вычеркн[а-я]*\s+тег/i.test(text),
-    named: [...text.matchAll(/\*\*([^*]+)\*\*/g)].map((m) => m[1].trim()),
+    named: [...text.matchAll(/\*\*([^*]+)\*\*/g)].flatMap((m) => {
+      const type = namedConsequence(m[1]);
+      return type ? [type.name] : [];
+    }),
   };
 }

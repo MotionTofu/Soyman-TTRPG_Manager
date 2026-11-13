@@ -1,7 +1,20 @@
 /** Слова и правила «сказочной книги» LitM без разметки — их делят каталоги и профиль. */
 import type { SystemSection } from "../../types";
 
-export const NAMED_CONSEQUENCES = new Set(["Заблокировано", "Разоблачение", "Дурные вести", "Новый вызов", "Осложнение", "«Да, но…»"]);
+const CONSEQUENCE_TYPES = [
+  { key: "blocked", name: "Возможность закрыта", alias: "Заблокировано" },
+  { key: "revelation", name: "Обнаружение", alias: "Разоблачение" },
+  { key: "ill_tidings", name: "Дурные вести" },
+  { key: "new_challenge", name: "Новый вызов" },
+  { key: "complication", name: "Осложнение" },
+  { key: "yes_but", name: "Да, но…" },
+  { key: "negative_effects", name: "Негативные эффекты" },
+] as const;
+
+export function namedConsequence(text: string) {
+  const key = norm(text.trim().replace(/[«»„“”"]/g, "").replace(/:\s*$/, "").replace(/\.\.\./g, "…"));
+  return CONSEQUENCE_TYPES.find((c) => c.key === key || norm(c.name) === key || ("alias" in c && norm(c.alias) === key));
+}
 
 export type LitmMight = "origin" | "adventure" | "greatness" | "variable";
 

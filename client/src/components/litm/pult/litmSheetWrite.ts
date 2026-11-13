@@ -24,25 +24,34 @@ export function patchLitmSheet(
   characterId: number,
   label: string,
   fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null,
-  log?: SheetLog
-): Promise<void> {
-  const run = (queue.get(characterId) ?? Promise.resolve()).then(() => patchNow(characterId, label, fields, log));
+  log?: SheetLog,
+  retry = true,
+): Promise<boolean> {
+  const run = (queue.get(characterId) ?? Promise.resolve()).then(() => patchNow(characterId, label, fields, log, retry));
   queue.set(characterId, run);
   return run;
 }
 
-const queue = new Map<number, Promise<void>>();
+const queue = new Map<number, Promise<boolean>>();
+
+export function findLitmSheet(rows: readonly Statblock[] | undefined): Statblock | undefined {
+  return rows?.find((row) => row.format === "litm_character" && !row.archived_at);
+}
 
 async function patchNow(
   characterId: number,
   label: string,
   fields: (data: LitMCharacterData) => Partial<LitMCharacterData> | null,
-  log?: SheetLog
-): Promise<void> {
+  log: SheetLog | undefined,
+  retry: boolean,
+): Promise<boolean> {
   try {
     const rows = await readResource<Statblock[]>(statblockListPath("character", characterId), { fresh: true });
-    const sb = rows.find((s) => s.format === "litm_character");
-    if (!sb) return;
+    const sb = findLitmSheet(rows);
+    if (!sb) {
+      showSaveError(`${label} — у героя нет листа`);
+      return false;
+    }
     let raw: unknown = {};
     try {
       raw = JSON.parse(sb.content || "{}");
@@ -51,21 +60,24 @@ async function patchNow(
     }
     const data = normalizeCharacter(raw);
     const patch = fields(data);
-    if (!patch) return;
+    if (!patch || !Object.keys(patch).length) return true;
     await write.put(`/statblocks/${sb.id}`, { contentPatch: patch });
     afterWriteAnywhere(statblockAffects("character", characterId));
     if (log) logLitm(log.sessionId, label, sheetChange(characterId, log.name, data, { ...data, ...patch }));
+    return true;
   } catch (error) {
-    showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`, () => patchLitmSheet(characterId, label, fields, log));
+    showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`,
+      retry ? () => patchLitmSheet(characterId, label, fields, log) : undefined);
+    return false;
   }
 }
 
 const NO_STATBLOCKS: Statblock[] = [];
 
 /** Лист героя LitM для пульта: читается сам, `null` — листа нет. */
-export function useLitmSheet(characterId: number): LitMCharacterData | null {
-  const rows = useResource<Statblock[]>(statblockListPath("character", characterId)).data ?? NO_STATBLOCKS;
-  const sb = rows.find((s) => s.format === "litm_character");
+export function useLitmSheet(characterId: number | undefined): LitMCharacterData | null {
+  const rows = useResource<Statblock[]>(characterId ? statblockListPath("character", characterId) : null).data ?? NO_STATBLOCKS;
+  const sb = findLitmSheet(rows);
   return useMemo(() => {
     if (!sb) return null;
     try {

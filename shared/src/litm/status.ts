@@ -50,6 +50,23 @@ export function reduceMarks(marks: readonly number[], by: number): number[] {
   return cleanMarks(marks.map((m) => m - n));
 }
 
+/** При столкновении противоположных статусов остаётся разница уровней. */
+export function opposeStatus(marks: readonly number[], tier: number): { marks: number[]; reversed: boolean } {
+  const incoming = clampTier(tier);
+  const current = statusTier(marks);
+  return incoming > current
+    ? { marks: [incoming - current], reversed: true }
+    : { marks: reduceMarks(marks, incoming), reversed: false };
+}
+
+export function giveOppositeStatus(list: readonly LitmStatus[], name: string, tier: number, opposite: string): LitmStatus[] {
+  const prior = list.find((s) => sameStatus(s.name, opposite));
+  if (!prior || sameStatus(prior.name, name)) return giveStatus(list, name, tier);
+  const result = opposeStatus(prior.marks, tier);
+  if (result.reversed) return giveStatus(list.filter((s) => s !== prior), name, statusTier(result.marks));
+  return list.flatMap((s) => s !== prior ? [s] : result.marks.length ? [{ ...s, marks: result.marks }] : []);
+}
+
 /** Одинаковое имя — без регистра, лишних пробелов и «ё/е». */
 export function sameStatus(a: string, b: string): boolean {
   const norm = (s: string) => s.trim().toLocaleLowerCase("ru").replace(/ё/g, "е").replace(/\s+/g, " ");
@@ -85,13 +102,24 @@ export function reduceStatus(list: readonly LitmStatus[], name: string, by: numb
   });
 }
 
+/** Сначала снять выбранную защиту. Только свободные уровни можно дать против Предела. */
+export function spendStatusDefense(list: LitmStatus[], tier: number, defense?: string) {
+  const protectedBy = defense ? list.find((s) => sameStatus(s.name, defense)) : undefined;
+  const spent = Math.min(tier, protectedBy ? statusTier(protectedBy.marks) : 0);
+  return {
+    statuses: protectedBy && spent ? reduceStatus(list, protectedBy.name, spent) : list,
+    spent,
+    remaining: tier - spent,
+  };
+}
+
 /**
  * Статус из разметки книги: «*настороже-1*», «застигнут-врасплох-3».
  * Имя может содержать дефисы — уровень только последнее число.
  */
 export function parseStatusTag(text: string): { name: string; tier: number } | null {
   const m = /^\*?\s*(.+?)-([1-6])\s*\*?$/.exec(text.trim());
-  if (!m || m[1].includes("*")) return null;
+  if (!m || m[1].includes("*") || /\sили\s/i.test(m[1])) return null;
   return { name: m[1].trim(), tier: Number(m[2]) };
 }
 

@@ -17,7 +17,7 @@ import {
 import "../litm-book.css";
 import "./litm-pult.css";
 
-type Sheet = (id: number, label: string, fields: Parameters<typeof patchLitmSheet>[2]) => Promise<void>;
+type Sheet = typeof patchLitmSheet;
 /** Правка привала; `tags` — новые сюжетные теги сцены той же записью (шаг «Рюкзак»). */
 type CampChange = (label: string, next: LitmCampState | null, tags?: LitmStoryTag[]) => void;
 

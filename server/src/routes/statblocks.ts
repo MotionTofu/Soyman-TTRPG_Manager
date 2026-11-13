@@ -265,22 +265,59 @@ function syncCharacterName(ownerType: string, ownerId: number, format: string, c
 }
 
 statblocksRouter.post("/", (req, res) => {
-  const { owner_type, owner_id, kind, format, content, note } = req.body as {
+  const { owner_type, owner_id, kind, format, content, note, creation_key } = req.body as {
     owner_type: string;
     owner_id: number;
     kind?: string;
     format?: string;
     content?: string;
     note?: string;
+    creation_key?: string;
   };
   if (!owner_type || !owner_id)
     return res.status(400).json({ error: "owner_type and owner_id are required" });
+  if (creation_key !== undefined && (
+    owner_type !== "character" || format !== "litm_character" ||
+    typeof creation_key !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(creation_key)
+  )) {
+    return res.status(400).json({ error: "Некорректный ключ создания листа LitM" });
+  }
+  let nextContent = content ?? "";
+  if (creation_key !== undefined) {
+    const campaign = db.prepare(
+      "SELECT c.group_theme_litm FROM characters h LEFT JOIN campaigns c ON c.id = h.campaign_id WHERE h.id = ?"
+    ).get(owner_id) as { group_theme_litm: string | null } | undefined;
+    if (!campaign) return res.status(404).json({ error: "Персонаж не найден" });
+    let sheet: Record<string, unknown>;
+    try {
+      sheet = JSON.parse(nextContent);
+      if (!sheet || typeof sheet !== "object" || Array.isArray(sheet)) throw new Error();
+    } catch {
+      return res.status(400).json({ error: "Лист LitM должен быть объектом JSON" });
+    }
+    if (campaign.group_theme_litm) {
+      try {
+        sheet.fellowshipTheme = JSON.parse(campaign.group_theme_litm);
+      } catch {
+        // В старой кампании может быть повреждённая общая тема.
+      }
+    }
+    nextContent = JSON.stringify(sheet);
+  }
   const info = db
     .prepare(
-      `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))`
+      `INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note, updated_at, creation_key)
+       VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'), ?)
+       ON CONFLICT (owner_type, owner_id, creation_key) DO NOTHING`
     )
-    .run(owner_type, owner_id, kind ?? "full", format ?? "text", content ?? "", note ?? "");
+    .run(owner_type, owner_id, kind ?? "full", format ?? "text", nextContent, note ?? "", creation_key ?? null);
+  if (!info.changes) {
+    // Ответ первого запроса мог потеряться. Повтор возвращает тот же лист,
+    // в том числе если его успели отредактировать после создания.
+    const existing = db.prepare("SELECT * FROM statblocks WHERE owner_type = ? AND owner_id = ? AND creation_key = ?")
+      .get(owner_type, owner_id, creation_key) as { avatar_image_path: string | null };
+    return res.json(withAvatarUrl(existing));
+  }
   const row = db.prepare("SELECT * FROM statblocks WHERE id = ?").get(info.lastInsertRowid) as {
     owner_type: string;
     owner_id: number;
@@ -292,7 +329,8 @@ statblocksRouter.post("/", (req, res) => {
   if (row.owner_type === "compendium_entry" && row.format === "dnd_creature") {
     syncCreatureDataFromStatblock(db, row.owner_id);
   }
-  syncCharacterName(row.owner_type, row.owner_id, row.format, content);
+  syncCharacterName(row.owner_type, row.owner_id, row.format, nextContent);
+  if (creation_key !== undefined) broadcastCharacterUpdate(row.owner_id, "sheet");
   res.status(201).json(withAvatarUrl(row));
 });
 

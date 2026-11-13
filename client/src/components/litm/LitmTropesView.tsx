@@ -113,7 +113,6 @@ export function LitmTropesView({ systemId, entries, selectedId, onSelect }: {
                 onClick={() => addToBag({ type: "compendium_entry", id: trope.id, title: trope.name, kind: trope.kind, system_id: trope.system_id, section_id: trope.section_id })}>
                 В мешок
               </button>
-              <Link className="d-btn d-btn--sm" to={`/compendium/${trope.id}`}>Править</Link>
               <button type="button" className="d-btn d-btn--sm" onClick={() => onSelect(undefined)}>Свернуть ▴</button>
             </span>
           </div>

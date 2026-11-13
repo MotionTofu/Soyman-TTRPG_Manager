@@ -102,15 +102,16 @@ export function useLitmRibbon(sessionId: number) {
   }
 
   /** Правка строки — на экран сразу, в лог конфликта (Q15) — когда записалась. */
-  async function setRow(row: InitiativeEntry, label: string, state: unknown, turn = false) {
+  async function setRow(row: InitiativeEntry, label: string, state: unknown, turn = false, compare = false) {
     const changes = rowChange(row, state);
-    const ok = await change(label, () => write.put(`/initiative-entries/${row.id}`, { state }), patchRow(row.id, { state: JSON.stringify(state) }));
+    const ok = await change(label, () => write.put(`/initiative-entries/${row.id}`, { state, ...(compare ? { expectedState: row.state } : {}) }), patchRow(row.id, { state: JSON.stringify(state) }));
     if (ok) logLitm(sessionId, label, changes, turn);
+    else if (compare) void client.invalidateQueries({ queryKey: dataKeys.resource(path) });
     return ok;
   }
 
-  function setChallenge(row: InitiativeEntry, label: string, state: LitmChallengeState) {
-    return setRow(row, label, state);
+  function setChallenge(row: InitiativeEntry, label: string, state: LitmChallengeState, compare = false) {
+    return setRow(row, label, state, false, compare);
   }
 
   /** Полоса «Сцена» — одна строка на сессию, заводится первой правкой. `turn` — передача спотлайта. */

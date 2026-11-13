@@ -1,15 +1,11 @@
 import type { LitMChallengeData } from "../../types";
-import { useEffect, useState } from "react";
 import { PipTrack } from "./PipTrack";
 import { LitmChallengeProfile } from "./LitmChallengeProfile";
 import { Rating, Roles } from "./LitmBook";
-import { profileFromContent } from "./litmChallenge";
+import { profileFromContent, ROLE_ORDER } from "./litmChallenge";
+import { MIGHT_NAMES } from "./litmBookText";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
-import {
-  findLitmSystemId,
-  loadLitmRefItemsByGroup,
-} from "./litmCompendium";
 
 export function emptyChallenge(): LitMChallengeData {
   return {
@@ -31,20 +27,14 @@ export function LitMChallengeEdit({
   value: LitMChallengeData;
   onChange: (v: LitMChallengeData) => void;
 }) {
-  const [roles, setRoles] = useState<string[]>([]);
-  const [mightLevels, setMightLevels] = useState<{ value: string; label: string }[]>([]);
-
-  useEffect(() => {
-    findLitmSystemId().then(async (sysId) => {
-      if (!sysId) return;
-      const [roleItems, mightItems] = await Promise.all([
-        loadLitmRefItemsByGroup(sysId, "Роли угроз"),
-        loadLitmRefItemsByGroup(sysId, "Могущество и Темы"),
-      ]);
-      setRoles(roleItems.map(r => r.name).sort());
-      setMightLevels(mightItems.map(m => ({ value: String(m.data.level ?? m.data.might ?? ""), label: m.name })).filter(m => m.value));
-    });
-  }, []);
+  const structured = Array.isArray(value.roles);
+  const legacyRoles = value.role ? [value.role] : [];
+  const selectedRoles = structured ? value.roles?.length ? value.roles : legacyRoles : legacyRoles;
+  const roles = [...new Set([...ROLE_ORDER, ...selectedRoles])];
+  const toggleRole = (role: string) => {
+    const next = selectedRoles.includes(role) ? selectedRoles.filter((r) => r !== role) : [...selectedRoles, role];
+    onChange({ ...value, roles: next, role: next.join(", ") });
+  };
 
   return (
     <div className="stack">
@@ -52,17 +42,29 @@ export function LitMChallengeEdit({
         Название угрозы
         <input value={value.title} onChange={(e) => onChange({ ...value, title: e.target.value })} />
       </label>
-      <label>
-        Роль (Role)
-        <select value={value.role} onChange={(e) => onChange({ ...value, role: e.target.value })}>
-          <option value="">— выберите роль —</option>
-          {roles.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-      </label>
+      {structured ? (
+        <fieldset className="lb-ed__roles">
+          <legend>Роли</legend>
+          {roles.map((role) => (
+            <label key={role} className="lb-ed__chip">
+              <input type="checkbox" checked={selectedRoles.includes(role)} onChange={() => toggleRole(role)} />
+              {role}
+            </label>
+          ))}
+        </fieldset>
+      ) : (
+        <label>
+          Роль (Role)
+          <select value={value.role} onChange={(e) => onChange({ ...value, role: e.target.value })}>
+            <option value="">— выберите роль —</option>
+            {roles.map((role) => <option key={role} value={role}>{role}</option>)}
+          </select>
+        </label>
+      )}
       <label className="row">
         Ступень могущества (Might Level)
         <select value={value.mightLevel} onChange={(e) => onChange({ ...value, mightLevel: e.target.value as "origin" | "adventure" | "greatness" | "variable" })}>
-          {mightLevels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          {Object.entries(MIGHT_NAMES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
       </label>
       <label className="row">

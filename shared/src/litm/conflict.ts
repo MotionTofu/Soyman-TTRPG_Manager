@@ -7,10 +7,15 @@
  * Профиль вызова (статблок `litm_challenge`) не меняется: пульт держит копию
  * пределов и живые отметки (Q6).
  */
-import { giveStatus, normalizeStatuses, parseStatusTag, reduceMarks, stackMarks, statusTier, type LitmStatus } from "./status";
+import { giveStatus, normalizeStatuses, opposeStatus, parseStatusTag, reduceMarks, sameStatus, spendStatusDefense, stackMarks, statusTier, type LitmStatus } from "./status";
 
 export const LITM_CHALLENGE_KIND = "litm_challenge";
 export const LITM_SCENE_KIND = "litm_scene";
+
+export interface LitmLimitSide {
+  status: string;
+  outcome: string;
+}
 
 /** Предел вызова — он же карточка учёта засчитанного статуса (Q8). */
 export interface LitmLimitState {
@@ -20,6 +25,9 @@ export interface LitmLimitState {
   /** Предел со стрелкой ↻: достигнут — вызов меняется, а не уходит. */
   turns: boolean;
   note: string;
+  sides?: LitmLimitSide[];
+  /** Снимаемая защита, назначенная Рассказчиком этому Пределу. */
+  defense?: string;
   /** Имя засчитанного статуса («напуган»); пусто, пока ничего не дали. */
   status: string;
   marks: number[];
@@ -29,6 +37,10 @@ export interface LitmChallengeState {
   limits: LitmLimitState[];
   /** Статусы вне пределов («настороже»). */
   statuses: LitmStatus[];
+  startingOptions?: LitmStatus[][];
+  guardLost?: boolean;
+  /** Отряд, с которым Полководец сейчас сражается. */
+  troopId?: number;
   /** Номер объявленной угрозы профиля (Q12), null — нет. */
   declaredThreat: number | null;
   /** Зачин объявленной угрозы — для плашки «⚠» над лентой. */
@@ -45,6 +57,7 @@ export interface LitmVignette {
   name: string;
   nameEn: string;
   threat: string;
+  narratorNote?: string;
   consequences: string[];
   /** Перекрывает путь — шаг засчитывается только «Одолели» (Q7). */
   blocksPath: boolean;
@@ -120,8 +133,8 @@ export function campDo(c: LitmCampState, heroId: number, a?: LitmCampActivity): 
 
 /** Минимум профиля, из которого собирается строка: пределы и теги книги. */
 export interface LitmProfileSource {
-  limitList?: { name: string; max: string; arrow?: boolean; note?: string }[];
-  tagList?: { text: string }[];
+  limitList?: { name: string; max: string; arrow?: boolean; note?: string; sides?: LitmLimitSide[] }[];
+  tagList?: { text: string; alternatives?: string[]; object?: string }[];
 }
 
 /** Строка вызова при добавлении на ленту: пределы из профиля, стартовые
@@ -134,16 +147,27 @@ export function challengeStateFromProfile(p: LitmProfileSource): LitmChallengeSt
       max: Number.isFinite(n) && n >= 1 ? Math.min(n, 6) : null,
       turns: !!l.arrow || !!l.note?.trim(),
       note: l.note ?? "",
+      ...(l.sides?.length ? { sides: l.sides } : {}),
       status: "",
       marks: [],
     };
   });
   let statuses: LitmStatus[] = [];
+  const startingOptions: LitmStatus[][] = [];
   for (const t of p.tagList ?? []) {
+    if (t.object) continue;
+    if (t.alternatives?.length) {
+      const options = t.alternatives.flatMap((value) => {
+        const option = parseStatusTag(value);
+        return option ? [{ name: option.name, marks: [option.tier] }] : [];
+      });
+      if (options.length) startingOptions.push(options);
+      continue;
+    }
     const s = parseStatusTag(t.text);
     if (s) statuses = giveStatus(statuses, s.name, s.tier);
   }
-  return { limits, statuses, declaredThreat: null, declaredLead: "", addons: [], vignette: null };
+  return { limits, statuses, ...(startingOptions.length ? { startingOptions } : {}), declaredThreat: null, declaredLead: "", addons: [], vignette: null };
 }
 
 /** Строка ленты для виньетки: без пределов и статусов. */
@@ -160,12 +184,31 @@ export function limitReached(l: Pick<LitmLimitState, "max" | "marks">): boolean 
 }
 
 /** Засчитать статус против предела (сложение по книге). У «—» не засчитывается. */
-export function giveToLimit(state: LitmChallengeState, index: number, status: string, tier: number): LitmChallengeState {
+export function giveToLimit(state: LitmChallengeState, index: number, status: string, tier: number, defense?: string | null): LitmChallengeState {
   const l = state.limits[index];
   if (!l || l.max == null) return state;
+  const name = status.trim();
+  const side = l.sides?.find((s) => sameStatus(s.status, name));
+  if (l.sides?.length && !side) return state;
+  const assignedDefense = defense === undefined ? l.defense : defense;
+  const protectedBy = assignedDefense && !sameStatus(name, assignedDefense) ? assignedDefense : undefined;
+  const { statuses, remaining } = spendStatusDefense(state.statuses, tier, protectedBy);
   const limits = state.limits.slice();
-  limits[index] = { ...l, status: l.status || status.trim(), marks: stackMarks(l.marks, tier) };
-  return { ...state, limits };
+  const { defense: _previous, ...limit } = l;
+  const linked = protectedBy ? { ...limit, defense: protectedBy } : limit;
+  if (!remaining) {
+    limits[index] = linked;
+    return { ...state, statuses, limits };
+  }
+  const opposing = side && l.status && !sameStatus(side.status, l.status);
+  const result = opposing ? opposeStatus(l.marks, remaining) : { marks: stackMarks(l.marks, remaining), reversed: false };
+  const active = result.reversed ? side?.status ?? name : l.status || side?.status || name;
+  limits[index] = { ...linked, status: result.marks.length ? active : "", marks: result.marks };
+  return { ...state, statuses, limits };
+}
+
+export function limitOutcome(l: LitmLimitState): string {
+  return l.sides?.find((side) => sameStatus(side.status, l.status))?.outcome ?? l.note;
 }
 
 /** Ослабить статус предела («снять 1 уровень с *убежать*»). */
@@ -270,10 +313,15 @@ export function parseChallengeState(raw: string | null | undefined): LitmChallen
       max: typeof l.max === "number" ? l.max : null,
       turns: !!l.turns,
       note: String(l.note ?? ""),
+      ...(Array.isArray(l.sides) ? { sides: l.sides.filter((s) => typeof s?.status === "string" && typeof s.outcome === "string") } : {}),
+      ...(typeof l.defense === "string" && l.defense.trim() ? { defense: l.defense.trim() } : {}),
       status: String(l.status ?? ""),
       marks: arr<number>(l.marks).filter((m) => Number.isInteger(m) && m >= 1 && m <= 6),
     })),
     statuses: normalizeStatuses(o.statuses),
+    ...(Array.isArray(o.startingOptions) ? { startingOptions: o.startingOptions.map(normalizeStatuses).filter((options) => options.length) } : {}),
+    ...(o.guardLost === true ? { guardLost: true } : {}),
+    ...(typeof o.troopId === "number" && Number.isSafeInteger(o.troopId) && o.troopId > 0 ? { troopId: o.troopId } : {}),
     declaredThreat: typeof o.declaredThreat === "number" ? o.declaredThreat : null,
     declaredLead: typeof o.declaredThreat === "number" ? String(o.declaredLead ?? "") : "",
     addons: arr<number>(o.addons).filter((n) => typeof n === "number"),
@@ -291,6 +339,7 @@ function parseVignette(v: unknown): LitmVignette | null {
     name: o.name,
     nameEn: String(o.nameEn ?? ""),
     threat: String(o.threat ?? ""),
+    ...(typeof o.narratorNote === "string" && o.narratorNote ? { narratorNote: o.narratorNote } : {}),
     consequences: strs(o.consequences),
     blocksPath: o.blocksPath === true,
     journeyId: typeof o.journeyId === "number" ? o.journeyId : null,

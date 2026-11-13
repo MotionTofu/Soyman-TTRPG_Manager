@@ -435,6 +435,7 @@ CREATE TABLE IF NOT EXISTS statblocks (
   theme TEXT, -- statblock visual theme (see statblock themes), NULL = default "Гравюра" (theme-color)
   density TEXT, -- 'comfortable' | 'compact', NULL = comfortable
   avatar_image_path TEXT,
+  creation_key TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

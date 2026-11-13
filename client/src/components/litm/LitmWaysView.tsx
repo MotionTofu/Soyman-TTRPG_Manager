@@ -68,7 +68,6 @@ function WayPage({ way, focusKit, back, grim, inTropes }: {
         <h3>{e.name}{e.name_original && <span className="lb-orig">[{e.name_original}]</span>}</h3>
         <span className="d-end">
           <button type="button" className="d-btn d-btn--sm" onClick={() => bag(e)}>В мешок</button>
-          <Link className="d-btn d-btn--sm" to={`/compendium/${e.id}`}>Править</Link>
         </span>
       </div>
       <div className="lb-file">
@@ -111,7 +110,6 @@ function ChapterPage({ chapter, back, grim }: { chapter: WayChapter; back: strin
       <div className="lb-crumbs"><Link className="lb-back" to={back}>← Пути магии</Link></div>
       <div className="lb-art__head">
         <h3>{e.name}{e.name_original && <span className="lb-orig">[{e.name_original}]</span>}</h3>
-        <span className="d-end"><Link className="d-btn d-btn--sm" to={`/compendium/${e.id}`}>Править</Link></span>
       </div>
       {e.description && <div className="lb-lead"><Paras lines={paras(e.description)} grim={grim} /></div>}
       {chapter.sidebars.length > 0 && <div className="lw-sides"><Sidebars items={chapter.sidebars} grim={grim} /></div>}

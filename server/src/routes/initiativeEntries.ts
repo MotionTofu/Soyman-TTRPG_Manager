@@ -1,8 +1,34 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { mirrorQueueRollToSheet } from "../services/initiativeSync";
+import { COMPOUND_EFFECTS } from "@soyman/shared";
+import { applyLitmCompound, LitmActionError, type CompoundRequest } from "../services/litmCompound";
+import { broadcastCharacterUpdate } from "../services/realtime";
 
 export const initiativeEntriesRouter = Router();
+
+initiativeEntriesRouter.post("/litm-compound", (req, res) => {
+  const { sessionId, ...effect } = req.body ?? {};
+  const isId = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && n > 0;
+  if (!isId(sessionId) || !isId(effect.sourceId) || typeof effect.effect !== "string" || !Object.hasOwn(COMPOUND_EFFECTS, effect.effect)
+    || (effect.target != null && (!["row", "hero"].includes(effect.target.kind) || !isId(effect.target.id)))
+    || (effect.injury != null && (!["status", "limit"].includes(effect.injury.kind) || typeof effect.injury.name !== "string"))
+    || (effect.threat != null && (!Number.isSafeInteger(effect.threat) || effect.threat < 0))
+    || (effect.withTroop != null && typeof effect.withTroop !== "boolean")
+    || (effect.expectedSource != null && typeof effect.expectedSource !== "string")
+    || (effect.expectedTroop != null && typeof effect.expectedTroop !== "string")
+    || (effect.newChallenge != null && (typeof effect.newChallenge !== "string" || effect.newChallenge.length > 160))) {
+    return res.status(400).json({ error: "Некорректные параметры составного Последствия." });
+  }
+  try {
+    const result = applyLitmCompound(sessionId, effect as CompoundRequest);
+    for (const id of result.characterIds) broadcastCharacterUpdate(id, "sheet");
+    res.json(result);
+  } catch (error) {
+    if (!(error instanceof LitmActionError)) throw error;
+    res.status(409).json({ error: error.message });
+  }
+});
 
 initiativeEntriesRouter.get("/", (req, res) => {
   const { session_id } = req.query as { session_id?: string };
@@ -60,7 +86,7 @@ initiativeEntriesRouter.post("/", (req, res) => {
 });
 
 initiativeEntriesRouter.put("/:id", (req, res) => {
-  const { initiative, name, max_hp, current_hp, temp_hp, dead, conditions, state } = req.body as {
+  const { initiative, name, max_hp, current_hp, temp_hp, dead, conditions, state, expectedState } = req.body as {
     initiative?: number | null;
     name?: string;
     max_hp?: number | null;
@@ -71,9 +97,14 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     // Состояние гнезда боевого режима целиком (см. schema.sql): клиент шлёт
     // объект после своей правки, сервер его не разбирает.
     state?: Record<string, unknown>;
+    expectedState?: string | null;
   };
   if (state !== undefined && (state === null || typeof state !== "object" || Array.isArray(state)))
     return res.status(400).json({ error: "state должен быть объектом" });
+  if (expectedState !== undefined) {
+    const row = db.prepare("SELECT state FROM initiative_entries WHERE id = ?").get(req.params.id) as { state: string | null } | undefined;
+    if (!row || row.state !== expectedState) return res.status(409).json({ error: "Гнездо уже изменилось. Откройте его заново." });
+  }
   // initiative через CASE, а не COALESCE: стирание числа шлёт null, и
   // COALESCE молча оставлял бы прежнее — Мастер стирает, а число возвращается.
   db.prepare(

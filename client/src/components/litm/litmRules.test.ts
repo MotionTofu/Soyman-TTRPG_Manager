@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CompendiumEntry } from "../../types";
 import { norm } from "./litmBookText";
-import { isCard, isTerm, rulesOf, searchRules, snippet } from "./litmRules";
+import { isCard, isTerm, ruleEntry, rulesOf, searchRules, snippet } from "./litmRules";
 
 const entry = (id: number, kind: string, name: string, parent: number | null, position: number, data: Record<string, unknown> = {}, description = "") =>
   ({ id, kind, name, name_original: name, parent_id: parent, position, data, description }) as unknown as CompendiumEntry;
@@ -38,5 +38,15 @@ describe("Справочник LitM", () => {
     expect(searchRules(all, "агрес").map((h) => h.article.entry.id)).toEqual([10]);
     expect(searchRules(all, "дорожка")[0]).toMatchObject({ phrase: "(с. 75) Дорожка на теме", rank: 2 });
     expect(snippet("• Статус *ранен-3* мешает", norm("ранен"))).toBe("Статус ранен-3 мешает");
+  });
+
+  it("ищет переименованное Последствие по старой метке и различает правило и словарь по странице", () => {
+    const rule = entry(17379, "mechanic_item", "Последствия", 1, 1, { page: "A160–A161" });
+    const glossary = entry(17405, "mechanic_item", "Последствия", 1, 2, { page: "A231" });
+    expect(ruleEntry([rule, glossary], "Последствия", "A160")).toBe(rule);
+    expect(ruleEntry([rule, glossary], "Последствия", "A231")).toBe(glossary);
+    const renamed = { ...entry(15017, "mechanic_consequence_item", "Возможность закрыта", 1, 3), aliases: ["Заблокировано"] };
+    const [group] = rulesOf([groups[0].entry, renamed]);
+    expect(searchRules(group.articles, "заблокировано").map(({ article }) => article.entry.id)).toEqual([15017]);
   });
 });

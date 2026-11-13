@@ -1,15 +1,52 @@
 import { describe, expect, it } from "vitest";
+import { consequenceAdjustment, consequenceTier } from "./consequence";
+import { BOOK_POLAR_LIMITS, updateRibbonLimit } from "./compound";
 import {
   formatStatus,
+  giveOppositeStatus,
   giveStatus,
   heroCondition,
   normalizeStatuses,
   parseStatusTag,
   reduceMarks,
   reduceStatus,
+  spendStatusDefense,
   stackMarks,
   statusTier,
 } from "./status";
+
+describe("Могущество источника Последствий", () => {
+  it("сравнивает ступени источника с Героем и ограничивает итог Эффекта", () => {
+    expect(consequenceAdjustment("greatness", "origin")).toEqual({ tiers: 6, tags: 3 });
+    expect(consequenceAdjustment("adventure", "origin")).toEqual({ tiers: 3, tags: 1 });
+    expect(consequenceAdjustment("origin", "adventure")).toEqual({ tiers: -3, tags: -1 });
+    expect(consequenceAdjustment("origin", "greatness")).toEqual({ tiers: -6, tags: -3 });
+    expect(consequenceAdjustment("origin", "origin")).toEqual({ tiers: 0, tags: 0 });
+    expect(consequenceAdjustment("greatness", "")).toEqual({ tiers: 0, tags: 0 });
+    expect(consequenceAdjustment("adventure", "origin", true)).toEqual({ tiers: 2, tags: 1 });
+    expect(consequenceTier(3, 6, 6)).toBe(6);
+    expect(consequenceTier(2, -3, 6)).toBe(0);
+    expect(consequenceTier(1, 3)).toBe(4);
+  });
+
+  it("тратит уровни только на выбранную защиту и сохраняет остальные отметки", () => {
+    const statuses = [{ name: "защищён", marks: [1, 3] }, { name: "настороже", marks: [2] }];
+    expect(spendStatusDefense(statuses, 1, "защищен")).toEqual({
+      statuses: [{ name: "защищён", marks: [2] }, statuses[1]], spent: 1, remaining: 0,
+    });
+    expect(spendStatusDefense(statuses, 4, "защищён")).toEqual({ statuses: [statuses[1]], spent: 3, remaining: 1 });
+  });
+});
+
+it("переносит все отметки двустороннего Предела только на известную или выбранную сторону", () => {
+  const definition = BOOK_POLAR_LIMITS.Kraken;
+  const profile = challengeStateFromProfile({ limitList: [{ ...definition, max: "5", arrow: true }] }).limits[0];
+  const saved = { ...profile, sides: undefined, status: definition.name, marks: [2, 5], defense: "течение" };
+  expect(updateRibbonLimit(saved, profile)).toBeNull();
+  expect(updateRibbonLimit(saved, profile, "сбежать")).toMatchObject({ status: "сбежать", marks: [2, 5], defense: "течение" });
+  expect(updateRibbonLimit({ ...saved, status: "проглочен" }, profile)).toMatchObject({ status: "проглотить", marks: [2, 5] });
+  expect(updateRibbonLimit({ ...saved, status: "", marks: [] }, profile)).toMatchObject({ status: "", marks: [], sides: definition.sides });
+});
 import {
   campDo,
   campPeriod,
@@ -17,6 +54,7 @@ import {
   challengeStateFromProfile,
   giveToLimit,
   journeyArrived,
+  limitOutcome,
   overcomeBy,
   parseChallengeState,
   parseSceneState,
@@ -30,7 +68,29 @@ import {
   type LitmSpotlight,
 } from "./conflict";
 
+it("снимает защиту до зачёта в Предел и сохраняет назначение при перезагрузке", () => {
+  const start = challengeStateFromProfile({ limitList: [{ name: "Сыт", max: "4" }], tagList: [{ text: "голоден-3" }] });
+  const partial = giveToLimit(start, 0, "сыт", 2, "голоден");
+  expect(partial.statuses).toEqual([{ name: "голоден", marks: [1] }]);
+  expect(partial.limits[0].marks).toEqual([]);
+  const saved = parseChallengeState(JSON.stringify(partial));
+  const equal = giveToLimit(saved, 0, "сыт", 1);
+  expect(equal.statuses).toEqual([]);
+  expect(equal.limits[0].marks).toEqual([]);
+  const overflow = giveToLimit(saved, 0, "сыт", 3);
+  expect(overflow.statuses).toEqual([]);
+  expect(overflow.limits[0]).toMatchObject({ status: "сыт", marks: [2], defense: "голоден" });
+  expect(overcomeBy(giveToLimit(overflow, 0, "сыт", 4))?.name).toBe("Сыт");
+  expect(giveToLimit(saved, 0, "сыт", 2, null).statuses).toEqual(saved.statuses);
+});
+
 describe("статусы LitM — примеры книги (A167–A168)", () => {
+  it("противоположный статус оставляет разницу уровней у сильнейшей стороны", () => {
+    const prior = [{ name: "враждебен", marks: [2, 3] }];
+    expect(giveOppositeStatus(prior, "дружелюбен", 2, "враждебен")).toEqual([{ name: "враждебен", marks: [1] }]);
+    expect(giveOppositeStatus(prior, "дружелюбен", 3, "враждебен")).toEqual([]);
+    expect(giveOppositeStatus(prior, "дружелюбен", 4, "враждебен")).toEqual([{ name: "дружелюбен", marks: [1] }]);
+  });
   it("складывает: отвлечён-2 + отвлечён-4 = 4, отвлечён-2 + отвлечён-2 = 3", () => {
     expect(stackMarks([2], 4)).toEqual([2, 4]);
     expect(statusTier(stackMarks([2], 4))).toBe(4);
@@ -108,6 +168,19 @@ describe("строка вызова", () => {
     s = giveToLimit(s, 0, "задета-честь", 3);
     expect(overcomeBy(s)).toBeNull();
     expect(turnedLimits(s).map((l) => l.name)).toEqual(["Задетая честь"]);
+  });
+
+  it("двусторонний предел гасит уровни и показывает исход достигшей стороны после загрузки", () => {
+    const sides = [{ status: "замысел", outcome: "План исполнен" }, { status: "срыв", outcome: "План сорван" }];
+    const empty = challengeStateFromProfile({ limitList: [{ name: "Исполнить / сорвать замысел", max: "4", arrow: true, sides }] });
+    const started = giveToLimit(empty, 0, "замысел", 3);
+    expect(giveToLimit(started, 0, "срыв", 3).limits[0]).toMatchObject({ status: "", marks: [] });
+    const flipped = giveToLimit(started, 0, "срыв", 5);
+    expect(flipped.limits[0]).toMatchObject({ status: "срыв", marks: [2] });
+    const reloaded = parseChallengeState(JSON.stringify(giveToLimit(flipped, 0, "срыв", 4)));
+    expect(turnedLimits(reloaded).map(limitOutcome)).toEqual(["План сорван"]);
+    expect(turnedLimits(giveToLimit(empty, 0, "замысел", 4)).map(limitOutcome)).toEqual(["План исполнен"]);
+    expect(giveToLimit(empty, 0, "ранен", 4)).toBe(empty);
   });
 
   it("«снять 1 уровень с *убежать*» ослабляет предел", () => {

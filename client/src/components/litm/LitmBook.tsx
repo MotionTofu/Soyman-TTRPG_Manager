@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import "./litm-book.css";
 import { grimMark } from "./litmGrimoire";
-import { MIGHT_NAMES, NAMED_CONSEQUENCES, splitConsequence, type LitmMight } from "./litmBookText";
+import { MIGHT_NAMES, namedConsequence, splitConsequence, type LitmMight } from "./litmBookText";
 
 /** Общие кусочки «сказочной книги» LitM: теги, статусы, ступени, роли, рейтинг
  *  и разбор разметки книги (доска Litm-Language, обзор подачи Q13). */
@@ -37,7 +37,7 @@ const GRIM_REF = /«([^»]+)»\s*\(с\.\s*(\d+)\)/g;
 /** Ссылки Гримуара: статья по «Названию» (с. N), правило корника по **Имени**. */
 export interface GrimLinks {
   article: (name: string, page: number) => string | null;
-  rule: (name: string) => string | null;
+  rule: (name: string, page?: string) => string | null;
 }
 
 /** Разметка книги → вид «сказочной книги»: `*x-3*` — статус с уровнем,
@@ -69,9 +69,10 @@ function RichRun({ text, grim }: { text: string; grim?: GrimLinks }) {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     if (m[1] !== undefined) {
-      const rule = grim && !NAMED_CONSEQUENCES.has(m[1]) ? grim.rule(m[1]) : null;
-      out.push(NAMED_CONSEQUENCES.has(m[1])
-        ? <span key={at} className="lb-cq">{m[1]}</span>
+      const consequence = namedConsequence(m[1]);
+      const rule = grim && !consequence ? grim.rule(m[1]) : null;
+      out.push(consequence
+        ? <span key={at} className="lb-cq">{consequence.name}{m[1].endsWith(":") ? ":" : ""}</span>
         : rule ? <Link key={at} className="lb-ref lb-link" to={rule}>{m[1]}</Link>
         : <b key={at} className="lb-ref">{m[1]}</b>);
     } else if (/^[A-Z][a-z]/.test(m[2])) {

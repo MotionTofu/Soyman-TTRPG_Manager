@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Modal } from "../Modal";
 import { readResource } from "../../data/imperative";
 import { useConfirm } from "../../hooks/useConfirm";
@@ -57,7 +57,7 @@ interface Hero {
  * Визард героя LitM в «Д» (гриллинг 2026-11-13, доски Litm-Wiz-*): путь книги,
  * троп, типы тем, темы набором / анкетой / вручную, рюкзак, отношения, досье,
  * обзор. На ПК окно со столбцом карточки героя; на телефоне — весь экран,
- * карточка шторкой по ◧. Пишет только свои поля листа — патчем.
+ * карточка шторкой по ◧. Черновик остаётся в окне до успешного создания листа.
  */
 export function LitmHeroWizard({
   ownerId,
@@ -71,7 +71,7 @@ export function LitmHeroWizard({
   ownerName?: string;
   ownerPlayerName?: string;
   campaignId?: number;
-  onComplete: (patch: Partial<LitMCharacterData>) => void;
+  onComplete: (fields: Partial<LitMCharacterData>) => Promise<void>;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<HeroDraft>(() => emptyHero(ownerName ?? "", ownerPlayerName ?? ""));
@@ -82,6 +82,9 @@ export function LitmHeroWizard({
   const [store, setStore] = useState<StoreCategory[]>([]);
   const [heroes, setHeroes] = useState<Hero[]>([]);
   const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savingRef = useRef(false);
   const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
@@ -119,10 +122,24 @@ export function LitmHeroWizard({
     setPreview(false);
   };
   const close = async () => {
+    if (savingRef.current) return;
     const touched = draft.path !== null;
     if (!touched || (await confirm({ message: "Закрыть визард? Набранное пропадёт.", confirmLabel: "Закрыть", danger: true }))) onCancel();
   };
-  const finish = () => book && onComplete(buildHero(draft, book, heroes));
+  async function finish() {
+    if (!book || !ready || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onComplete(buildHero(draft, book, heroes));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Не удалось создать лист.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
   const setTheme = (i: number, t: ThemeDraft) => setDraft((d) => ({ ...d, themes: d.themes.map((x, k) => (k === i ? t : x)) }));
 
   let body: ReactNode = <p className="lb-empty">Загрузка справочника…</p>;
@@ -163,7 +180,7 @@ export function LitmHeroWizard({
           <ol>
             {steps.map((s, i) => (
               <li key={s} className={i < at ? "is-done" : i === at ? "is-on" : ""}>
-                <button type="button" disabled={i > reached} onClick={() => go(i)} aria-current={i === at ? "step" : undefined}>
+                <button type="button" disabled={saving || i > reached} onClick={() => go(i)} aria-current={i === at ? "step" : undefined}>
                   {stepLabel(s)}
                 </button>
               </li>
@@ -175,7 +192,10 @@ export function LitmHeroWizard({
           </button>
         </nav>
         <div className={`lhw-body${step === "review" ? " is-wide" : ""}`}>
-          <section className="lhw-main">{body}</section>
+          <section className="lhw-main">
+            {saveError && <p className="sb-save-status is-error" role="alert">{saveError}</p>}
+            {body}
+          </section>
           {book && step !== "review" && (
             <aside className={`lhw-prev${preview ? " is-open" : ""}`} aria-label="Карточка героя">
               <HeroCard draft={draft} book={book} heroes={heroes} />
@@ -186,12 +206,12 @@ export function LitmHeroWizard({
           )}
         </div>
         <footer className="lhw-foot">
-          <button type="button" className="d-btn" onClick={() => (at ? go(at - 1) : void close())}>
+          <button type="button" className="d-btn" disabled={saving} onClick={() => (at ? go(at - 1) : void close())}>
             {at ? "← Назад" : "Отмена"}
           </button>
           <span className="lhw-hint">{hint}</span>
-          <button type="button" className="d-btn d-btn--primary" disabled={!ready} onClick={() => (last ? finish() : go(at + 1))}>
-            {last ? "Создать героя" : step === "relations" && Object.values(draft.relations).every((t) => !t.trim()) ? "Пропустить →" : "Далее →"}
+          <button type="button" className="d-btn d-btn--primary" disabled={saving || !ready} onClick={() => (last ? void finish() : go(at + 1))}>
+            {last ? (saving ? "Создаём…" : "Создать героя") : step === "relations" && Object.values(draft.relations).every((t) => !t.trim()) ? "Пропустить →" : "Далее →"}
           </button>
         </footer>
       </div>

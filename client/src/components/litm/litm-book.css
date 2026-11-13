@@ -168,8 +168,7 @@
   .lb-prof__side { order: -1; }
 }
 
-/* ── Вид раздела: каталог / список ── */
-.lb-viewbar { display: flex; gap: var(--sp-5); align-items: center; margin: 0 0 var(--sp-5); }
+/* ── Навигация внутри каталога ── */
 .lb-back { background: none; border: 0; padding: 0; color: var(--lb-muted); font: inherit; font-size: var(--fs-meta); cursor: pointer; text-decoration: underline; }
 .lb-crumbs { display: flex; gap: var(--sp-4); align-items: baseline; font-size: var(--fs-meta); color: var(--lb-muted); margin: 0 0 var(--sp-3); }
 

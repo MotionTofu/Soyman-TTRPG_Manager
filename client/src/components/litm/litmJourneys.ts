@@ -1,7 +1,7 @@
 /** Путешествия LitM (доски Litm-Journey): правило, местности, события, предприятия и общие дорожные виньетки (кн. II). */
 import type { CompendiumEntry } from "../../types";
 
-export interface Vignette { name: string; nameEn: string; threat: string; consequences: string[]; blocksPath: boolean }
+export interface Vignette { name: string; nameEn: string; threat: string; narratorNote?: string; consequences: string[]; blocksPath: boolean }
 export interface Journey {
   entry: CompendiumEntry; kind: string; page: string; tags: string[];
   consequences: string[]; benefits: string; vignettes: Vignette[];
@@ -16,7 +16,7 @@ const strs = (v: unknown) => arr<unknown>(v).filter((s): s is string => typeof s
 const byPos = (a: CompendiumEntry, b: CompendiumEntry) => a.position - b.position || a.id - b.id;
 
 const vignettes = (v: unknown): Vignette[] => arr<Record<string, unknown>>(v).map((x) => ({
-  name: str(x.name), nameEn: str(x.nameEn), threat: str(x.threat), consequences: strs(x.consequences), blocksPath: x.blocksPath === true,
+  name: str(x.name), nameEn: str(x.nameEn), threat: str(x.threat), narratorNote: str(x.narratorNote) || undefined, consequences: strs(x.consequences), blocksPath: x.blocksPath === true,
 })).filter((x) => x.name);
 
 /** Путешествие из записи книги: теги, общие последствия, виньетки. */

@@ -43,6 +43,7 @@ export function LitmChallengeEditor({ initial, busy, onSave, onCancel }: {
     </span>
   );
   const toggleRole = (r: string) => set("roles", d.roles.includes(r) ? d.roles.filter((x) => x !== r) : [...d.roles, r]);
+  const roles = [...new Set([...ROLE_ORDER, ...initial.roles])];
   const locations = LOCATION_ORDER.includes(d.location) ? LOCATION_ORDER : [d.location, ...LOCATION_ORDER];
 
   return (
@@ -64,14 +65,14 @@ export function LitmChallengeEditor({ initial, busy, onSave, onCancel }: {
       </div>
       <fieldset className="lb-ed__roles">
         <legend className="lb-lbl">Роли</legend>
-        {ROLE_ORDER.map((r) => (
+        {roles.map((r) => (
           <label key={r} className={`lb-ed__chip${d.roles.includes(r) ? " is-on" : ""}`}>
             <input type="checkbox" checked={d.roles.includes(r)} onChange={() => toggleRole(r)} />{r}
           </label>
         ))}
       </fieldset>
       <Field label="Описание"><textarea rows={4} value={d.description} onChange={(e) => set("description", e.target.value)} /></Field>
-      <p className="lb-ed__hint">Разметка книги: <code>*тег*</code>, <code>*статус-2*</code>, <code>**Заблокировано**</code>, <code>**УГРОЗА**</code> — так же покажет профиль.</p>
+      <p className="lb-ed__hint">Разметка книги: <code>*тег*</code>, <code>*статус-2*</code>, <code>**Возможность закрыта**</code>, <code>**УГРОЗА**</code> — так же покажет профиль.</p>
 
       <Section title="Пределы" onAdd={() => add<LitmLimit>("limitList", { name: "", max: "3" })}>
         {d.limitList.map((l, i) => (
@@ -113,10 +114,11 @@ export function LitmChallengeEditor({ initial, busy, onSave, onCancel }: {
         {d.threatList.map((t, i) => (
           <div key={i} className="lb-ed__threat">
             <div className="lb-ed__row lb-ed__row--threat">
-              <input aria-label="Угроза" placeholder="Угроза (глагол)" value={t.name} onChange={(e) => edit<LitmThreat>("threatList", i, { name: e.target.value })} />
-              <input aria-label="Зачин" placeholder="Что видят герои" value={t.lead} onChange={(e) => edit<LitmThreat>("threatList", i, { lead: e.target.value })} />
+              <input aria-label="Угроза" placeholder="Угроза (глагол)" disabled={t.withoutThreat} value={t.name} onChange={(e) => edit<LitmThreat>("threatList", i, { name: e.target.value })} />
+              <input aria-label="Зачин" placeholder="Что видят герои" disabled={t.withoutThreat} value={t.lead} onChange={(e) => edit<LitmThreat>("threatList", i, { lead: e.target.value })} />
               {rowTools("threatList", i, "Угроза")}
             </div>
+            <label><input type="checkbox" checked={!!t.withoutThreat} onChange={(e) => edit<LitmThreat>("threatList", i, { withoutThreat: e.target.checked })} /> Последствия без Угрозы</label>
             <textarea aria-label="Последствия — по одному на строку" rows={Math.max(2, t.consequences.length + 1)} placeholder="Последствия — по одному на строку: Ударить (*ранен-3*)"
               value={t.consequences.join("\n")} onChange={(e) => edit<LitmThreat>("threatList", i, { consequences: e.target.value.split("\n") })} />
           </div>

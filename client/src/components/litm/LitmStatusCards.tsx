@@ -57,7 +57,7 @@ export function LitmStatusCards({
         </div>
       )}
       {beyond ? (
-        <div className="litm-status-down">Необратимо: {formatStatus(beyond)} — гибель или превращение</div>
+        <div className="litm-status-down">Необратимо: {formatStatus(beyond)}</div>
       ) : overcome ? (
         <div className="litm-status-down">Повержен: {formatStatus(overcome)}</div>
       ) : null}

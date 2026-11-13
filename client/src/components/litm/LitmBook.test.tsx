@@ -14,7 +14,7 @@ describe("«сказочная книга» LitM", () => {
   it("renders book markup as statuses, tags, named consequences and threat references", () => {
     expect(html("получить *настороже-1*")).toContain('<span class="lb-st">настороже<b>1</b></span>');
     expect(html("*меч*, *булава* или *копьё*")).toBe('<span class="lb-tg">меч</span>, <span class="lb-tg">булава</span> или <span class="lb-tg">копьё</span>');
-    expect(html("(**Заблокировано**)")).toBe('(<span class="lb-cq">Заблокировано</span>)');
+    expect(html("(**Заблокировано**)")).toBe('(<span class="lb-cq">Возможность закрыта</span>)');
     expect(html("действия **ДУЭЛЬ**")).toContain('<b class="lb-ref">ДУЭЛЬ</b>');
     // статус без уровня в ссылке на него — статус, а не тег
     expect(html("снять два уровня с *ублажён*")).toContain('<span class="lb-st">ублажён</span>');

@@ -57,6 +57,7 @@ function JourneySetup({ journey, onChange }: { journey: LitmJourneyState; onChan
 export function LitmJourneyBar({
   journey,
   current,
+  pathBlocked,
   onChange,
   onCamp,
   onMenu,
@@ -64,6 +65,7 @@ export function LitmJourneyBar({
   journey: LitmJourneyState;
   /** Виньетка этого путешествия на ленте — текущий шаг. */
   current: string | null;
+  pathBlocked: boolean;
   onChange: Change;
   onCamp: () => void;
   onMenu: (e: MouseEvent, items: { label: string; danger?: boolean; onClick: () => void }[]) => void;
@@ -124,7 +126,8 @@ export function LitmJourneyBar({
           <button
             type="button"
             className="d-btn d-btn--sm"
-            title="Засчитать шаг без виньетки"
+            disabled={pathBlocked}
+            title={pathBlocked ? "Путь перекрыт" : "Засчитать шаг без виньетки"}
             onClick={() => onChange(`«${j.name}»: шаг ${j.passed.length + 1} пройден`, passStep(j, current ?? "—", "skip"))}
           >
             Следующий шаг
@@ -210,6 +213,7 @@ export function LitmVignetteNest({
           </p>
         </div>
       )}
+      {v.narratorNote && <p className="lp-vig__thr"><b>Заметка Рассказчика</b><br /><LitmRich text={v.narratorNote} /></p>}
       {v.consequences.length > 0 && (
         <div className="lp-block lb-thr lp-thr">
           <div className="lb-lbl">
@@ -228,7 +232,7 @@ export function LitmVignetteNest({
                           key={i}
                           type="button"
                           className="lp-act"
-                          title="Нажатие — выполнить · ПКМ — открыть «Дать статус»"
+                          title="ПКМ — открыть параметры Последствия"
                           onClick={(e) => onAction(a, e, false)}
                           onContextMenu={(e) => {
                             e.preventDefault();
@@ -255,7 +259,7 @@ export function LitmVignetteNest({
           type="button"
           className="d-btn d-btn--sm"
           disabled={v.blocksPath}
-          title={v.blocksPath ? "Заблокировано — путь перекрыт, дальше только «Одолели»" : undefined}
+          title={v.blocksPath ? "Путь перекрыт. Одолейте виньетку или разрешите переход в меню виньетки." : undefined}
           onClick={() => onPass("consequences")}
         >
           Пройдено с последствиями
@@ -266,7 +270,7 @@ export function LitmVignetteNest({
 }
 
 function toVignette(v: Vignette, journeyId: number | null): LitmVignette {
-  return { name: v.name, nameEn: v.nameEn, threat: v.threat, consequences: v.consequences, blocksPath: v.blocksPath, journeyId };
+  return { name: v.name, nameEn: v.nameEn, threat: v.threat, narratorNote: v.narratorNote, consequences: v.consequences, blocksPath: v.blocksPath, journeyId };
 }
 
 /**

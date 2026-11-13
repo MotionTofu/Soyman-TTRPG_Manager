@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { addToBag } from "../../bag";
 import type { CompendiumEntry } from "../../types";
 import { DSeg } from "../DSeg";
@@ -159,7 +158,6 @@ function ThemePage({ book, kits, level, focusKit, mode, setMode, onSelect }: {
         <span className="d-end">
           {might && <MightMark might={might} />}
           <button type="button" className="d-btn d-btn--sm" onClick={() => bag(book)}>В мешок</button>
-          <Link className="d-btn d-btn--sm" to={`/compendium/${book.id}`}>Править</Link>
         </span>
       </div>
       {typeof d.subtitle === "string" && d.subtitle && <div className="lb-sub">{d.subtitle}</div>}

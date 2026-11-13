@@ -60,13 +60,13 @@ describe("Гримуар действий LitM", () => {
     expect(html).toContain("«Нет такой» (с. 99)");
     expect(html).toContain('<a class="lb-ref lb-link" href="/r" data-discover="true">Полярные статусы</a>');
     expect(html).toContain('<span class="lb-st">отвлечён</span>');
-    expect(html).toContain('<span class="lb-cq">Заблокировано</span>');
+    expect(html).toContain('<span class="lb-cq">Возможность закрыта</span>');
     expect(litmCatalogOf("litm", { id: 1, system_id: 1, position: 0, name: "Гримуар действий", kind: "mechanics", created_at: "" })).toBe("grimoire");
   });
 
   it("takes statuses, scratch and named consequences for the pult drawer", () => {
     expect(grimGive("*измотан*, *обижен* или вычеркнуть тег")).toEqual({ statuses: [{ name: "измотан" }, { name: "обижен" }], scratch: true, named: [] });
-    expect(grimGive("*подозрение*, *тревога* или **Разоблачение**").named).toEqual(["Разоблачение"]);
+    expect(grimGive("*подозрение*, *тревога* или **Разоблачение**").named).toEqual(["Обнаружение"]);
     expect(grimGive("*тупой клинок*, *в-синяках*, *ранен-2*").statuses).toEqual([{ name: "в синяках" }, { name: "ранен", tier: 2 }]);
   });
 });
