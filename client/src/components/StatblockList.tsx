@@ -44,7 +44,7 @@ import { emptyDndCharacter, normalizeDndCharacter, DndCharacterView } from "./dn
 import { classAndLevelSummary } from "./dnd/dndSummary";
 import { stripLatin } from "./dnd/sheetShared";
 import { findDndSystemId } from "./dnd/dndCompendium";
-import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
+import { LitmHeroWizard } from "./litm/LitmHeroWizard";
 import { DndCharacterWizard, clearWizardDraftFor, hasWizardDraftFor, type WizardRandom } from "./dnd/DndCharacterWizard";
 import { D20_ICON, RandomHeroDialog } from "./dnd/RandomHeroDialog";
 import { SheetTopBar, type SheetMenuExtra } from "./dnd/SheetTopBar";
@@ -988,14 +988,17 @@ export function StatblockList({
           />
         )}
         {showLitmWizard && (
-          <LitMCharacterWizard
+          <LitmHeroWizard
+            ownerId={ownerType === "character" ? ownerId : undefined}
             ownerName={ownerName}
             ownerPlayerName={ownerPlayerName}
-            onComplete={(data) => {
+            campaignId={campaignId}
+            onComplete={(patch) => {
               setShowLitmWizard(false);
               if (litmWizardStatblockId) {
+                // Патчем: тема Содружества кампании, положенная при создании листа, остаётся.
                 void run(
-                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { content: JSON.stringify(data) }),
+                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { contentPatch: patch }),
                   { affects: statblockAffects(ownerType, ownerId) }
                 );
               }
@@ -1397,14 +1400,17 @@ export function StatblockList({
         />
       )}
         {showLitmWizard && (
-          <LitMCharacterWizard
+          <LitmHeroWizard
+            ownerId={ownerType === "character" ? ownerId : undefined}
             ownerName={ownerName}
             ownerPlayerName={ownerPlayerName}
-            onComplete={(data) => {
+            campaignId={campaignId}
+            onComplete={(patch) => {
               setShowLitmWizard(false);
               if (litmWizardStatblockId) {
+                // Патчем: тема Содружества кампании, положенная при создании листа, остаётся.
                 void run(
-                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { content: JSON.stringify(data) }),
+                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { contentPatch: patch }),
                   { affects: statblockAffects(ownerType, ownerId) }
                 );
               }

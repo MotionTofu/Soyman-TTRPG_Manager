@@ -1,19 +1,9 @@
-import { memo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import type { LitMPower, LitMThemeCard } from "../../types";
-import { TagList } from "./TagList";
-import { TrackGroup } from "./TrackGroup";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
-import { findLitmSystemId, loadLitmThemeKits, mightLabel, type LitmThemeKit, type LitmTreasure } from "./litmCompendium";
-
-const POWER_CLASS: Record<LitMPower, string> = {
-  "": "",
-  origin: "litm-power-origin",
-  adventure: "litm-power-adventure",
-  greatness: "litm-power-greatness",
-  variable: "litm-power-variable",
-};
+import { findLitmSystemId, loadLitmThemeKits, type LitmThemeKit, type LitmTreasure } from "./litmCompendium";
 
 export function emptyTheme(): LitMThemeCard {
   return {
@@ -132,7 +122,7 @@ function ThemeKitPicker({
   );
 }
 
-function ImprovementsEdit({
+export function ImprovementsEdit({
   items,
   onChange,
 }: {
@@ -187,270 +177,58 @@ function ImprovementsEdit({
   );
 }
 
-export const ThemeCardEdit = memo(function ThemeCardEdit({
-  value,
-  onChange,
-  onRemove,
-  headerColorClass,
-  onMakeGroupTheme,
-}: {
-  value: LitMThemeCard;
-  onChange: (v: LitMThemeCard) => void;
-  onRemove?: () => void;
-  headerColorClass?: string;
-  onMakeGroupTheme?: () => void;
-}) {
-  const [showKitPicker, setShowKitPicker] = useState(false);
-  const [kitPickerFilter, setKitPickerFilter] = useState<string | undefined>(value.themeType || undefined);
-  const [showTreasurePicker, setShowTreasurePicker] = useState(false);
-  const [showMagicWayPicker, setShowMagicWayPicker] = useState(false);
+/**
+ * «Из набора · Из сокровищницы · Путь магии» для карты темы в правке листа
+ * (лист LitM в «Д», доска Litm-Sheet-Edit): заполняют тему из справочника.
+ */
+export function ThemePickers({ value, onChange }: { value: LitMThemeCard; onChange: (v: LitMThemeCard) => void }) {
+  const [kitOpen, setKitOpen] = useState(false);
+  const [treasureOpen, setTreasureOpen] = useState(false);
+  const [wayOpen, setWayOpen] = useState(false);
 
-  function handleKitPick(kit: LitmThemeKit) {
+  function pickKit(kit: LitmThemeKit) {
     const pt = kit.data.powerTags ?? [];
     const wt = kit.data.weaknessTags ?? [];
-    const q = kit.data.quest ?? "";
-    const might = kit.data.might ?? "";
-    const name = kit.name;
-    // у набора пути магии тема героя — «Магия» (доска Litm-Way)
-    const themeType = kit.bookEn;
-
     onChange({
       ...value,
-      name,
-      themeType,
-      power: (might || value.power) as LitMPower,
+      name: kit.name,
+      // у набора пути магии тема героя — «Магия» (доска Litm-Way)
+      themeType: kit.bookEn,
+      power: (kit.data.might || value.power) as LitMPower,
       powerTags: pt.length ? pt : value.powerTags,
       weaknessTags: wt.length ? wt : value.weaknessTags,
-      quest: q || value.quest,
+      quest: kit.data.quest || value.quest,
     });
-    setShowKitPicker(false);
+    setKitOpen(false);
   }
-
-  function handleTreasurePick(treasure: LitmTreasure) {
+  function pickTreasure(treasure: LitmTreasure) {
     onChange({
       ...value,
       name: treasure.name,
       powerTags: treasure.powerTags.length ? treasure.powerTags : value.powerTags,
       weaknessTags: treasure.weakness ? [treasure.weakness] : value.weaknessTags,
     });
-    setShowTreasurePicker(false);
+    setTreasureOpen(false);
   }
-
-  function handleMagicWayPick(magicWay: any) {
-    const name = magicWay.name;
-    
-    onChange({
-      ...value,
-      name,
-      themeType: "Magic",
-      power: "variable",
-    });
-    setShowMagicWayPicker(false);
+  function pickWay(way: { name: string }) {
+    onChange({ ...value, name: way.name, themeType: "Magic", power: "variable" });
+    setWayOpen(false);
   }
 
   return (
-    <div className="card stack litm-theme-card">
-      <div className={`litm-theme-header ${headerColorClass ?? POWER_CLASS[value.power]}`}>
-        <div className="litm-theme-title-row">
-          <input
-            className="litm-theme-title"
-            placeholder="Название темы"
-            value={value.name}
-            onChange={(e) => onChange({ ...value, name: e.target.value })}
-          />
-          {onRemove && (
-            <button type="button" onClick={onRemove}>
-              ✕
-            </button>
-          )}
-        </div>
-        <div className="litm-theme-subtitle">
-          {mightLabel(value.power) || "—"}
-          {value.themeType ? ` · ${value.themeType}` : ""}
-        </div>
-      </div>
-      <label>
-        Могущество
-        <select
-          value={value.power}
-          onChange={(e) => onChange({ ...value, power: e.target.value as LitMPower })}
-        >
-          <option value="">—</option>
-          {(["origin", "adventure", "greatness"] as const).map((p) => (
-            <option key={p} value={p}>{mightLabel(p)}</option>
-          ))}
-        </select>
-      </label>
-      <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
-        <label style={{ flex: 1 }}>
-          Тип темы
-          <input
-            value={value.themeType}
-            onChange={(e) => onChange({ ...value, themeType: e.target.value })}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => { setKitPickerFilter(value.themeType || undefined); setShowKitPicker(true); }}
-          style={{ padding: "6px 12px", border: "1.5px solid var(--ink)", background: "transparent", cursor: "pointer" }}
-        >
-          Из наборов…
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowTreasurePicker(true)}
-          style={{ padding: "6px 12px", border: "1.5px solid var(--ink)", background: "transparent", cursor: "pointer" }}
-        >
-          Из сокровищницы
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowMagicWayPicker(true)}
-          style={{ padding: "6px 12px", border: "1.5px solid var(--ink)", background: "transparent", cursor: "pointer" }}
-        >
-          Путь магии
-        </button>
-      </div>
-      <ThemeKitPicker
-        isOpen={showKitPicker}
-        onClose={() => setShowKitPicker(false)}
-        onPick={handleKitPick}
-        themeTypeFilter={kitPickerFilter}
-      />
-      <TreasurePickerModal
-        isOpen={showTreasurePicker}
-        onClose={() => setShowTreasurePicker(false)}
-        onPick={handleTreasurePick}
-      />
-      <MagicWayPickerModal
-        isOpen={showMagicWayPicker}
-        onClose={() => setShowMagicWayPicker(false)}
-        onPick={handleMagicWayPick}
-      />
-      <div>
-        <span className="muted">Ключи силы</span>
-        <TagList
-          tags={value.powerTags}
-          variant="power"
-          leadingChip={value.name || undefined}
-          onChange={(tags) => onChange({ ...value, powerTags: tags })}
-        />
-      </div>
-      <div>
-        <span className="muted">Тэг слабости</span>
-        <TagList
-          tags={value.weaknessTags}
-          variant="weak"
-          onChange={(tags) => onChange({ ...value, weaknessTags: tags })}
-        />
-      </div>
-      <label>
-        Квест темы
-        <input value={value.quest} onChange={(e) => onChange({ ...value, quest: e.target.value })} />
-      </label>
-      <TrackGroup
-        tracks={[
-          { label: "Рост", value: value.improve, onChange: (n) => onChange({ ...value, improve: n }) },
-          { label: "Увядание", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
-          { label: "Веха", value: value.milestone, onChange: (n) => onChange({ ...value, milestone: n }) },
-        ]}
-      />
-      <ImprovementsEdit
-        items={value.specialImprovements}
-        onChange={(items) => onChange({ ...value, specialImprovements: items })}
-      />
-      {onMakeGroupTheme && (
-        <button type="button" onClick={onMakeGroupTheme} style={{ alignSelf: "flex-start" }}>
-          Сделать общей командной темой
-        </button>
-      )}
-    </div>
+    <span className="lsh-pickers">
+      <button type="button" onClick={() => setKitOpen(true)}>
+        из набора…
+      </button>
+      <button type="button" onClick={() => setTreasureOpen(true)}>
+        из сокровищницы
+      </button>
+      <button type="button" onClick={() => setWayOpen(true)}>
+        путь магии
+      </button>
+      <ThemeKitPicker isOpen={kitOpen} onClose={() => setKitOpen(false)} onPick={pickKit} themeTypeFilter={value.themeType || undefined} />
+      <TreasurePickerModal isOpen={treasureOpen} onClose={() => setTreasureOpen(false)} onPick={pickTreasure} />
+      <MagicWayPickerModal isOpen={wayOpen} onClose={() => setWayOpen(false)} onPick={pickWay} />
+    </span>
   );
-});
-
-export const ThemeCardView = memo(function ThemeCardView({
-  value,
-  onQuickUpdate,
-  headerColorClass,
-  onMakeGroupTheme,
-}: {
-  value: LitMThemeCard;
-  onQuickUpdate: (v: LitMThemeCard) => void;
-  headerColorClass?: string;
-  onMakeGroupTheme?: () => void;
-}) {
-  // Вычеркнуть тег силы за +3 к Силе — главный размен конфликта LitM (Q10).
-  // Имя темы — её главный тег силы, вычёркивается так же.
-  const scratched = value.scratchedTags ?? [];
-  const toggleScratch = (tag: string) =>
-    onQuickUpdate({
-      ...value,
-      scratchedTags: scratched.includes(tag) ? scratched.filter((t) => t !== tag) : [...scratched, tag],
-    });
-  return (
-    <div className="card stack litm-theme-card">
-      <div className={`litm-theme-header ${headerColorClass ?? POWER_CLASS[value.power]}`}>
-        <div className="litm-theme-title-row">
-          <strong className="litm-theme-title">{value.name || "Без названия"}</strong>
-        </div>
-        {value.power && (
-          <div className="litm-theme-subtitle">
-            {mightLabel(value.power)}
-            {value.themeType ? ` · ${value.themeType}` : ""}
-          </div>
-        )}
-      </div>
-      <div>
-        <span className="muted">Ключи силы</span>
-        <TagList
-          tags={value.powerTags}
-          variant="power"
-          leadingChip={value.name || undefined}
-          onChange={(tags) => onQuickUpdate({ ...value, powerTags: tags })}
-          scratched={scratched}
-          onToggleScratch={toggleScratch}
-        />
-      </div>
-      <div>
-        <span className="muted">Тэг слабости</span>
-        <TagList
-          tags={value.weaknessTags}
-          variant="weak"
-          onChange={(tags) => onQuickUpdate({ ...value, weaknessTags: tags })}
-        />
-      </div>
-      {value.quest && <div className="muted">Квест: {value.quest}</div>}
-      <TrackGroup
-        tracks={[
-          { label: "Рост", value: value.improve, onChange: (n) => onQuickUpdate({ ...value, improve: n }) },
-          { label: "Увядание", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
-          { label: "Веха", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
-        ]}
-      />
-      {value.improvementPending && (
-        <button
-          type="button"
-          className="litm-pending"
-          title="Положено после передышки: отметьте улучшение темы и снимите метку"
-          onClick={() => onQuickUpdate({ ...value, improvementPending: undefined })}
-        >
-          Улучшение ждёт ✕
-        </button>
-      )}
-      {value.specialImprovements.some((imp) => imp.active) && (
-        <ul className="litm-improvements">
-          {value.specialImprovements
-            .filter((imp) => imp.active)
-            .map((imp, i) => (
-              <li key={i}>{imp.text}</li>
-            ))}
-        </ul>
-      )}
-      {onMakeGroupTheme && (
-        <button type="button" onClick={onMakeGroupTheme} style={{ alignSelf: "flex-start" }}>
-          Сделать общей командной темой
-        </button>
-      )}
-    </div>
-  );
-});
+}

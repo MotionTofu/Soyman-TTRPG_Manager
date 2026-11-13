@@ -1,24 +1,12 @@
-import { memo, useCallback, useMemo, useRef, type DragEvent, useState } from "react";
+import { memo, type DragEvent } from "react";
 import type { LitMCharacterData, LitMThemeCard, LitMImprovement } from "../../types";
 import type { SearchResult } from "../../types";
-import { emptyTheme, ThemeCardEdit, ThemeCardView } from "./ThemeCard";
-import { TagList } from "./TagList";
+import { emptyTheme } from "./ThemeCard";
+import { LitmSheet } from "./LitmSheet";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
-import { MentionTextarea } from "../mentions/MentionTextarea";
-import { MentionText } from "../mentions/MentionText";
 import { applyGroupThemeToCampaign } from "../../data/campaignActions";
 import { NavIcon } from "../NavIcons";
-import {
-  findLitmSystemId,
-  loadLitmThemeBooks,
-  loadLitmThemeKits,
-  tropeThemes,
-} from "./litmCompendium";
-import { TropePickerModal } from "./TropePickerModal";
-import { useConfirm } from "../../hooks/useConfirm";
 import { normalizeStatuses } from "@shared/litm/status";
-import { LitmStatusCards } from "./LitmStatusCards";
-import { LitmTableStrip } from "./LitmTableStrip";
 
 async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeCard) {
   if (!campaignId) return;
@@ -216,6 +204,7 @@ const CompanionField = memo(function CompanionField({
   );
 });
 
+/** Правка листа на месте (Q13): тот же лист в «Д», поля правятся там, где стоят. */
 export function LitMCharacterEdit({
   value,
   onChange,
@@ -225,239 +214,23 @@ export function LitMCharacterEdit({
   onChange: (v: LitMCharacterData) => void;
   campaignId?: number;
 }) {
-  const [confirmDialog, confirm] = useConfirm();
-  // A keystroke in any one field used to replace the whole LitMCharacterData
-  // object and hand every child (4 theme cards, story themes, fellowship
-  // theme, backpack) a brand-new `value`/`onChange` prop, defeating
-  // React.memo and forcing React to reconcile the entire ~500-node form on
-  // every character typed (measured ~30-45ms/keystroke). These refs let the
-  // callbacks below stay referentially stable across renders while still
-  // reading/writing the latest data, so React.memo on the child cards can
-  // actually skip the ones the user isn't currently editing.
-  const valueRef = useRef(value);
-  valueRef.current = value;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-const [showTropePicker, setShowTropePicker] = useState(false);
-
-  const setField = useCallback(
-    <K extends keyof LitMCharacterData>(key: K, v: LitMCharacterData[K]) => {
-      onChangeRef.current({ ...valueRef.current, [key]: v });
-    },
-    []
-  );
-  const setPromise = useCallback((v: string) => setField("promise", v), [setField]);
-  const setQuest = useCallback((v: string) => setField("quest", v), [setField]);
-  const setFellowshipRelationship = useCallback(
-    (v: string) => setField("fellowshipRelationship", v),
-    [setField]
-  );
-  const setQuintessences = useCallback((v: string) => setField("quintessences", v), [setField]);
-  const setSpecialImprovements = useCallback(
-    (v: string) => setField("specialImprovements", v),
-    [setField]
-  );
-  const setNotes = useCallback((v: string) => setField("notes", v), [setField]);
-  const setBackpack = useCallback((tags: string[]) => setField("backpack", tags), [setField]);
-  const setFellowshipTheme = useCallback(
-    (v: LitMThemeCard) => setField("fellowshipTheme", v),
-    [setField]
-  );
-
-  const onDropCompanion = useCallback((result: SearchResult) => {
-    onChangeRef.current({
-      ...valueRef.current,
-      companionCharacterType: result.type,
-      companionCharacterId: result.id,
-      companionCharacterName: result.title,
-    });
-  }, []);
-  const onClearCompanion = useCallback(() => {
-    onChangeRef.current({
-      ...valueRef.current,
-      companionCharacterType: undefined,
-      companionCharacterId: undefined,
-      companionCharacterName: undefined,
-    });
-  }, []);
-  const onRelationshipTagChange = useCallback((v: string) => setField("companionRelationshipTag", v), [setField]);
-
-  const updateTheme = useCallback((i: number, patch: LitMThemeCard) => {
-    const themes = valueRef.current.themes.slice();
-    themes[i] = patch;
-    onChangeRef.current({ ...valueRef.current, themes });
-  }, []);
-  const removeTheme = useCallback(async (i: number) => {
-    if (!(await confirm({ message: "Удалить эту тему?", confirmLabel: "Удалить", danger: true })))
-      return;
-    onChangeRef.current({
-      ...valueRef.current,
-      themes: valueRef.current.themes.filter((_, idx) => idx !== i),
-    });
-  }, []);
-  function addTheme() {
-    onChange({ ...value, themes: [...value.themes, emptyTheme()] });
-  }
-  // Stable per-index callbacks — rebuilt only when the number of theme cards
-  // changes (add/remove), not on every keystroke, so React.memo on
-  // ThemeCardEdit sees the same onChange/onRemove reference for every card
-  // except the one actually being edited.
-  const themeChangeCallbacks = useMemo(
-    () => value.themes.map((_, i) => (v: LitMThemeCard) => updateTheme(i, v)),
-    [value.themes.length, updateTheme]
-  );
-  const themeRemoveCallbacks = useMemo(
-    () => value.themes.map((_, i) => () => removeTheme(i)),
-    [value.themes.length, removeTheme]
-  );
-
-  const updateStoryTheme = useCallback((i: number, patch: LitMThemeCard) => {
-    const storyThemes = valueRef.current.storyThemes.slice();
-    storyThemes[i] = patch;
-    onChangeRef.current({ ...valueRef.current, storyThemes });
-  }, []);
-  const removeStoryTheme = useCallback(async (i: number) => {
-    if (!(await confirm({ message: "Удалить эту сюжетную тему?", confirmLabel: "Удалить", danger: true })))
-      return;
-    onChangeRef.current({
-      ...valueRef.current,
-      storyThemes: valueRef.current.storyThemes.filter((_, idx) => idx !== i),
-    });
-  }, []);
-  function addStoryTheme() {
-    onChange({ ...value, storyThemes: [...value.storyThemes, emptyTheme()] });
-  }
-  const storyThemeChangeCallbacks = useMemo(
-    () => value.storyThemes.map((_, i) => (v: LitMThemeCard) => updateStoryTheme(i, v)),
-    [value.storyThemes.length, updateStoryTheme]
-  );
-  const storyThemeRemoveCallbacks = useMemo(
-    () => value.storyThemes.map((_, i) => () => removeStoryTheme(i)),
-    [value.storyThemes.length, removeStoryTheme]
-  );
-
-  const onMakeGroupTheme = useMemo(
-    () => (campaignId ? () => applyGroupTheme(campaignId, valueRef.current.fellowshipTheme) : undefined),
-    [campaignId]
-  );
-
   return (
-    <div className="stack litm-character-form">
-      {confirmDialog}
-      <label>
-        Обещание (Promise)
-        <input value={value.promise} onChange={(e) => setPromise(e.target.value)} />
-      </label>
-      <label>
-        Квест (Quest)
-        <input value={value.quest} onChange={(e) => setQuest(e.target.value)} />
-      </label>
-      <label>
-        Связь с содружеством (Fellowship Relationship)
-        <input
-          value={value.fellowshipRelationship}
-          onChange={(e) => setFellowshipRelationship(e.target.value)}
+    <LitmSheet
+      value={value}
+      edit
+      onChange={onChange}
+      campaignId={campaignId}
+      onMakeGroupTheme={campaignId ? () => applyGroupTheme(campaignId, value.fellowshipTheme) : undefined}
+      companion={
+        <CompanionField
+          companionCharacterName={value.companionCharacterName}
+          companionRelationshipTag={value.companionRelationshipTag}
+          onDropCompanion={(r) => onChange({ ...value, companionCharacterType: r.type, companionCharacterId: r.id, companionCharacterName: r.title })}
+          onClearCompanion={() => onChange({ ...value, companionCharacterType: undefined, companionCharacterId: undefined, companionCharacterName: undefined })}
+          onRelationshipTagChange={(v) => onChange({ ...value, companionRelationshipTag: v })}
         />
-      </label>
-      <CompanionField
-        companionCharacterName={value.companionCharacterName}
-        companionRelationshipTag={value.companionRelationshipTag}
-        onDropCompanion={onDropCompanion}
-        onClearCompanion={onClearCompanion}
-        onRelationshipTagChange={onRelationshipTagChange}
-      />
-      <label>
-        Квинтэссенции
-        <MentionTextarea value={value.quintessences} onChange={setQuintessences} rows={2} />
-      </label>
-      <label>
-        Особые улучшения
-        <MentionTextarea value={value.specialImprovements} onChange={setSpecialImprovements} rows={3} />
-      </label>
-      <label>
-        Заметки
-        <MentionTextarea value={value.notes} onChange={setNotes} rows={3} />
-      </label>
-
-      <strong>Карты Тем (Theme Cards)</strong>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span></span>
-        <button
-          type="button"
-          onClick={() => setShowTropePicker(true)}
-          style={{ padding: "4px 10px", border: "1.5px solid var(--ink)", background: "transparent", cursor: "pointer" }}
-        >
-          ⚡ Выбрать троп
-        </button>
-      </div>
-      <div className="litm-theme-row">
-        {value.themes.map((t, i) => (
-          <ThemeCardEdit
-            key={i}
-            value={t}
-            onChange={themeChangeCallbacks[i]}
-            onRemove={themeRemoveCallbacks[i]}
-          />
-        ))}
-      </div>
-      <button onClick={addTheme} style={{ alignSelf: "flex-start" }}>
-        + Добавить карту темы
-      </button>
-
-      <strong>Рюкзак, Темы Истории, Тема Содружества</strong>
-      <div className="litm-theme-row">
-        <div className="card stack litm-theme-card">
-          <div className="litm-theme-header litm-header-backpack">
-            <div className="litm-theme-title-row">
-              <strong className="litm-theme-title">Инвентарь</strong>
-            </div>
-          </div>
-          <TagList tags={value.backpack} variant="power" onChange={setBackpack} />
-        </div>
-        {value.storyThemes.map((t, i) => (
-          <ThemeCardEdit
-            key={i}
-            value={t}
-            onChange={storyThemeChangeCallbacks[i]}
-            onRemove={value.storyThemes.length > 1 ? storyThemeRemoveCallbacks[i] : undefined}
-            headerColorClass="litm-header-story"
-          />
-        ))}
-        <ThemeCardEdit
-          value={value.fellowshipTheme}
-          onChange={setFellowshipTheme}
-          headerColorClass="litm-header-fellowship"
-          onMakeGroupTheme={onMakeGroupTheme}
-        />
-      </div>
-      <button onClick={addStoryTheme} style={{ alignSelf: "flex-start" }}>
-        + Добавить тему истории
-      </button>
-
-      <TropePickerModal
-        isOpen={showTropePicker}
-        onClose={() => setShowTropePicker(false)}
-        onPick={async (trope) => {
-          try {
-            const sysId = await findLitmSystemId();
-            if (!sysId) return;
-            const [kits, books] = await Promise.all([loadLitmThemeKits(sysId), loadLitmThemeBooks(sysId)]);
-            // Три постоянные темы тропа; четвёртую игрок выбирает сам.
-            const newThemes = tropeThemes(trope, null, kits, books);
-
-            const themes = value.themes.slice();
-            for (let i = 0; i < 4; i++) {
-              themes[i] = newThemes[i] ?? emptyTheme();
-            }
-            onChange({ ...value, themes });
-          } catch (e) {
-            console.error(e);
-          }
-          setShowTropePicker(false);
-        }}
-      />
-    </div>
+      }
+    />
   );
 }
 
@@ -473,126 +246,14 @@ export function LitMCharacterView({
   /** Персонаж листа — для плашки «Вы в спотлайте» у игрока (Д33, Q19). */
   characterId?: number;
 }) {
-  function updateTheme(i: number, patch: LitMThemeCard) {
-    const themes = value.themes.slice();
-    themes[i] = patch;
-    onQuickUpdate({ ...value, themes });
-  }
-  function updateStoryTheme(i: number, patch: LitMThemeCard) {
-    const storyThemes = value.storyThemes.slice();
-    storyThemes[i] = patch;
-    onQuickUpdate({ ...value, storyThemes });
-  }
-
   return (
-    <div className="stack sb-scope">
-      {value.promise && (
-        <div>
-          <strong>Обещание</strong> <span>{value.promise}</span>
-        </div>
-      )}
-      {value.quest && (
-        <div>
-          <strong>Квест</strong> <span>{value.quest}</span>
-        </div>
-      )}
-      {value.fellowshipRelationship && <div className="muted">{value.fellowshipRelationship}</div>}
-      {(value.companionCharacterName || value.companionRelationshipTag) && (
-        <div className="row">
-          {value.companionCharacterName && (
-            <span className="litm-tag litm-tag-companion">{value.companionCharacterName}</span>
-          )}
-          {value.companionRelationshipTag && (
-            <span className="litm-tag litm-tag-companion">{value.companionRelationshipTag}</span>
-          )}
-        </div>
-      )}
-      {(value.relationships ?? []).length > 0 && (
-        <div>
-          <strong>Отношения</strong>
-          <div className="row">
-            {(value.relationships ?? []).map((r) => (
-              <span key={r.characterId} className="litm-tag litm-tag-companion">
-                {r.name}: {r.tag}{" "}
-                <button
-                  type="button"
-                  className="litm-rel-x"
-                  aria-label={`Убрать тег отношений с ${r.name}`}
-                  onClick={() => onQuickUpdate({ ...value, relationships: (value.relationships ?? []).filter((x) => x.characterId !== r.characterId) })}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {value.quintessences && (
-        <div>
-          <strong>Квинтэссенции</strong>
-          <div style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={value.quintessences} />
-          </div>
-        </div>
-      )}
-      {value.specialImprovements && (
-        <div>
-          <strong>Особые улучшения</strong>
-          <div style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={value.specialImprovements} />
-          </div>
-        </div>
-      )}
-      {value.notes && (
-        <div>
-          <strong>Заметки</strong>
-          <div style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={value.notes} />
-          </div>
-        </div>
-      )}
-
-      <LitmTableStrip campaignId={campaignId} characterId={characterId} />
-      <LitmStatusCards statuses={value.statuses ?? []} onChange={(update) => onQuickUpdate({ ...value, statuses: update(value.statuses ?? []) })} />
-
-      {value.themes.length > 0 && <strong>Карты Тем</strong>}
-      <div className="litm-theme-row">
-        {value.themes.map((t, i) => (
-          <ThemeCardView key={i} value={t} onQuickUpdate={(v) => updateTheme(i, v)} />
-        ))}
-      </div>
-
-      <strong>Рюкзак, Темы Истории, Тема Содружества</strong>
-      <div className="litm-theme-row">
-        <div className="card stack litm-theme-card">
-          <div className="litm-theme-header litm-header-backpack">
-            <div className="litm-theme-title-row">
-              <strong className="litm-theme-title">Инвентарь</strong>
-            </div>
-          </div>
-          <TagList
-            tags={value.backpack}
-            variant="power"
-            onChange={(tags) => onQuickUpdate({ ...value, backpack: tags })}
-          />
-        </div>
-        {value.storyThemes.map((t, i) => (
-          <ThemeCardView
-            key={i}
-            value={t}
-            onQuickUpdate={(v) => updateStoryTheme(i, v)}
-            headerColorClass="litm-header-story"
-          />
-        ))}
-        <ThemeCardView
-          value={value.fellowshipTheme}
-          onQuickUpdate={(v) => onQuickUpdate({ ...value, fellowshipTheme: v })}
-          headerColorClass="litm-header-fellowship"
-          onMakeGroupTheme={
-            campaignId ? () => applyGroupTheme(campaignId, value.fellowshipTheme) : undefined
-          }
-        />
-      </div>
-    </div>
+    <LitmSheet
+      value={value}
+      edit={false}
+      onChange={onQuickUpdate}
+      campaignId={campaignId}
+      characterId={characterId}
+      onMakeGroupTheme={campaignId ? () => applyGroupTheme(campaignId, value.fellowshipTheme) : undefined}
+    />
   );
 }
