@@ -1,49 +1,194 @@
-import {useRef,useState} from "react";
-import {Link,useNavigate} from "react-router-dom";
-import {useAction,useResource,write} from "../data/hooks";
-import {readOnce} from "../data/imperative";
-import {PageFrame} from "../components/PageFrame";
-import {Modal} from "../components/Modal";
-import {WORKBOOK_AFFECTS,downloadWorkbook,type InstanceSummary,type TemplateSummary} from "../components/workbooks/model";
-import type {LibraryDepartment,LibraryShelf,LibraryCatalog} from "../components/mastering/libraryTypes";
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAction, useResource, write } from "../data/hooks";
+import { readOnce } from "../data/imperative";
+import { ListPage } from "../components/ListPage";
+import { RegMeta, RegRow, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
+import { EmptyState } from "../components/EmptyState";
+import { Loadable, ListSkeleton } from "../components/Loadable";
+import { Modal } from "../components/Modal";
+import { formatDateKeyRu } from "../utils/date";
+import { openSecondWindow } from "../electronApi";
+import { WORKBOOK_AFFECTS, downloadWorkbook, type InstanceSummary, type TemplateSummary } from "../components/workbooks/model";
+import type { LibraryDepartment, LibraryShelf, LibraryCatalog } from "../components/mastering/libraryTypes";
 import "./workbook.css";
 
-/** Раздел «Тетради» (макет «Пустые состояния», разбор Q13): мои тетради и шаблоны. */
-export function WorkbooksPage(){
- const run=useAction(),navigate=useNavigate(),[tab,setTab]=useState<"mine"|"templates">("mine"),[archived,setArchived]=useState(false),[error,setError]=useState("");
- const [creating,setCreating]=useState<number|null|"pick">(null),[placement,setPlacement]=useState<InstanceSummary|null>(null);
- const upload=useRef<HTMLInputElement>(null);
- const templates=useResource<TemplateSummary[]>("/workbooks/templates"),instances=useResource<InstanceSummary[]>(`/workbooks/instances${archived?"?archived=1":""}`);
- // Шаблон — последняя версия каждого ключа; старые версии видны в «Версии шаблонов».
- const latest=(templates.data??[]).filter(t=>!t.archived_at).filter((t,_i,all)=>!all.some(o=>o.template_key===t.template_key&&o.version>t.version)).sort((a,b)=>a.title.localeCompare(b.title,"ru"));
- async function importFile(file:File|undefined){if(!file)return;setError("");try{if(file.size>4*1024*1024)throw new Error("Файл шаблона или тетради должен быть до 4 МБ");const text=await file.text();if(/\.md$/i.test(file.name)){await run(()=>write.post("/workbooks/templates",{markdown:text}),{affects:WORKBOOK_AFFECTS,retry:false});setTab("templates");return;}const data=JSON.parse(text);await run(()=>write.post(data.format==="soyman-workbook"?"/workbooks/templates":"/workbooks/import",data),{affects:WORKBOOK_AFFECTS,retry:false});}catch(e){setError((e as Error).message);}}
- const uploadButton=<><button type="button" className="wb-link workbooks-upload" onClick={()=>upload.current?.click()}>Загрузить шаблон</button><input ref={upload} className="sr-only" type="file" accept=".md,.json" aria-label="Файл шаблона (.md) или тетради (.json)" onChange={e=>{void importFile(e.target.files?.[0]);e.target.value="";}}/></>;
- const actions=<div className="workbooks-actions"><button type="button" className="primary" disabled={!latest.length} onClick={()=>setCreating("pick")}>Начать тетрадь</button>{uploadButton}</div>;
- return <PageFrame title="Тетради" actions={actions}>
-  <Link to="/mastering">← Библиотека</Link>
-  {error&&<p role="alert">{error}</p>}{(templates.error||instances.error)&&<p role="alert">{templates.error||instances.error}</p>}
-  <div className="workbooks-tabs" role="tablist" aria-label="Тетради и шаблоны">
-   <button type="button" role="tab" aria-selected={tab==="mine"} className={tab==="mine"?"primary":""} onClick={()=>setTab("mine")}>Мои тетради</button>
-   <button type="button" role="tab" aria-selected={tab==="templates"} className={tab==="templates"?"primary":""} onClick={()=>setTab("templates")}>Шаблоны · {latest.length}</button>
-  </div>
-  {tab==="mine"?<>
-   {instances.data&&!instances.data.length&&!archived?<div className="workbooks-empty"><span className="workbooks-empty__art" aria-hidden="true"/><h2>Тетрадей пока нет</h2><p>{latest.length?"Тетради создаются вместе с сеттингами, приключениями и кампаниями. Можно также начать отдельную тетрадь по шаблону.":"Загрузи шаблон, чтобы начать тетрадь."}</p><div className="workbooks-actions">{latest.length>0&&<button type="button" className="primary" onClick={()=>setCreating("pick")}>Начать по шаблону</button>}{uploadButton}</div><p><a href="/workbook-example.md" download>Пример шаблона</a> · <a href="/workbook-author-guide.md" download>Как сделать шаблон</a></p></div>
-   :<div className="workbooks-grid">{instances.data?.map(i=>{const p=i.progress??{total:0,filled:0};return <article key={i.id} className="workbook-tile paper-scope">
-     <h3><Link to={`/workbooks/${i.id}`}>{i.title}</Link></h3>
-     <span className="workbook-tile__meta">{i.template_title} · версия {i.template_version}{i.sheets?` · листов ${i.sheets}`:""}</span>
-     <progress className="workbook-tile__bar" max={Math.max(1,p.total)} value={p.filled} aria-label={`Заполнено ${p.filled} из ${p.total}`}/>
-     <span className="workbook-tile__meta">Заполнено {p.filled} из {p.total}</span>
-     <div className="workbook-tile__actions">{!archived&&<button type="button" className="wb-link" onClick={()=>setPlacement(i)}>На полку</button>}<button type="button" className="wb-link" onClick={()=>{void run(()=>write.put(`/workbooks/instances/${i.id}`,{revision:i.revision,archived:!archived}),{affects:WORKBOOK_AFFECTS});}}>{archived?"Вернуть из архива":"В архив"}</button></div>
-    </article>;})}</div>}
-   <label className="row"><input type="checkbox" checked={archived} onChange={e=>setArchived(e.target.checked)}/>Показать архив</label>
-  </>:<>
-   {latest.length?<div className="workbooks-grid">{latest.map(t=><article key={t.id} className="workbook-tile paper-scope"><h3>{t.title}</h3><span className="workbook-tile__meta">версия {t.version}</span><div className="workbook-tile__actions"><button type="button" className="wb-link" onClick={()=>setCreating(t.id)}>Начать тетрадь</button></div></article>)}</div>
-   :<div className="workbooks-empty"><span className="workbooks-empty__art" aria-hidden="true"/><h2>Шаблонов пока нет</h2><p>Шаблон — рабочая тетрадь курса в Markdown, как она написана. Загрузи файл — листы и графы SoyMan найдёт сам.</p>{uploadButton}<p><a href="/workbook-example.md" download>Пример шаблона</a> · <a href="/workbook-author-guide.md" download>Как сделать шаблон</a></p></div>}
-   <details><summary>Версии шаблонов и архив</summary>{templates.data?.map(t=><div className="card row" key={t.id}><span>{t.title} · {t.version}{t.archived_at?" · архив":""}</span><button onClick={async()=>{const data=await readOnce(`/workbooks/templates/${t.id}`);downloadWorkbook(`${t.template_key}-v${t.version}.json`,JSON.stringify(data,null,2));}}>Скачать</button><button onClick={()=>{void run(()=>write.put(`/workbooks/templates/${t.id}/archive`,{archived:!t.archived_at}),{affects:WORKBOOK_AFFECTS});}}>{t.archived_at?"Восстановить":"В архив"}</button></div>)}</details>
-  </>}
-  {creating!==null&&<NewWorkbook templates={latest} initial={creating==="pick"?null:creating} onClose={()=>setCreating(null)} onCreated={id=>navigate(`/workbooks/${id}`)}/>}
-  {placement&&<Placement workbook={placement} onClose={()=>setPlacement(null)} onError={setError}/>}
- </PageFrame>;
+const purposes: Record<string, string> = {
+  campaign: "Кампания", adventure: "Приключение", setting: "Сеттинг", standalone: "Просто тетрадь",
+};
+
+const columns: RegColumn[] = [
+  { label: "Название", width: "minmax(0, 1fr)" },
+  { label: "Шаблон", width: "minmax(0, 1fr)" },
+  { label: "Заполнено", width: "minmax(0, 8rem)", phone: true },
+];
+
+export function LibraryWorkbooks() {
+  const run = useAction();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<"mine" | "templates">("mine");
+  const [archived, setArchived] = useState(false);
+  const [query, setQuery] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [view, setView] = useListView("library-workbooks");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState<number | null | "pick">(null);
+  const [placement, setPlacement] = useState<InstanceSummary | null>(null);
+  const [versions, setVersions] = useState<TemplateSummary | null>(null);
+  const upload = useRef<HTMLInputElement>(null);
+  const templates = useResource<TemplateSummary[]>("/workbooks/templates");
+  const instances = useResource<InstanceSummary[]>(`/workbooks/instances${archived ? "?archived=1" : ""}`);
+  const archivedInstances = useResource<InstanceSummary[]>("/workbooks/instances?archived=1");
+  const templatesByKey = new Map<string, TemplateSummary>();
+  for (const template of templates.data ?? []) {
+    const previous = templatesByKey.get(template.template_key);
+    if (!template.archived_at && (!previous || previous.version < template.version)) {
+      templatesByKey.set(template.template_key, template);
+    }
+  }
+  const latest = [...templatesByKey.values()].sort((a, b) => a.title.localeCompare(b.title, "ru"));
+  const term = query.trim().toLocaleLowerCase("ru");
+  const matches = (...fields: string[]) => fields.some(field => field.toLocaleLowerCase("ru").includes(term));
+  const visibleInstances = (instances.data ?? []).filter(item =>
+    matches(item.title, item.template_title ?? "", item.project_name ?? "") && (!purpose || (item.project_type ?? "standalone") === purpose));
+  const visibleTemplates = latest.filter(item => matches(item.title));
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    try {
+      if (file.size > 4 * 1024 * 1024) throw new Error("Файл шаблона или тетради должен быть до 4 МБ");
+      const text = await file.text();
+      if (/\.md$/i.test(file.name)) {
+        const imported = await run(() => write.post("/workbooks/templates", { markdown: text }), { affects: WORKBOOK_AFFECTS, retry: false });
+        if (imported) setTab("templates");
+        return;
+      }
+      const data = JSON.parse(text);
+      await run(() => write.post(data.format === "soyman-workbook" ? "/workbooks/templates" : "/workbooks/import", data), {
+        affects: WORKBOOK_AFFECTS, retry: false,
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  function instanceEntry(item: InstanceSummary) {
+    const to = `/workbooks/${item.id}`;
+    const entity = { type: "workbook", id: item.id, name: item.title };
+    const progress = item.progress ?? { total: 0, filled: 0 };
+    const filled = `${progress.filled} из ${progress.total} граф`;
+    const menu = [
+      { label: "Отдельное окно", onClick: () => openSecondWindow(`/workbook-window/${item.id}`) },
+      ...(!archived ? [{ label: "На полку…", onClick: () => setPlacement(item) }] : []),
+      { label: "Скачать .json", onClick: () => void run(async () => {
+        const bundle = await readOnce(`/workbooks/instances/${item.id}/export`);
+        downloadWorkbook(`${item.title}.workbook.json`, JSON.stringify(bundle, null, 2));
+      }, { affects: [] }) },
+      { label: archived ? "Вернуть из архива" : "В архив", danger: !archived, onClick: () => {
+        void run(() => write.put(`/workbooks/instances/${item.id}`, {
+          revision: item.revision, archived: !archived,
+        }), { affects: WORKBOOK_AFFECTS });
+      } },
+    ];
+    return view === "rows"
+      ? <RegRow key={item.id} entity={entity} to={to} columns={columns} cells={[item.template_title, filled]} menu={menu} />
+      : <RegTile key={item.id} entity={entity} to={to} menu={menu} plate="Тетрадь">
+          <RegMeta>{item.template_title} · v{item.template_version}</RegMeta>
+          <RegMeta>{[purposes[item.project_type ?? "standalone"], item.project_name].filter(Boolean).join(" · ")}</RegMeta>
+          <progress max={Math.max(1, progress.total)} value={progress.filled} aria-label={filled} />
+          <RegMeta>{filled}{item.updated_at && ` · ${formatDateKeyRu(item.updated_at.slice(0, 10))}`}</RegMeta>
+        </RegTile>;
+  }
+
+  function templateEntry(item: TemplateSummary) {
+    const menu = <details className="library-menu">
+      <summary className="d-btn d-btn--sm" aria-label={`Действия: ${item.title}`}>⋯</summary>
+      <div className="library-menu__items">
+        <button type="button" onClick={event => {
+          event.currentTarget.closest("details")?.removeAttribute("open");
+          setVersions(item);
+        }}>Версии</button>
+      </div>
+    </details>;
+    const start = <button type="button" className="d-btn d-btn--sm" onClick={() => setCreating(item.id)}>Начать тетрадь</button>;
+    if (view === "rows") return <div key={item.id} className="reg-row" role="row">
+      <span role="cell" className="reg-row__name">{item.title}</span>
+      <span role="cell" className="reg-row__cell reg-wide">v{item.version}</span>
+      <span role="cell" className="reg-row__cell">{start}</span>
+      <span role="cell">{menu}</span>
+    </div>;
+    return <article key={item.id} className="reg-tile library-template-tile">
+      <div className="reg-tile__body">
+        <h3 className="reg-tile__name">{item.title}</h3>
+        <RegMeta>Версия {item.version}</RegMeta>
+        {start}
+      </div>
+      <div className="library-template-tile__menu">{menu}</div>
+    </article>;
+  }
+
+  const list = tab === "mine" ? visibleInstances.map(instanceEntry) : visibleTemplates.map(templateEntry);
+  const activeQuery = tab === "mine" ? instances : templates;
+  const archiveCount = archivedInstances.data?.length ?? 0;
+  const tableColumns = tab === "mine" ? columns : [
+    columns[0], { ...columns[1], label: "Версия" }, { ...columns[2], label: "Действие" },
+  ];
+  return <>
+    <div className="library-registry__actions">
+      <button className="d-btn" type="button" onClick={() => upload.current?.click()}>Загрузить шаблон</button>
+      <button className="d-btn d-btn--primary" type="button" disabled={!latest.length} onClick={() => setCreating("pick")}>+ Новая тетрадь</button>
+      <input ref={upload} className="sr-only" type="file" accept=".md,.json" aria-label="Файл шаблона или тетради"
+        onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ""; }} />
+    </div>
+    {error && <p role="alert">{error}</p>}
+    <ListPage ds embedded title="Тетради" groups={[]} allLabel={null}
+      extraTabs={[{ id: "mine", label: "Мои тетради" }, { id: "templates", label: "Шаблоны", count: latest.length }]}
+      activeGroup={tab} onGroupChange={value => setTab(value === "templates" ? "templates" : "mine")}
+      search={query} onSearch={setQuery} searchPlaceholder="Поиск по названию, проекту…"
+      filteredCount={list.length} totalCount={tab === "mine" ? instances.data?.length ?? 0 : latest.length}
+      onResetSearch={() => { setQuery(""); setArchived(false); setPurpose(""); }} showReset={!!term || archived || (tab === "mine" && !!purpose)}
+      view={view} onViewChange={setView}
+      filters={tab === "mine" && <div className="row">
+        <label>Для чего <select value={purpose} onChange={event => setPurpose(event.target.value)}>
+          <option value="">Все</option>
+          {Object.entries(purposes).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select></label>
+        {(archiveCount > 0 || archived) && <button className="d-btn d-btn--sm" type="button"
+          aria-pressed={archived} onClick={() => setArchived(value => !value)}>Архив · {archiveCount}</button>}
+      </div>}>
+      <Loadable loading={activeQuery.loading} error={activeQuery.error} errorTitle="Не удалось загрузить тетради" onRetry={activeQuery.reload} skeleton={<ListSkeleton variant="tiles" />}>
+        {list.length ? view === "rows"
+          ? <RegTable columns={tableColumns} label="Тетради">{list}</RegTable>
+          : <RegTiles>{list}</RegTiles>
+          : <EmptyState kind={term ? "search" : "primary"}
+              title={term ? "Ничего не найдено" : tab === "templates" ? "Шаблонов пока нет" : archived ? "В архиве пока пусто" : "Тетрадей пока нет"}
+              action={!term && !archived && <div className="library-registry__actions">
+                <a href="/workbook-example.md" download>Пример шаблона</a>
+                <a href="/workbook-author-guide.md" download>Как сделать шаблон</a>
+              </div>} />}
+      </Loadable>
+    </ListPage>
+    {creating !== null && <NewWorkbook templates={latest} initial={creating === "pick" ? null : creating}
+      onClose={() => setCreating(null)} onCreated={id => navigate(`/workbooks/${id}`)} />}
+    {placement && <Placement workbook={placement} onClose={() => setPlacement(null)} onError={setError} />}
+    {versions && <Modal ariaLabel="Версии шаблона" onClose={() => setVersions(null)}>
+      <div className="stack">
+        <h2>{versions.title} · Версии</h2>
+        {(templates.data ?? []).filter(item => item.template_key === versions.template_key).sort((a, b) => b.version - a.version)
+          .map(item => <div key={item.id} className="row">
+            <span>Версия {item.version}{item.archived_at ? " · архив" : ""}</span>
+            <button type="button" onClick={() => void run(async () => {
+              const data = await readOnce(`/workbooks/templates/${item.id}`);
+              downloadWorkbook(`${item.template_key}-v${item.version}.json`, JSON.stringify(data, null, 2));
+            }, { affects: [] })}>Скачать</button>
+            <button type="button" onClick={() => void run(() => write.put(`/workbooks/templates/${item.id}/archive`, {
+              archived: !item.archived_at,
+            }), { affects: WORKBOOK_AFFECTS })}>{item.archived_at ? "Восстановить" : "В архив"}</button>
+          </div>)}
+      </div>
+    </Modal>}
+  </>;
 }
 
 function NewWorkbook({templates,initial,onClose,onCreated}:{templates:TemplateSummary[];initial:number|null;onClose:()=>void;onCreated:(id:number)=>void}){
@@ -56,7 +201,7 @@ function NewWorkbook({templates,initial,onClose,onCreated}:{templates:TemplateSu
   <label>Название<input value={title} placeholder="Например, Ваншот «Маяк»" onChange={e=>setTitle(e.target.value)}/></label>
   <label>Для чего<select value={projectType} onChange={e=>{setProjectType(e.target.value);setProjectId("");}}><option value="">Просто тетрадь</option><option value="campaign">Кампания</option><option value="setting">Сеттинг</option><option value="adventure">Приключение</option></select></label>
   {projectType&&<select aria-label="Проект" value={projectId} onChange={e=>setProjectId(e.target.value)}><option value="">Выбрать</option>{projects.data?.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select>}
-  <button className="primary" disabled={!title.trim()||!templateId||!!projectType&&!projectId} onClick={()=>void create()}>Начать</button>
+  <button className="d-btn d-btn--primary" disabled={!title.trim()||!templateId||!!projectType&&!projectId} onClick={()=>void create()}>Начать</button>
  </div></Modal>;
 }
 

@@ -19,7 +19,7 @@ export function useWorkbookCrumbs(pathname: string): Crumb[] | null {
   const crumbs: Crumb[] = [{ label: "Главная", to: "/" }];
   if (!workbook) return [...crumbs, { label: "…" }];
   if (!projectKind || !workbook.project_id) {
-    return [...crumbs, { label: "Тетради", to: "/workbooks" }, { label: workbook.title }];
+    return [...crumbs, { label: "Библиотека", to: "/mastering" }, { label: "Тетради", to: "/mastering?tab=workbooks" }, { label: workbook.title }];
   }
   if (projectKind === "setting") {
     crumbs.push({ label: "Сеттинги", to: "/settings" }, { label: project?.name ?? "Сеттинг", to: `/settings/${workbook.project_id}` });

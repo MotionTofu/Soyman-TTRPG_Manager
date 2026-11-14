@@ -106,6 +106,9 @@ export interface ListPageProps {
    *  под ней поиск · «Сбросить» · «N / M» · «Плитки | Список», ниже — строка
    *  фильтров страницы. Кампании, Сеттинги, Игроки, Системы. */
   ds?: boolean;
+  /** Вкладка внутри страницы с общей шапкой и листом. */
+  embedded?: boolean;
+  allCount?: number;
   /** Переключатель «Плитки | Список» (Q6). Нет — переключателя нет. */
   view?: ListView;
   onViewChange?: (view: ListView) => void;
@@ -147,6 +150,8 @@ export function ListPage({
   hideToolbar,
   children,
   ds = false,
+  embedded = false,
+  allCount,
   view,
   onViewChange,
   filters,
@@ -222,7 +227,7 @@ export function ListPage({
   const groupIds = new Set(groups.map((g) => g.id));
 
   const tabs: ListPageGroup[] = [
-    ...(allLabel != null ? [{ id: "all", label: allLabel, count: ds ? totalCount : undefined }] : []),
+    ...(allLabel != null ? [{ id: "all", label: allLabel, count: ds ? allCount ?? totalCount : undefined }] : []),
     ...(extraTabs ?? []).map((t) => ({ id: t.id, label: t.label, count: t.count })),
     ...groups,
     ...(showUngrouped != null ? [{ id: "ungrouped", label: showUngrouped }] : []),
@@ -335,8 +340,8 @@ export function ListPage({
   }
 
   return (
-    <div className={`stack list-page${ds ? " list-page--d" : ""}`}>
-      <PageHead
+    <div className={`stack list-page${ds ? " list-page--d" : ""}${embedded ? " list-page--embedded" : ""}`}>
+      {!embedded && <PageHead
         section={headingSection}
         title={title}
         actions={
@@ -351,7 +356,7 @@ export function ListPage({
             </>
           )
         }
-      />
+      />}
 
       {ds && (
         <div className="list-page__sheet">

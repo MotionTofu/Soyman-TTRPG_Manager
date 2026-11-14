@@ -1705,6 +1705,10 @@ export interface ArchiveItem {
   title: string;
   subtitle?: string;
   archived_at: string;
+  resource_category?: string | null;
+  resource_type?: string;
+  resource_extension?: string | null;
+  resource_link_category_hint?: string | null;
 }
 
 // A single file moved to _Archive after the last remaining link to its

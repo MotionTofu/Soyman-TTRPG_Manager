@@ -1,6 +1,7 @@
 /* Библиотека — «Д» (макет Roll-Library): отделы ярлыками над листом,
    «Продолжить чтение» — главный блок, полки с плашками. */
-.library-departments { flex-wrap: wrap; margin-bottom: calc(-1 * var(--edge-width)); }
+.library-departments { flex-wrap: nowrap; overflow-x: auto; margin-bottom: calc(-1 * var(--edge-width)); }
+.library-departments > * { flex: 0 0 auto; }
 .library-room-intro p { margin: 0; }
 .library-continue {
   display: grid;
@@ -63,3 +64,36 @@
 .library-placement-list { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-top: var(--sp-6); }
 .library-placement-list button, .library-department-settings { font-size: var(--fs-meta); }
 .library-gallery-preview img { width: 160px; height: 120px; object-fit: contain; }
+
+.library-progress { display: block; width: min(100%, 360px); margin-top: var(--sp-3); accent-color: var(--primary-bg); }
+.library-menu { position: relative; }
+.library-menu > summary { display: inline-flex; cursor: pointer; list-style: none; }
+.library-menu__items {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 12;
+  display: grid;
+  min-width: max-content;
+  padding: var(--sp-2);
+  border: var(--edge-width) solid var(--edge);
+  background: var(--sheet);
+}
+.library-menu__items > :is(a, button) {
+  display: block;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.library-menu__items > :is(a, button):hover { background: var(--field); }
+.library-registry__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--sp-3); }
+.library-registry__actions + .list-page { margin-top: var(--sp-4); }
+@media (max-width: 760px) {
+  .library-departments { scrollbar-width: thin; }
+}
+
+.library-template-tile__menu { position: absolute; top: var(--sp-3); right: var(--sp-3); z-index: 3; }
+.library-template-tile > .reg-tile__body { padding-right: var(--sp-10); }
+.library-template-tile .reg-tile__name { padding-right: var(--sp-8); }

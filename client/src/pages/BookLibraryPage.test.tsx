@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter,Routes,Route,useParams} from 'react-router-dom';
 import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
 import {BookLibraryPage} from './BookLibraryPage';
 import type {LibraryBook} from '../components/mastering/libraryTypes';
@@ -15,7 +15,7 @@ vi.mock('../components/mentions/MentionTextarea',()=>({MentionTextarea:({value,o
 vi.mock('../components/mastering/MasteringReader',()=>({MasteringReader:({libraryBook,book,onClose}:{libraryBook:LibraryBook;book:LibraryBook;onClose:()=>void})=><div>Читаем {libraryBook.key}, источник {book.id}<button onClick={onClose}>На полку</button></div>}));
 let books:LibraryBook[];
 beforeEach(()=>{
- vi.clearAllMocks();localStorage.clear();localStorage.setItem('libraryLegacyPinsMigrated:1','1');
+ vi.clearAllMocks();localStorage.clear();localStorage.setItem('libraryBookmarksImported:1','[]');
  books=Array.from({length:20},(_,i)=>({id:i+101,key:`${i%2?'resource':'mastering'}:uid-${i}`,uid:`uid-${i}`,source_type:i%2?'resource':'mastering',source_id:Math.floor(i/2)+1,department_id:1,department_name:'Любые книги',shelf_id:1,section_id:1,section_name:'Большая полка',title:`Книга ${20-i}`,format:'markdown',category:'prep',system_id:null,created_at:'2026-09-30',cover_image:null,reading_minutes:0,note_count:i===0?2:0,bookmarked:false,last_opened:null,mode:null,archived_at:null,position:{}} as LibraryBook));
  mock.read.mockImplementation((p:string|null)=>{
   if(p==='/book-library/departments')return [{id:1,name:'Любые книги',position:0}];
@@ -30,7 +30,11 @@ beforeEach(()=>{
  vi.stubGlobal('ResizeObserver',class {cb:()=>void;constructor(cb:()=>void){this.cb=cb;} observe(n:HTMLElement){Object.defineProperty(n,'clientWidth',{configurable:true,value:500});Object.defineProperty(n,'scrollWidth',{configurable:true,value:4000});this.cb();}disconnect(){}});
 });
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
-function mount(){return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><BookLibraryPage/></MemoryRouter></QueryClientProvider>);}
+function MarkdownRoute(){return <div>Открыт Markdown-ресурс {useParams().id}</div>;}
+function mount(){return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><Routes>
+ <Route path="/" element={<BookLibraryPage/>}/>
+ <Route path="/resources/:id/markdown-file" element={<MarkdownRoute/>}/>
+ </Routes></MemoryRouter></QueryClientProvider>);}
 describe('общая библиотека',()=>{
  it('открывает Читальный зал, сортирует 20 смешанных книг и не смешивает одинаковые ID источников',async()=>{
   mount();expect(screen.getByRole('button',{name:'Читальный зал'})).toBeTruthy();
@@ -38,7 +42,14 @@ describe('общая библиотека',()=>{
   const names=()=>within(shelf).getAllByRole('button',{name:/Открыть книгу:/}).map(b=>b.getAttribute('aria-label'));
   expect(names()[0]).toBe('Открыть книгу: Книга 1');fireEvent.click(within(shelf).getByRole('button',{name:'Сортировка А–Я: Большая полка'}));expect(names()[0]).toBe('Открыть книгу: Книга 20');
   expect(within(shelf).getByText('Заметки · 2')).toBeTruthy();fireEvent.click(within(shelf).getByRole('button',{name:'Заметки к книге: Книга 20'}));expect(await screen.findByText('Читаем mastering:uid-0, источник 1')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button',{name:'На полку'}));fireEvent.click(screen.getByRole('button',{name:'Открыть книгу: Книга 19'}));expect(await screen.findByText('Читаем resource:uid-1, источник 1')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'На полку'}));fireEvent.click(screen.getByRole('button',{name:'Открыть книгу: Книга 19'}));expect(await screen.findByText('Открыт Markdown-ресурс 1')).toBeTruthy();
+ });
+ it('показывает страницу и общий объём PDF после чтения',()=>{
+  books[0]={...books[0],format:'pdf',last_opened:'2026-11-13T10:00:00Z',position:{page:24,pageCount:264}};
+  const read=mock.read.getMockImplementation();
+  mock.read.mockImplementation((path:string|null)=>path?.includes('recent=1')?{books:[books[0]],total:1}:read?.(path));
+  mount();
+  expect(screen.getByRole('progressbar',{name:'стр. 24 из 264'}).getAttribute('value')).toBe(String(24/264));
  });
  it('создаёт книгу и её размещение одним запросом',async()=>{
   mount();fireEvent.click(screen.getByRole('button',{name:'Добавить книгу на полку Большая полка'}));fireEvent.change(screen.getByLabelText('Название'),{target:{value:'Новые правила'}});

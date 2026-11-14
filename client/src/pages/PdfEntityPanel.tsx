@@ -47,10 +47,9 @@ function detailPath(kind: PdfEntityKind, row: Row, systemId: number) {
   }
 }
 
-export function PdfEntityPanel({ resource, sources, quote, page, placement, onPlacementChange, onClose }: {
-  resource: Resource; quote: string; page: number | null; placement: "left" | "right";
+export function PdfEntityPanel({ resource, sources, quote, page }: {
+  resource: Resource; quote: string; page: number | null;
   sources: PdfEntitySource[];
-  onPlacementChange: (value: "left" | "right") => void; onClose: () => void;
 }) {
   const [mode, setMode] = useState<"create" | "edit">("create");
   const [kind, setKind] = useState<PdfEntityKind>("being");
@@ -182,8 +181,7 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
     } finally { setBusy(false); }
   }
 
-  return <aside className={`pdf-reader__entity-panel is-${placement}`} aria-label="Редактор Сущности">
-    <div className="pdf-reader__entity-head"><strong>Сущность из PDF</strong><button type="button" aria-label="Закрыть редактор Сущности" onClick={onClose}>×</button></div>
+  return <div className="pdf-reader__entity-panel" role="tabpanel" aria-label="Редактор Сущности">
     <div className="pdf-reader__entity-scroll">
       {sources.length > 0 && <details className="pdf-reader__entity-linked"><summary>Связано с этим PDF ({sources.length})</summary>
         {sources.map((source) => <button type="button" key={source.id} disabled={!!pendingTarget} onClick={() => editLinked(source)}>
@@ -194,10 +192,6 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
       <div className="pdf-reader__entity-switch" role="group" aria-label="Действие">
         <button type="button" disabled={!!pendingTarget} aria-pressed={mode === "create"} onClick={() => { setMode("create"); setTargetId(0); setName(""); setBody(""); setPendingTarget(null); setSavedTarget(null); setInserted(false); }}>Создать</button>
         <button type="button" disabled={!!pendingTarget} aria-pressed={mode === "edit"} onClick={() => { setMode("edit"); setTargetId(0); setName(""); setBody(""); setPendingTarget(null); setSavedTarget(null); setInserted(false); }}>Изменить</button>
-      </div>
-      <div className="pdf-reader__entity-switch" role="group" aria-label="Положение панели">
-        <button type="button" aria-pressed={placement === "right"} onClick={() => onPlacementChange("right")}>Справа</button>
-        <button type="button" aria-pressed={placement === "left"} onClick={() => onPlacementChange("left")}>Слева</button>
       </div>
       <label>Вид Сущности<select value={kind} disabled={!!pendingTarget} onChange={(event) => selectKind(event.target.value as PdfEntityKind)}>
         {Object.entries(KINDS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
@@ -232,5 +226,5 @@ export function PdfEntityPanel({ resource, sources, quote, page, placement, onPl
       </button>
       {savedTarget && <p role="status">Сохранено. <Link to={detailPath(kind, savedTarget, systemId)}>Открыть карточку ↗</Link></p>}
     </div>
-  </aside>;
+  </div>;
 }

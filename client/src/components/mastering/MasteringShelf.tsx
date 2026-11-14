@@ -1,6 +1,9 @@
+import type { LibraryBook } from "./libraryTypes";
+import {bookReadingProgress} from "./bookReadingProgress";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {useAuthenticatedFileUrl} from "../../utils/fileUrl";
 import { NavIcon } from "../NavIcons";
+import { formatDateKeyRu } from "../../utils/date";
 import type { MasteringBook, MasteringSection } from "../../types";
 
 const alphabet = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
@@ -82,6 +85,8 @@ function MasteringBookCover({ book, src, saved, dragging, onDrag, onOpen, onNote
   const authenticated=useAuthenticatedFileUrl(src??null);
   const imageSource=src?.startsWith("/files/")?authenticated:src;
   const showImage = imageSource && failedSource !== imageSource;
+  const progress = "position" in book ? bookReadingProgress(book as LibraryBook) : null;
+  const opened = "last_opened" in book && book.last_opened;
   const words = book.title.trim().split(/\s+/);
   const caption = words.length > 25 ? `${words.slice(0, 25).join(" ")}…` : book.title;
   return <div className="mastering-book-item">
@@ -93,7 +98,8 @@ function MasteringBookCover({ book, src, saved, dragging, onDrag, onOpen, onNote
     <span className="mastering-book__label">{book.format === "pdf" ? "PDF" : book.format === "workbook" ? "Тетрадь" : "Маркдаун"}</span>
     <span className="mastering-book__symbol"><NavIcon name={book.category === "live" ? "sword" : book.category === "knowledge" ? "book" : ["star", "die", "map", "document"][book.id % 4] as "star" | "die" | "map" | "document"} /></span>
     <span className="mastering-book__title">{book.title}</span>
-    <span className="mastering-book__meta">{book.system_name || (book.reading_minutes ? `${book.reading_minutes} мин чтения` : book.format === "pdf" ? "Документ PDF" : "Статья")}</span>
+    <span className="mastering-book__meta">{progress?.label || (typeof opened === "string" ? formatDateKeyRu(opened.slice(0, 10)) : null) ||
+      book.system_name || (book.reading_minutes ? `${book.reading_minutes} мин чтения` : book.format === "pdf" ? "Документ PDF" : "Статья")}</span>
     </button>
     <span className="mastering-book-caption" title={book.title}>{caption}</span>
     {!!book.note_count && onNotes && <button type="button" className="library-note-badge" aria-label={`Заметки к книге: ${book.title}`} onClick={() => onNotes(book.id)}>Заметки · {book.note_count}</button>}

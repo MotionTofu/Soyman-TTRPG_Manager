@@ -184,11 +184,13 @@ const archivedDate = (iso: string) => iso.slice(0, 10).split("-").reverse().join
  * месте, у каждой — «Вернуть». Нет архивных — строки нет. Только Мастеру:
  * архив — его кухня, а у игрока в списке кампаний ему не место.
  */
-export function RegArchive({ type, basePath, affects }: { type: string; basePath: string; affects: Affect[] }) {
+export function RegArchive({ type, basePath, affects, include }: {
+  type: string; basePath: string; affects: Affect[]; include?: (item: ArchiveItem) => boolean;
+}) {
   const { user } = useCurrentUser();
   const isGm = user?.role === "gm";
   const archive = useResource<ArchiveItem[]>(isGm ? "/archive" : null);
-  const items = (archive.data ?? NO_ARCHIVE).filter((a) => a.type === type);
+  const items = (archive.data ?? NO_ARCHIVE).filter((a) => a.type === type && (!include || include(a)));
   const [open, setOpen] = useState(false);
   const run = useAction();
   if (!isGm || items.length === 0) return null;

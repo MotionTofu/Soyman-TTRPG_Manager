@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { PageHead } from "../PageFrame";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import "./sheet.css";
@@ -97,10 +98,14 @@ interface Props {
   contentKey: unknown;
   /** Строка над листом: ошибки сохранения, конфликт версий. */
   notice?: ReactNode;
+  /** Положение из серверного каталога для первого открытия в этом браузере. */
+  readingRatio?: number;
+  onReadingRatio?: (ratio: number) => void;
+  libraryTitle?: string;
   children: ReactNode;
 }
 
-export function SheetView({ docKey, back, actions, modes, mode, onMode, contentKey, notice, children }: Props) {
+export function SheetView({ docKey, back, actions, modes, mode, onMode, contentKey, notice, children, readingRatio, onReadingRatio, libraryTitle }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
   const [stageWidth, setStageWidth] = useState(0);
@@ -183,20 +188,36 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
     const stage = stageRef.current;
     if (!stage || restoredRef.current === scrollKey) return;
     const saved = Number(readPref(scrollKey));
-    if (!(saved > 0)) { restoredRef.current = scrollKey; return; }
+    if (!(saved > 0)) {
+      const distance = stage.scrollHeight - stage.clientHeight;
+      if (readingRatio && (!sheetHeight || distance <= 0)) return;
+      if (readingRatio) stage.scrollTop = readingRatio * distance;
+      restoredRef.current = scrollKey;
+      return;
+    }
     if (stage.scrollHeight - stage.clientHeight < saved) return;
     stage.scrollTop = saved;
     restoredRef.current = scrollKey;
-  }, [scrollKey, sheetHeight, contentKey]);
+  }, [scrollKey, sheetHeight, contentKey, readingRatio]);
+  const readingRatioListener = useRef(onReadingRatio);
+  readingRatioListener.current = onReadingRatio;
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
     let timer = 0;
+    let pending = false;
+    const savePosition = () => {
+      if (!pending || restoredRef.current !== scrollKey) return;
+      pending = false;
+      writePref(scrollKey, stage.scrollTop > 0 ? String(Math.round(stage.scrollTop)) : null);
+      if (mode === "reading") readingRatioListener.current?.(stage.scrollTop / Math.max(1, stage.scrollHeight - stage.clientHeight));
+    };
     const onScroll = () => {
+      pending = true;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         if (restoredRef.current !== scrollKey) return;
-        writePref(scrollKey, stage.scrollTop > 0 ? String(Math.round(stage.scrollTop)) : null);
+        savePosition();
         const top = stage.getBoundingClientRect().top + 80;
         let current = 0;
         headings.forEach((h, i) => { if (h.el.getBoundingClientRect().top <= top) current = i; });
@@ -204,8 +225,8 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
       }, 150);
     };
     stage.addEventListener("scroll", onScroll, { passive: true });
-    return () => { stage.removeEventListener("scroll", onScroll); window.clearTimeout(timer); };
-  }, [scrollKey, headings]);
+    return () => { stage.removeEventListener("scroll", onScroll); window.clearTimeout(timer); savePosition(); };
+  }, [scrollKey, headings, mode]);
 
   // Щелчок по пустому полю листа под текстом — курсор в конец, как в
   // Obsidian; иначе промах мимо строк не давал писать вовсе.
@@ -240,14 +261,27 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
     </nav>
   );
 
-  return (
-    <div className="sheet-stage" ref={stageRef}>
+  const modeButtons = modes.map(m => (
+    <button key={m} type="button" className={libraryTitle ? (m === mode ? "active" : "") : `sheet-btn${m === mode ? " is-on" : ""}`}
+      aria-pressed={m === mode} title={MODE_LABEL[m].title} aria-label={MODE_LABEL[m].title}
+      onClick={() => pickMode(m)}>{libraryTitle ? MODE_LABEL[m].title.split(" — ")[0] : MODE_LABEL[m].short}</button>
+  ));
+
+  return <>
+    {libraryTitle && <header className="markdown-library__head">
+      <Link to={back.to ?? "/mastering"} onClick={back.onClick}>← {back.label}</Link>
+      <PageHead section="mastering" title={libraryTitle} actions={<>
+        {modes.length > 1 && <div className="d-tabs" role="group" aria-label="Вид документа">{modeButtons}</div>}
+        {actions}
+      </>} />
+    </header>}
+    <div className={libraryTitle ? "sheet-stage d-sheet" : "sheet-stage"} ref={stageRef}>
       <div className="sheet-layout">
         {showToc && (
           <aside className="sheet-toc">
-            {back.to
+            {!libraryTitle && (back.to
               ? <Link to={back.to} onClick={back.onClick} className="sheet-toc__back">← {back.label}</Link>
-              : <button type="button" onClick={back.onClick} className="sheet-toc__back">← {back.label}</button>}
+              : <button type="button" onClick={back.onClick} className="sheet-toc__back">← {back.label}</button>)}
             <span className="sheet-toc__title">Содержание</span>
             {toc}
           </aside>
@@ -264,15 +298,10 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
             <div className="document-sheet-plate document-sheet-plate--left">
               {/* При колонке оглавления «Назад» стоит в ней; на узком окне,
                   где колонка свёрнута в корешок, — здесь. */}
-              <span className={showToc ? "sheet-back--narrow" : "sheet-back"}>{backLink}</span>
-              {actions}
+              {!libraryTitle && <><span className={showToc ? "sheet-back--narrow" : "sheet-back"}>{backLink}</span>{actions}</>}
             </div>
             <div className="document-sheet-plate document-sheet-plate--right" role="group" aria-label="Вид документа">
-              {modes.map(m => (
-                <button key={m} type="button" className={`sheet-btn${m === mode ? " is-on" : ""}`}
-                  aria-pressed={m === mode} title={MODE_LABEL[m].title} aria-label={MODE_LABEL[m].title}
-                  onClick={() => pickMode(m)}>{MODE_LABEL[m].short}</button>
-              ))}
+              {!libraryTitle && modeButtons}
               <span className="document-sheet-plate__sep" />
               <button type="button" className="sheet-btn" title="Мельче (Ctrl+колесо)" aria-label="Мельче" onClick={() => stepZoom(-1)}>−</button>
               <span className="document-sheet-plate__zoom">{Math.round(z * 100)}%</span>
@@ -296,5 +325,5 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
         </div>
       </div>
     </div>
-  );
+  </>;
 }

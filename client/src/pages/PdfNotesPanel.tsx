@@ -63,12 +63,15 @@ function MarginLane({ metric, notes, activeId, actions, onOpen }: {
   </div>;
 }
 
-export function PdfNotesPanel({ notes, preferences, onPreferenceChange, onCollapse, actions, activeId,
+export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuous, onContinuousChange, onAddNote, ready, actions, activeId,
   container, viewer, zoom, layoutTick, loading, error }: {
   notes: PdfNote[];
   preferences: PdfReaderPreferences;
   onPreferenceChange: (patch: Partial<PdfReaderPreferences>) => void;
-  onCollapse: () => void;
+  continuous: boolean;
+  onContinuousChange: (value: boolean) => void;
+  onAddNote: () => void;
+  ready: boolean;
   actions: NoteActions;
   activeId: string | null;
   container: HTMLDivElement | null;
@@ -108,42 +111,49 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, onCollap
   }).filter((item): item is { metric: PageMetric; group: PdfNote[] } => item !== null);
 
   useLayoutEffect(() => {
-    if (preferences.note_mode !== "margins" || !container || !scrollRef.current) return;
+    if (continuous || preferences.note_mode !== "margins" || !container || !scrollRef.current) return;
     const sync = () => { if (scrollRef.current) scrollRef.current.scrollTop = container.scrollTop; };
     sync();
     container.addEventListener("scroll", sync);
     return () => container.removeEventListener("scroll", sync);
-  }, [container, preferences.note_mode, zoom, layoutTick]);
+  }, [container, continuous, preferences.note_mode, zoom, layoutTick]);
 
-  return <aside className="pdf-reader__notes" aria-label="Заметки к PDF">
-    <header className="pdf-reader__notes-header">
-      <strong>Заметки <span>{notes.length}</span></strong>
-      <button type="button" onClick={onCollapse} aria-label="Свернуть заметки">›</button>
-    </header>
+  return <div className="pdf-reader__notes" role="tabpanel" aria-label="Заметки к PDF">
     <div className="pdf-reader__notes-controls">
       <div role="group" aria-label="Режим заметок">
-        <button type="button" aria-pressed={preferences.note_mode === "margins"}
-          onClick={() => onPreferenceChange({ note_mode: "margins" })}>У страниц</button>
-        <button type="button" aria-pressed={preferences.note_mode === "list"}
-          onClick={() => onPreferenceChange({ note_mode: "list" })}>Список</button>
+        <button type="button" aria-pressed={!continuous && preferences.note_mode === "list"}
+          onClick={() => { onContinuousChange(false); onPreferenceChange({ note_mode: "list" }); }}>Список</button>
+        <button type="button" aria-pressed={!continuous && preferences.note_mode === "margins"}
+          onClick={() => { onContinuousChange(false); onPreferenceChange({ note_mode: "margins" }); }}>У страниц</button>
+        <button type="button" aria-pressed={continuous} onClick={() => onContinuousChange(true)}>Одним текстом</button>
       </div>
+      <button type="button" disabled={!ready} onClick={onAddNote}>+ Общая заметка</button>
       <label><input type="checkbox" checked={preferences.show_highlights}
         onChange={(event) => onPreferenceChange({ show_highlights: event.target.checked })} /> Подсветка на PDF</label>
     </div>
-    {preferences.note_mode === "margins" && general.length > 0 &&
+    {!continuous && preferences.note_mode === "margins" && general.length > 0 &&
       <div className="pdf-reader__notes-general"><strong>Ко всей книге</strong>
         {general.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={openNote} />)}
       </div>}
     <div ref={scrollRef} className="pdf-reader__notes-scroll" onScroll={(event) => {
-      if (preferences.note_mode === "margins" && container && Math.abs(container.scrollTop - event.currentTarget.scrollTop) > 1)
+      if (!continuous && preferences.note_mode === "margins" && container && Math.abs(container.scrollTop - event.currentTarget.scrollTop) > 1)
         container.scrollTop = event.currentTarget.scrollTop;
     }}>
       {loading && <p className="muted">Загружаю заметки…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && !error && !notes.length && <p className="pdf-reader__notes-empty">Выделите цитату в PDF или создайте общую заметку.</p>}
-      {/* инлайн-стиль намеренно — высота полотна заметок повторяет прокрутку читалки, считается на лету */}
-      {preferences.note_mode === "list" ?
+      {continuous ? <div className="pdf-reader__notes-list">
+        {sorted.map(note => <article key={note.id} className="pdf-reader__note-card">
+          <h3>{note.page_number ? `Страница ${note.page_number}` : "Общая заметка"}</h3>
+          {note.quote && <blockquote>{note.quote}</blockquote>}
+          <MentionText text={note.body} />
+          {note.needs_reattach && <p>Проверьте привязку к PDF</p>}
+          {note.page_number != null && !note.needs_reattach &&
+            <button type="button" onClick={() => actions.onLocate(note)}>К цитате</button>}
+        </article>)}
+      </div> : preferences.note_mode === "list" ?
         <div className="pdf-reader__notes-list">{sorted.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={openNote} />)}</div> :
+        // инлайн-стиль намеренно — высота полотна заметок повторяет прокрутку читалки
         <div className="pdf-reader__notes-canvas" style={{ height: Math.max(viewer?.scrollHeight ?? 0, container?.clientHeight ?? 0) }}>
           {metrics.map(({ metric, group }) => <MarginLane key={metric.page} metric={metric} notes={group} activeId={activeId} actions={actions} onOpen={openNote} />)}
         </div>}
@@ -162,5 +172,5 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, onCollap
         <button type="button" onClick={() => { actions.onEdit(openedNote); closeNote(); }}>Править</button>
       </div>
     </div>}
-  </aside>;
+  </div>;
 }

@@ -12,6 +12,7 @@ import { PdfNotesPanel } from "./PdfNotesPanel";
 import { PdfEntityPanel, type PdfEntitySource } from "./PdfEntityPanel";
 import { capturePdfSelection, DEFAULT_PDF_PREFERENCES, type PdfNote, type PdfNoteDraft, type PdfReaderPreferences } from "./pdfNotes";
 import "./pdf-reader.css";
+import "./book-library.css";
 import {FileBookControls} from "../components/mastering/FileBookControls";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -79,14 +80,14 @@ export function PdfReaderPage() {
   const [notes, setNotes] = useState<PdfNote[]>([]);
   const [preferences, setPreferences] = useState<PdfReaderPreferences>(DEFAULT_PDF_PREFERENCES);
   const preferencesRef = useRef(preferences);
-  const notesOpenedFor=useRef<string|undefined>(undefined);
+  const requestedNotes = useRef<string | null>(null);
   const preferenceSaveRef = useRef(Promise.resolve());
   const [notesError, setNotesError] = useState("");
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenu | null>(null);
   const [composer, setComposer] = useState<NoteComposer | null>(null);
   const [entitySelection, setEntitySelection] = useState<{ quote: string; page: number | null } | null>(null);
-  const [entityPlacement, setEntityPlacement] = useState<"left" | "right">(() =>
-    localStorage.getItem("pdf-entity-placement") === "left" ? "left" : "right");
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(() => new URLSearchParams(location.search).has("notes"));
+  const [continuousNotes, setContinuousNotes] = useState(() => new URLSearchParams(location.search).get("notes") === "text");
   const [savingNote, setSavingNote] = useState(false);
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
@@ -98,12 +99,11 @@ export function PdfReaderPage() {
   const preferencesPath = id && isPdf ? `/resources/${id}/pdf-reader-preferences` : null;
   const notesQuery = useResource<PdfNote[]>(notesPath);
   const markdownPath = id && isPdf && notes.length ? `/resources/${id}/pdf-notes-markdown` : null;
-  const markdownQuery = useResource<{ resource_id: number }>(markdownPath);
   const preferencesQuery = useResource<PdfReaderPreferences>(preferencesPath);
   const sourceQuery = useResource<PdfEntitySource[]>(id && isPdf ? `/pdf-entity-sources/resource/${id}` : null);
   const afterWrite = useAfterWrite();
 
-  useEffect(() => { if (notesQuery.data) setNotes(notesQuery.data); }, [notesQuery.data]);
+  useEffect(() => { setNotes(notesQuery.data ?? []); }, [notesQuery.data, id]);
   useEffect(() => {
     if (!ready) return;
     const requested = Number(new URLSearchParams(location.search).get("page"));
@@ -112,9 +112,19 @@ export function PdfReaderPage() {
   }, [ready, pageCount, location.search]);
   useEffect(() => {
     if (!preferencesQuery.data) return;
-    const next=notesOpenedFor.current!==id&&new URLSearchParams(location.search).get("notes")==="1"?{...preferencesQuery.data,notes_collapsed:false}:preferencesQuery.data;
-    notesOpenedFor.current=id;preferencesRef.current=next;setPreferences(next);
-  }, [preferencesQuery.data]);
+    const requestKey = `${id}:${location.search}`;
+    const requested = requestedNotes.current !== requestKey && new URLSearchParams(location.search).has("notes");
+    requestedNotes.current = requestKey;
+    const next = requested ? { ...preferencesQuery.data, notes_collapsed: false } : preferencesQuery.data;
+    preferencesRef.current = next;
+    setPreferences(next);
+  }, [preferencesQuery.data, location.search, id]);
+
+  useEffect(() => {
+    const view = new URLSearchParams(location.search).get("notes");
+    setMobilePanelOpen(view !== null);
+    setContinuousNotes(view === "text");
+  }, [id, location.search]);
 
   useEffect(() => {
     if (!fileUrl || !isPdf || !containerRef.current || !viewerRef.current) return;
@@ -308,18 +318,43 @@ export function PdfReaderPage() {
     setComposer({ id: note?.id ?? null, draft: source, body: note?.body ?? "" });
     setSelectionMenu(null);
     window.getSelection()?.removeAllRanges();
+    setEntitySelection(null);
+    setMobilePanelOpen(true);
     if (preferences.notes_collapsed) updatePreferences({ notes_collapsed: false });
   }
 
   function openEntity(quote = "", selectedPage: number | null = null) {
     setEntitySelection({ quote, page: selectedPage });
+    setMobilePanelOpen(true);
     setSelectionMenu(null);
     window.getSelection()?.removeAllRanges();
   }
 
-  function changeEntityPlacement(value: "left" | "right") {
-    setEntityPlacement(value);
-    localStorage.setItem("pdf-entity-placement", value);
+  function showNotes() {
+    setEntitySelection(null);
+    setMobilePanelOpen(true);
+    if (preferences.notes_collapsed) updatePreferences({ notes_collapsed: false });
+  }
+
+  function closeSide() {
+    setEntitySelection(null);
+    setMobilePanelOpen(false);
+    updatePreferences({ notes_collapsed: true });
+  }
+
+  async function downloadNotes() {
+    if (!markdownPath) return;
+    try {
+      const { content } = await readResource<{ content: string }>(markdownPath, { fresh: true });
+      const url = URL.createObjectURL(new Blob([content], { type: "text/markdown;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `pdf-${id}.notes.md`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setNotesError(reason instanceof Error ? reason.message : "Не удалось скачать заметки");
+    }
   }
 
   async function saveNote() {
@@ -420,20 +455,33 @@ export function PdfReaderPage() {
   if (!resource) return <p role="alert">Ресурс не найден. <Link to="/resources">К Ресурсам</Link></p>;
   if (!isPdf) return <p role="alert">У этого Ресурса нет загруженного PDF. <Link to="/resources">К Ресурсам</Link></p>;
 
+  const panelOpen = !preferences.notes_collapsed || !!entitySelection;
   return (
     <section className="pdf-reader" aria-label={`Читалка: ${resource.name}`}>
       <header className="pdf-reader__toolbar">
-        <FileBookControls page={page} ready={ready} onRestore={value=>{if(Number.isInteger(value)&&value>0&&value<=pageCount&&readerRef.current?.viewer)readerRef.current.viewer.currentPageNumber=value;}}/>
-        <Link to={returnTo}>← Назад</Link>
-        <strong className="pdf-reader__title" title={resource.name}>{resource.name}</strong>
+        <div className="pdf-reader__header">
+          <Link className="d-btn d-btn--sm" to={returnTo}>← Библиотека</Link>
+          <div className="pdf-reader__identity">
+            <strong className="pdf-reader__title" title={resource.name}>{resource.name}</strong>
+            <small className="d-mono">PDF · стр. {page} из {pageCount || "—"}</small>
+          </div>
+          <details className="library-menu">
+            <summary className="d-btn d-btn--sm" aria-label="Действия с PDF">⋯</summary>
+            <div className="library-menu__items">
+              {resource.file_url && <button type="button" onClick={() => void download()}>Скачать PDF</button>}
+              {notes.length > 0 && <button type="button" onClick={() => void downloadNotes()}>Скачать заметки .md</button>}
+              <FileBookControls page={page} pageCount={pageCount} ready={ready}
+                onRestore={value => { if (Number.isInteger(value) && value > 0 && value <= pageCount && readerRef.current?.viewer) readerRef.current.viewer.currentPageNumber = value; }} />
+            </div>
+          </details>
+        </div>
         <div className="pdf-reader__controls">
           <button ref={outlineButtonRef} type="button" aria-expanded={outlineOpen} aria-controls="pdf-reader-outline"
             onClick={() => setOutlineOpen((value) => !value)} disabled={!ready}>☰ Главы</button>
-          <button type="button" aria-expanded={!preferences.notes_collapsed} onClick={() => updatePreferences({ notes_collapsed: !preferences.notes_collapsed })}
-            disabled={!ready}>Заметки ({notes.length})</button>
-          <button type="button" onClick={() => openComposer()} disabled={!ready}>+ Общая заметка</button>
-          <button type="button" aria-expanded={!!entitySelection} onClick={() => entitySelection ? setEntitySelection(null) : openEntity()} disabled={!ready}>Сущности{sourceQuery.data?.length ? ` (${sourceQuery.data.length})` : ""}</button>
-          {markdownQuery.data && <Link to={`/resources/${markdownQuery.data.resource_id}/markdown`} state={{ from: `${location.pathname}${location.search}` }}>Заметки .md</Link>}
+          <button type="button" className="pdf-reader__panel-trigger" aria-expanded={panelOpen && mobilePanelOpen}
+            onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>
+          {!panelOpen && <button type="button" className="pdf-reader__panel-desktop"
+            onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>}
           <button type="button" onClick={() => goToPage(page - 1)} disabled={!ready || page <= 1} aria-label="Предыдущая страница">‹</button>
           <input aria-label="Номер страницы" type="number" min={1} max={pageCount || 1} value={page}
             onChange={(event) => goToPage(Number(event.target.value))} disabled={!ready} />
@@ -445,13 +493,12 @@ export function PdfReaderPage() {
           <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScaleValue = "page-width"; }} disabled={!ready}>По ширине</button>
           <input aria-label="Поиск в PDF" type="search" placeholder="Поиск в PDF" value={query} onChange={(event) => search(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") search(query, true); }} disabled={!ready} />
-          {resource.file_url && <button type="button" onClick={() => void download()}>Скачать</button>}
         </div>
       </header>
       {error && <p className="pdf-reader__error" role="alert">PDF не открылся: {error}</p>}
       {!ready && !error && <p className="pdf-reader__loading">Загружаю PDF…</p>}
       {preferences.notes_collapsed && notesError && <p className="pdf-reader__error" role="alert">{notesError}</p>}
-      <div className={`pdf-reader__viewport${preferences.notes_collapsed ? "" : " has-notes"}${entitySelection ? entityPlacement === "left" ? " has-left-entity" : " has-right-entity" : ""}`}>
+      <div className={`pdf-reader__viewport${panelOpen ? " has-side" : ""}`}>
         <div ref={containerRef} className="pdf-reader__container" tabIndex={0} onMouseUp={onPdfMouseUp} onClick={(event) => {
           if (window.getSelection()?.toString().trim()) return;
           const element = event.target as HTMLElement;
@@ -464,16 +511,34 @@ export function PdfReaderPage() {
           const hit = notes.find((note) => !note.needs_reattach && note.anchors.some((anchor) =>
             anchor.page === pageNumber && anchor.rects.some((rect) =>
               x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)));
-          if (hit) { setActiveNoteId(hit.id); if (preferences.notes_collapsed) updatePreferences({ notes_collapsed: false }); }
+          if (hit) { setActiveNoteId(hit.id); showNotes(); }
         }}>
           <div ref={viewerRef} className="pdfViewer" />
         </div>
-        {!preferences.notes_collapsed && <PdfNotesPanel notes={notes} preferences={preferences} onPreferenceChange={updatePreferences}
-          onCollapse={() => updatePreferences({ notes_collapsed: true })}
-          actions={{ onHover: setHoveredNoteId, onLocate: locateNote, onEdit: (note) => openComposer(note),
-            onDelete: (note) => void deleteNote(note), onReattach: (note) => { setReattachId(note.id); setSelectionMenu(null); } }}
-          activeId={activeNoteId} container={containerRef.current} viewer={viewerRef.current} zoom={zoom} layoutTick={layoutTick}
-          loading={notesQuery.loading} error={notesError || notesQuery.error} />}
+        {panelOpen && <>
+          {mobilePanelOpen && <button type="button" className="pdf-reader__sheet-backdrop" aria-label="Закрыть панель PDF"
+            onClick={() => setMobilePanelOpen(false)} />}
+          <aside className={`pdf-reader__side${mobilePanelOpen ? " is-open" : ""}`} aria-label="Панель PDF">
+            <div className="pdf-reader__side-tabs">
+              <div className="d-tabs" role="tablist" aria-label="Панель PDF">
+                <button type="button" role="tab" aria-selected={!entitySelection} className={!entitySelection ? "active" : ""}
+                  onClick={showNotes}>Заметки · {notes.length}</button>
+                <button type="button" role="tab" aria-selected={!!entitySelection} className={entitySelection ? "active" : ""}
+                  disabled={!ready} onClick={() => { if (!entitySelection) openEntity(); }}>Сущность из PDF</button>
+              </div>
+              <button type="button" aria-label="Свернуть панель PDF" onClick={closeSide}>×</button>
+            </div>
+            {entitySelection ? <PdfEntityPanel key={`${id}-${entitySelection.quote}-${entitySelection.page}`} resource={resource}
+              sources={sourceQuery.data ?? []} quote={entitySelection.quote} page={entitySelection.page} />
+              : <PdfNotesPanel notes={notes} preferences={preferences} onPreferenceChange={updatePreferences}
+                continuous={continuousNotes} onContinuousChange={setContinuousNotes}
+                onAddNote={() => openComposer()} ready={ready}
+                actions={{ onHover: setHoveredNoteId, onLocate: note => { locateNote(note); setMobilePanelOpen(false); }, onEdit: (note) => openComposer(note),
+                  onDelete: (note) => void deleteNote(note), onReattach: (note) => { setReattachId(note.id); setSelectionMenu(null); setMobilePanelOpen(false); } }}
+                activeId={activeNoteId} container={containerRef.current} viewer={viewerRef.current} zoom={zoom} layoutTick={layoutTick}
+                loading={notesQuery.loading} error={notesError || notesQuery.error} />}
+          </aside>
+        </>}
         {reattachId && <div className="pdf-reader__reattach-hint" role="status">
           Выделите новую цитату для перепривязки заметки.
           <button type="button" onClick={() => setReattachId(null)}>Отмена</button>
@@ -490,9 +555,6 @@ export function PdfReaderPage() {
             + Сущность из цитаты
           </button>}
         </div>}
-        {entitySelection && <PdfEntityPanel key={`${id}-${entitySelection.quote}-${entitySelection.page}`} resource={resource}
-          sources={sourceQuery.data ?? []} quote={entitySelection.quote} page={entitySelection.page} placement={entityPlacement}
-          onPlacementChange={changeEntityPlacement} onClose={() => setEntitySelection(null)} />}
         {composer && <div className="pdf-reader__composer" role="dialog" aria-label={composer.id ? "Править заметку" : "Новая заметка"}>
           <div className="pdf-reader__composer-head"><strong>{composer.id ? "Править заметку" : "Новая заметка"}</strong>
             <button type="button" aria-label="Закрыть редактор заметки" onClick={() => setComposer(null)}>×</button></div>

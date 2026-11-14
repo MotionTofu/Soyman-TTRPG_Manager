@@ -1,14 +1,6 @@
 .pdf-markdown { height: 100%; min-height: 0; display: flex; flex-direction: column; }
-.pdf-markdown__toolbar { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; padding: var(--sp-5) var(--sp-7); border-bottom: 1px solid var(--border, #9995); }
-.pdf-markdown__spacer { flex: 1; }
 .pdf-markdown__body { overflow: auto; max-width: 860px; width: 100%; margin: 0 auto; padding: var(--sp-7); }
 .pdf-markdown__hint { opacity: .7; }
-.pdf-markdown__warning { color: var(--warning, #9a5b13); }
-.pdf-markdown__note { padding: var(--sp-6) 0; border-bottom: 1px solid var(--border, #9995); }
-.pdf-markdown__note h2 { margin: 0 0 var(--sp-5); }
-.pdf-markdown__note blockquote { margin: 0 0 var(--sp-5); padding: var(--sp-4) var(--sp-6); border-left: 3px solid currentColor; white-space: pre-wrap; opacity: .8; }
-.pdf-markdown__note-body { white-space: pre-wrap; margin-bottom: var(--sp-5); font-size: var(--fs-body); line-height: 1.6; }
-.pdf-markdown__source { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .markdown-resource .pdf-markdown__body { max-width: 1000px; }
 .markdown-resource .mention-textarea-wrap { width: 100%; }
 .markdown-resource textarea { width: 100%; min-height: 22rem; max-height: 60vh; overflow-y: auto; field-sizing: fixed; resize: vertical; }
@@ -24,3 +16,15 @@
 .markdown-resource__picker input[type="text"], .markdown-resource__picker input:not([type]) { width: 100%; }
 .markdown-resource__picker-list { display: flex; flex-wrap: wrap; gap: .5rem; max-height: 10rem; overflow: auto; }
 .markdown-resource__notice { display: flex; align-items: center; gap: .75rem; margin: 0 0 var(--sp-4); }
+
+.app-shell-markdown > .app-content { min-height: 0; }
+.markdown-library { gap: var(--sp-4); }
+.markdown-library__head > a { font-size: var(--fs-meta); }
+.markdown-library__head h1 { overflow-wrap: anywhere; }
+.markdown-library .sheet-stage { padding: 0; }
+.markdown-library .sheet-layout { min-width: 0; }
+.markdown-library .sheet-toc { min-width: 0; flex-shrink: 1; }
+.markdown-library .sheet { box-shadow: none; }
+.markdown-library__head .d-tabs { margin: 0; }
+.markdown-library__head .sheet-pop { z-index: 12; }
+.markdown-library__head .library-file-controls { flex-direction: column; align-items: stretch; }

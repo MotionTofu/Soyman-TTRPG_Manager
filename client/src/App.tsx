@@ -52,7 +52,7 @@ const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) 
 const DndCardProfilePage = lazy(() => import("./pages/DndCardProfilePage").then((m) => ({ default: m.DndCardProfilePage })));
 const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
 const WorkbookPage = lazy(()=>import("./pages/WorkbookPage").then(m=>({default:m.WorkbookPage})));
-const WorkbooksPage = lazy(()=>import("./pages/WorkbooksPage").then(m=>({default:m.WorkbooksPage})));
+
 const AudioLibraryPage = lazy(() => import("./pages/AudioLibraryPage").then(m=>({default:m.AudioLibraryPage})));
 const PdfReaderPage = lazy(() => import("./pages/PdfReaderPage").then((m) => ({ default: m.PdfReaderPage })));
 const PdfMarkdownPage = lazy(() => import("./pages/PdfMarkdownPage").then((m) => ({ default: m.PdfMarkdownPage })));
@@ -238,7 +238,7 @@ function App() {
               <Route path="/systems" element={<SystemsListPage />} />
               <Route path="/systems/:id" element={<SystemDetailPage />} />
               <Route path="/systems/:id/entries/:entryId" element={<DndCardProfilePage />} />
-              <Route path="/resources" element={<ResourcesListPage />} />
+              <Route path="/resources" element={<Navigate to="/mastering?tab=misc" replace />} />
               <Route path="/gallery" element={<ResourcesListPage mode="gallery" />} />
               <Route path="/audio-library" element={<AudioLibraryPage />} />
               <Route path="/resources/:id/read" element={<PdfReaderPage />} />
@@ -249,7 +249,7 @@ function App() {
               <Route path="/mastering/cutscenes" element={<CutscenesPage />} />
               <Route path="/mastering/cutscenes/:id" element={<CutsceneWorkshopPage />} />
               <Route path="/mastering/:id" element={<MasteringArticleRedirect />} />
-              <Route path="/workbooks" element={<WorkbooksPage />} />
+              <Route path="/workbooks" element={<Navigate to="/mastering?tab=workbooks" replace />} />
               <Route path="/workbooks/:id" element={<WorkbookPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />
               <Route path="/characters/:id/sheet" element={<CharacterSheetPage />} />

@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
+import { errorText, useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { MentionText } from "../components/mentions/MentionText";
 import type { Resource } from "../types";
 import { getAuthToken } from "../api/client";
 import { SheetEditor } from "../components/sheet/SheetEditor";
 import { SheetMenu, SheetView, rememberedSheetMode, type SheetMode } from "../components/sheet/SheetView";
 import "./pdf-markdown.css";
+import type { LibraryBook, LibraryCatalog } from "../components/mastering/libraryTypes";
+import { FileBookControls } from "../components/mastering/FileBookControls";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 const SHEET_MODES: SheetMode[] = ["source", "hybrid", "reading"];
+const PHONE_MODES: SheetMode[] = ["reading"];
 
 const IMAGE_FILE_RE = /\.(?:png|jpe?g|gif|webp|avif)(?:\?|$)/i;
 
@@ -17,10 +21,18 @@ type SaveState = "saved" | "unsaved" | "saving" | "conflict" | "error";
 
 export function MarkdownResourcePage() {
   const { id } = useParams();
+  const isPhone = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
   const from = (location.state as { from?: unknown } | null)?.from;
-  const returnTo = typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/resources";
+  const returnTo = typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/mastering";
+  const libraryContext = (location.state as { library?: { bookId: number; position?: LibraryBook["position"] } } | null)?.library;
+  const catalog = useResource<LibraryCatalog>(id && !libraryContext ? `/book-library/books?source_type=resource&source_id=${id}` : null);
+  const book = catalog.data?.books[0];
+  const bookId = libraryContext?.bookId ?? book?.id;
+  const initialRatio = (libraryContext?.position ?? book?.position)?.ratio;
+  const run = useAction();
+  const savedRatio = useRef<number | null>(null);
   const resourceQuery = useResource<Resource>(id ? `/resources/${id}` : null);
   const documentQuery = useResource<MarkdownDocument>(id ? `/resources/${id}/markdown-content` : null);
   const resourceList = useResource<Resource[]>("/resources");
@@ -194,10 +206,18 @@ export function MarkdownResourcePage() {
 
   if (resourceQuery.loading || documentQuery.loading) return <p>Открываю Markdown…</p>;
   if (resourceQuery.error || documentQuery.error || resourceQuery.data?.type !== "markdown" || !documentQuery.data)
-    return <p role="alert">Markdown-ресурс не найден. <Link to="/resources">К Ресурсам</Link></p>;
+    return <p role="alert">Markdown-ресурс не найден. <Link to="/mastering">К Библиотеке</Link></p>;
+
+  function reportRatio(ratio: number) {
+    if (!bookId || savedRatio.current === ratio) return;
+    savedRatio.current = ratio;
+    void run(() => write.put(`/book-library/books/${bookId}/state`, { position: { ratio }, opened: true }), {
+      affects: [{ path: `/book-library/books/${bookId}` }, { path: "/book-library/books?recent=1" }], retry: false,
+    });
+  }
 
   const content = documentQuery.data.content;
-  const mode: SheetMode = chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "hybrid");
+  const mode: SheetMode = isPhone ? "reading" : chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "hybrid");
   const editing = mode !== "reading";
   const saveTitle = saveState === "saving" ? "Сохраняю…" : saveState === "saved" ? "Сохранено"
     : saveState === "unsaved" ? "Сохранить (Ctrl+S) — черновик сохраняется сам" : saveError || "Сохранить";
@@ -231,10 +251,13 @@ export function MarkdownResourcePage() {
         {attachmentError && <p role="alert">{attachmentError}</p>}
       </div>}
     </SheetMenu>}
-    <SheetMenu label="Скачать" icon="⤓" open={downloadOpen} onOpenChange={setDownloadOpen}>
+    <SheetMenu label="Действия с документом" icon="⋯" open={downloadOpen} onOpenChange={setDownloadOpen}>
       <button type="button" onClick={() => { download(); setDownloadOpen(false); }}>Скачать .md</button>
       <button type="button" disabled={bundleBusy || saveState === "conflict"}
         onClick={() => { void downloadBundle(); setDownloadOpen(false); }}>{bundleBusy ? "Собираю ZIP…" : "Скачать с вложениями"}</button>
+      {saveState === "conflict" && <button type="button" onClick={download}>Скачать черновик .md</button>}
+      {bookId && <Link role="button" to={`/mastering?book=${bookId}&notes=1`}>Заметки к книге</Link>}
+      {bookId && <FileBookControls />}
     </SheetMenu>
   </>;
 
@@ -243,13 +266,15 @@ export function MarkdownResourcePage() {
     {saveState === "conflict" && <button type="button" onClick={download}>Скачать черновик .md</button>}
   </p>;
 
-  return <section className="pdf-markdown markdown-resource">
-    <SheetView docKey={`resource-md-${id}`} contentKey={draft} modes={SHEET_MODES} mode={mode} onMode={next => {
+  return <section className="pdf-markdown markdown-resource markdown-library">
+    <SheetView libraryTitle={resourceQuery.data.name}
+      readingRatio={typeof initialRatio === "number" ? initialRatio : undefined}
+      onReadingRatio={reportRatio} docKey={`resource-md-${id}`} contentKey={draft} modes={isPhone ? PHONE_MODES : SHEET_MODES} mode={mode} onMode={next => {
         // Уход в «Чтение» сохраняет набранное (Q10).
         if (next === "reading" && dirty) void save();
         setChosenMode(next);
       }}
-      back={{ to: returnTo, label: "Назад", onClick: event => {
+      back={{ to: returnTo, label: "Библиотека", onClick: event => {
         if (!dirty) return;
         event.preventDefault();
         void save().then(ok => { if (ok) navigate(returnTo); });

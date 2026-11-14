@@ -508,6 +508,8 @@ export function AppShell() {
   const workbookCrumbs = useWorkbookCrumbs(pathname);
   const cutsceneCrumbs = useCutsceneCrumbs(pathname, gm);
   const mode = workspaceMode(pathname, user?.role);
+  const isPdfReader = !isPlayer && /^\/resources\/[^/]+\/read\/?$/.test(pathname);
+  const isMarkdownReader = !isPlayer && /^\/resources\/[^/]+\/markdown-file\/?$/.test(pathname);
   const isLivePult = mode === "session";
   const isMapWorkspace = mode === "maps";
   const [mapRail, setMapRail] = useState<HTMLDivElement | null>(null);
@@ -745,7 +747,7 @@ export function AppShell() {
         страницей, уходил вместе с ней. */}
     <UndoDeleteProvider>
     <MapWorkspaceContext.Provider value={isMapWorkspace ? { rail: mapRail, placement: mapPlacement, setPlacement: setMapPlacement } : null}>
-    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}${isMapWorkspace ? " app-shell-maps" : ""}${panelsHidden && (isLivePult || isMapWorkspace) ? " app-shell-panels-hidden" : ""}`} data-workspace={mode}>
+    <div className={`app-shell${isPdfReader ? " app-shell-pdf" : ""}${isMarkdownReader ? " app-shell-markdown" : ""}${isLivePult ? " app-shell-live" : ""}${isMapWorkspace ? " app-shell-maps" : ""}${panelsHidden && (isLivePult || isMapWorkspace) ? " app-shell-panels-hidden" : ""}`} data-workspace={mode}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню" aria-expanded={navOpen} aria-controls="app-nav">
           <NavIcon name="menu" />
@@ -883,6 +885,8 @@ export function AppShell() {
             крошки с названием карты. Общие крошки там дублировали бы шапку. */}
         {!userLoading &&
           !isMapWorkspace &&
+          !isPdfReader &&
+          !isMarkdownReader &&
           !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) &&
           !/^\/characters\/\d+\/sheet$/.test(pathname) &&
           !/^\/maps\/\d+$/.test(pathname) && (
@@ -908,7 +912,7 @@ export function AppShell() {
         {isMapWorkspace && <button type="button" className="map-workspace-search-close" aria-label="Закрыть поиск и мешок" onClick={() => setSearchOpen(false)}><NavIcon name="close" /></button>}
         <SearchPanel workspace={isMapWorkspace} onNavigate={() => setSearchOpen(false)} />
       </div>
-      <NavWidget />
+      {!isPdfReader && !isMarkdownReader && <NavWidget />}
       {/* Players never had a reason to control music — only the GM runs the
           session soundtrack. The full bar is desktop-only (hidden on mobile
           via CSS, see index.css); mobile gets MiniPlayerBar below instead —

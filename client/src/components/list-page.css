@@ -1,3 +1,10 @@
+
+.list-page--d.list-page--embedded .list-page__sheet {
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
 .list-page--d .list-page__sheet {
   display: flex;
   flex-direction: column;

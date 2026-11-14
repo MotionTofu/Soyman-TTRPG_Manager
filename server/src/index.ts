@@ -462,7 +462,13 @@ app.use("/files", (req: AuthedRequest, res, next) => {
     next();
   }
 }, (req, res, next) => {
-  express.static(VAULT_ROOT)(req, res, next);
+  express.static(VAULT_ROOT, {
+    setHeaders(response, file) {
+      const name = path.basename(file);
+      const attachment = /^[a-f0-9-]{36}-(.+)\.attachment$/i.exec(name);
+      if (attachment) response.attachment(attachment[1]).type("application/octet-stream");
+    },
+  })(req, res, next);
 });
 
 app.use("/api/systems", systemsRouter);

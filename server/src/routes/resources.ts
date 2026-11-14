@@ -39,7 +39,11 @@ const upload = multer({
     filename(_req, _file, cb) { cb(null, crypto.randomUUID() + ".upload"); },
   }),
   limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter(_req, file, cb) {
+  fileFilter(req, file, cb) {
+    if (req.body?.type === "file" && req.body?.category === "other") {
+      cb(null, true);
+      return;
+    }
     if (ALLOWED_IMAGE_MIMES.test(file.mimetype) || /\.(pdf|md)$/i.test(file.originalname) || (ALLOWED_AUDIO_EXTENSION.test(file.originalname)&&/^(audio\/|application\/ogg$)/i.test(file.mimetype))) cb(null, true);
     else cb(new Error("Допускаются изображения, PDF, Markdown и аудиофайлы"));
   },
@@ -536,6 +540,7 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
     if (body.type === "statblock_template")
       return res.status(410).json({ error: "Шаблоны статблоков больше не используются" });
 
+    const isMiscFile = body.type === "file" && body.category === "other";
     const isPdf = !!req.file && /\.pdf$/i.test(req.file.originalname);
     const isMarkdownFile = !!req.file && /\.md$/i.test(req.file.originalname);
     const createMarkdown = !req.file && body.category === "markdown";
@@ -561,7 +566,7 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
         return res.status(400).json({ error: "Для категории PDF нужен PDF-файл" });
       } else if (body.category === "markdown") {
         return res.status(400).json({ error: "Для категории Markdown нужен .md файл" });
-      } else if (!ALLOWED_IMAGE_MIMES.test(req.file.mimetype) || req.file.size > 15 * 1024 * 1024) {
+      } else if (!isMiscFile && (!ALLOWED_IMAGE_MIMES.test(req.file.mimetype) || req.file.size > 15 * 1024 * 1024)) {
         return res.status(400).json({ error: "Изображение должно быть меньше 15 МБ" });
       } else if (!body.category) {
         body.category = "image";
@@ -581,7 +586,7 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
       const targetFolder = subdir ? ensureSubfolder(folder, subdir) : folder;
       const original = sanitizeName(req.file?.originalname ?? `${body.name}.md`);
       const targetName = isPdf ? `${path.parse(original).name}-${crypto.randomUUID()}.pdf`
-        : (isMarkdownFile || createMarkdown) ? `${path.parse(original).name}-${crypto.randomUUID()}.md` : body.category === "audio" ? `${path.parse(original).name}-${crypto.randomUUID()}${path.extname(original)}` : original;
+        : (isMarkdownFile || createMarkdown) ? `${path.parse(original).name}-${crypto.randomUUID()}.md` : body.category === "audio" ? `${path.parse(original).name}-${crypto.randomUUID()}${path.extname(original)}` : isMiscFile ? `${crypto.randomUUID()}-${original}.attachment` : original;
       const target = path.join(vaultAbs(targetFolder), targetName);
       if (isPdf) {
         uploadedPdfPath = target;

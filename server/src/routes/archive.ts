@@ -134,6 +134,7 @@ archiveRouter.get("/", (_req, res) => {
   const resources = db
     .prepare(
       `SELECT r.id, r.name, r.scope, r.archived_at,
+              r.category, r.type AS resource_type, r.file_path, r.link_url,
               sy.name as system_name, se.name as setting_name, ca.name as campaign_name
          FROM resources r
          LEFT JOIN systems sy ON sy.id = r.system_id
@@ -142,13 +143,18 @@ archiveRouter.get("/", (_req, res) => {
         WHERE r.archived_at IS NOT NULL
           AND r.type <> 'pdf_notes'`
     )
-    .all() as { id: number; name: string; scope: string; archived_at: string; system_name: string | null; setting_name: string | null; campaign_name: string | null }[];
+    .all() as { id: number; name: string; scope: string; archived_at: string; system_name: string | null; setting_name: string | null; campaign_name: string | null;
+      category: string | null; resource_type: string; file_path: string | null; link_url: string | null }[];
   items.push(
     ...resources.map((r) => {
       const owner = r.system_name || r.setting_name || r.campaign_name || null;
       const scopeLabel = SCOPE_LABELS[r.scope] ?? r.scope;
       const sub = [scopeLabel, owner].filter(Boolean).join(" · ");
-      return { type: "resource", id: r.id, title: r.name, subtitle: sub || undefined, archived_at: r.archived_at };
+      return { type: "resource", id: r.id, title: r.name, subtitle: sub || undefined, archived_at: r.archived_at,
+        resource_category: r.category, resource_type: r.resource_type,
+        resource_extension: r.file_path?.match(/\.[^.\\/]+$/)?.[0] ?? null,
+        resource_link_category_hint: r.link_url?.split(/[?#]/)[0].match(/\.[^.\\/]+$/)?.[0] ?? null,
+      };
     })
   );
 
