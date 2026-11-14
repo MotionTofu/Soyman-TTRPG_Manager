@@ -496,14 +496,20 @@ export function HomeCalendarPage() {
       )}
 
       {createModal && (
-        <Modal onClose={() => setCreateModal(null)} closeOnBackdropClick={false}>
+        <Modal
+          onClose={() => setCreateModal(null)}
+          closeOnBackdropClick={false}
+          className="home-session-modal"
+          ariaLabel="Новая сессия"
+        >
+          <h3>Новая сессия</h3>
           <div className="stack">
-            <h3 style={{ margin: 0 }}>Новая сессия</h3>
-            <label>
-              Кампания
+            <label className="home-session-modal__field">
+              <span>Кампания</span>
               <select
                 value={createModal.campaignId}
                 onChange={(e) => setCreateModal({ ...createModal, campaignId: e.target.value })}
+                aria-describedby={campaigns.length === 0 ? "home-session-campaign-hint" : undefined}
               >
                 <option value="">—</option>
                 {campaigns.map((c) => (
@@ -512,27 +518,33 @@ export function HomeCalendarPage() {
                   </option>
                 ))}
               </select>
-              {campaigns.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сначала создайте кампанию в разделе «Кампании»</span>}
             </label>
-            <label>
-              Дата
-              <input
-                type="date"
-                value={createModal.date}
-                onChange={(e) => setCreateModal({ ...createModal, date: e.target.value })}
-              />
-            </label>
-            <label>
-              Время начала (необязательно)
-              <input
-                type="time"
-                value={createModal.startTime}
-                onChange={(e) => setCreateModal({ ...createModal, startTime: e.target.value })}
-              />
-            </label>
+            {campaigns.length === 0 && (
+              <span id="home-session-campaign-hint" className="home-session-modal__hint muted">
+                Сначала создайте кампанию в разделе «Кампании»
+              </span>
+            )}
+            <div className="home-session-modal__schedule">
+              <label className="home-session-modal__field">
+                <span>Дата</span>
+                <input
+                  type="date"
+                  value={createModal.date}
+                  onChange={(e) => setCreateModal({ ...createModal, date: e.target.value })}
+                />
+              </label>
+              <label className="home-session-modal__field">
+                <span>Время начала <span className="muted">(необязательно)</span></span>
+                <input
+                  type="time"
+                  value={createModal.startTime}
+                  onChange={(e) => setCreateModal({ ...createModal, startTime: e.target.value })}
+                />
+              </label>
+            </div>
             {selectedCampaign?.type === "oneshot" && oneshotSessions.length > 0 && (
-              <label>
-                Скопировать подготовку из прогона (необязательно)
+              <label className="home-session-modal__field">
+                <span>Скопировать подготовку из прогона <span className="muted">(необязательно)</span></span>
                 <select
                   value={createModal.copyFromSessionId}
                   onChange={(e) => setCreateModal({ ...createModal, copyFromSessionId: e.target.value })}
@@ -547,11 +559,11 @@ export function HomeCalendarPage() {
               </label>
             )}
             {createError && <LoadErrorCard message={createError} />}
-            <div className="row">
+            <div className="row modal-footer home-session-modal__actions">
+              <button className="d-btn" onClick={() => setCreateModal(null)} disabled={creating}>Отмена</button>
               <button className="primary" onClick={createSessionFromModal} disabled={!createModal.campaignId || creating}>
                 {creating ? "Создаю…" : "Создать"}
               </button>
-              <button onClick={() => setCreateModal(null)} disabled={creating}>Отмена</button>
             </div>
           </div>
         </Modal>
