@@ -127,6 +127,7 @@ export function useLitmRibbon(sessionId: number) {
 
   async function add(src: LitmSource, count = 1) {
     const names = challenges.map((e) => e.name);
+    let added = true;
     for (let k = 0; k < count; k += 1) {
       const state = await sourceState(src);
       const name = numbered(src.name, names);
@@ -141,8 +142,10 @@ export function useLitmRibbon(sessionId: number) {
           state,
         })
       );
-      if (ok) recordNote(sessionId, `«${name}» на ленте`);
+      if (!ok) added = false;
+      else recordNote(sessionId, `«${name}» на ленте`);
     }
+    return added;
   }
 
   /**

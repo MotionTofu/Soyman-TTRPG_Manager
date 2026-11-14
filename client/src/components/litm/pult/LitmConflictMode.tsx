@@ -26,7 +26,7 @@ import { statblockAffects, statblockListPath } from "../../../data/statblocks";
 import { useConfirm, usePrompt } from "../../../hooks/useConfirm";
 import { Ribbon } from "../../../combat/CombatMode";
 import { ContextMenu, type ContextMenuItem } from "../../ContextMenu";
-import type { Character, InitiativeEntry, SessionStage, SessionUnionRow, Statblock } from "../../../types";
+import type { Character, InitiativeEntry, SessionDetail, SessionStage, SessionUnionRow, Statblock } from "../../../types";
 import { LitmStatusCards } from "../LitmStatusCards";
 import { LitmChallengeProfile } from "../LitmChallengeProfile";
 import { LitmRich, MightMark, Rating, Status } from "../LitmBook";
@@ -45,6 +45,7 @@ import { useLitmBook, type LitmBookEntry } from "./useLitmBook";
 import { LITM_RIBBON_TARGET, useLitmRibbon, type LitmRibbon, type LitmSource } from "./useLitmRibbon";
 import { useUnloadTarget } from "../../../unloadTargets";
 import { LitmAddPanel } from "./LitmAddPanel";
+import { LitmOracleDrawer } from "./LitmOracleDrawer";
 import { LitmCompendiumDrawer } from "./LitmCompendiumDrawer";
 import { LitmJourneyBar, LitmVignetteNest } from "./LitmJourney";
 import { LitmCampBar } from "./LitmCamp";
@@ -79,7 +80,7 @@ export function LitmRibbonTarget({ sessionId }: { sessionId: number }) {
   useUnloadTarget({
     label: LITM_RIBBON_TARGET,
     accepts: (item) => item.type === "being" || (item.type === "compendium_entry" && (!item.kind || item.kind === "monster")),
-    drop: (item) => ribbon.add({ type: item.type as "being" | "compendium_entry", id: item.id, name: item.title }, 1),
+    drop: async (item) => { await ribbon.add({ type: item.type as "being" | "compendium_entry", id: item.id, name: item.title }, 1); },
   });
   return null;
 }
@@ -146,10 +147,12 @@ export function LitmConflictMode({
   const ribbon = useLitmRibbon(sessionId);
   const fight = useLitmBattle(sessionId);
   const { scene } = ribbon;
+  const session = useResource<SessionDetail>("/sessions/" + sessionId).data;
   const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data ?? null;
   const current = stage?.current ?? null;
   const [adding, setAdding] = useState(false);
   const [grimOpen, setGrimOpen] = useState(false);
+  const [oracleOpen, setOracleOpen] = useState(false);
   const closeGrim = useCallback(() => setGrimOpen(false), []);
   const [rewardsOpen, setRewardsOpen] = useState(false);
   const closeRewards = useCallback(() => setRewardsOpen(false), []);
@@ -376,10 +379,16 @@ export function LitmConflictMode({
 
   // Пробел — спотлайт следующему (Q4). Перехват на захвате, как в бою D&D:
   // плеер приложения тоже слушает пробел.
-  const spotRef = useRef({ spotlight, back });
-  spotRef.current = { spotlight, back };
+  const spotRef = useRef({ spotlight, back, systemId });
+  spotRef.current = { spotlight, back, systemId };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.code === "KeyO" && spotRef.current.systemId != null && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !keysBlocked(e.target)) {
+        e.preventDefault();
+        setGrimOpen(false);
+        setOracleOpen(true);
+        return;
+      }
       // G — поиск по книге на пульте (Q8).
       if (e.code === "KeyG" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.repeat && !keysBlocked(e.target)) {
         e.preventDefault();
@@ -486,6 +495,10 @@ export function LitmConflictMode({
           <button type="button" className={`d-btn d-btn--sm${grimOpen ? " is-on" : ""}`} aria-pressed={grimOpen} title="Справочник и Гримуар — клавиша G" onClick={() => setGrimOpen(!grimOpen)}>
             Компендиум · G
           </button>
+          {systemId != null && <button type="button" className="d-btn d-btn--sm" aria-haspopup="dialog" aria-expanded={oracleOpen}
+            title="Оракул — клавиша O" onClick={() => { setGrimOpen(false); setOracleOpen(true); }}>
+            Оракул · O
+          </button>}
           <button type="button" className="d-btn d-btn--sm" onClick={() => setAdding(true)}>
             + Вызов
           </button>
@@ -656,6 +669,11 @@ export function LitmConflictMode({
             await ribbon.add(src, count);
           }}
         />
+      )}
+      {oracleOpen && systemId != null && (
+        <LitmOracleDrawer systemId={systemId} sessionId={sessionId} campaignId={session?.campaign_id}
+          ribbon={ribbon} spot={sp.current != null ? { id: sp.current, name: heroName(sp.current) } : null}
+          onGive={setGive} onClose={() => setOracleOpen(false)} />
       )}
       {grimOpen && systemId != null && (
         <LitmCompendiumDrawer

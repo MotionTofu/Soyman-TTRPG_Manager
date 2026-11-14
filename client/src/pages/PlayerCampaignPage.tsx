@@ -20,6 +20,7 @@ import type {
   PartyMember,
   PlayerSection,
   SettingPlayerContent,
+  SystemSection,
   VisibleCampaignContent,
   WorldExplorationTag,
 } from "../types";
@@ -56,6 +57,9 @@ export function PlayerCampaignPage() {
   const settingState = useResource<SettingPlayerContent>(id4 == null ? null : playerCampaignPaths.setting(id4));
   const partyState = useResource<PartyMember[]>(id4 == null ? null : playerCampaignPaths.party(id4));
   const content = contentState.data ?? null;
+  const systemId = content?.campaign.system_id;
+  const systemSections = useResource<SystemSection[]>(systemId ? "/systems/" + systemId + "/sections" : null).data;
+  const oraclesId = systemSections?.find((section) => section.kind === "oracle")?.id;
   const sections = sectionsState.data ?? NO_SECTIONS;
   const setting = settingState.data ?? null;
   const party = partyState.data ?? NO_PARTY;
@@ -308,6 +312,9 @@ export function PlayerCampaignPage() {
       overlays={promptDialog}
     >
 
+      {tab === "Лента" && oraclesId && (
+        <Link className="d-btn d-btn--sm" to={"/systems/" + systemId + "?section=" + oraclesId}>Оракулы</Link>
+      )}
       {(tab === "Лента" || activeFolder != null) && (
         <CampaignJournal
           campaignId={campaignId}

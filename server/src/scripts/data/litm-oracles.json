@@ -1,0 +1,4522 @@
+{
+  "oracles": [
+    {
+      "key": "question",
+      "name": "Вопрос",
+      "nameEn": "The Question Oracles",
+      "page": "B242–B244",
+      "lead": "Когда в истории встаёт вопрос, ответа на который вы не знаете, бросьте две шестигранные кости (как для действия Героя) и истолкуйте результат.",
+      "leadEn": "Whenever you run into a question in your story to which you do not know the answer, you can roll two six-sided dice (as you would for a Hero action) and interpret the result as below.",
+      "yesNo": {
+        "rule": "Бросьте две шестигранные кости и прибавьте Силу. Здесь Сила считает теги и статусы, которые могут склонить ответ к «да», положительными, а те, что склоняют к «нет», — отрицательными.",
+        "ruleEn": "Roll two six-sided dice and add Power. Power in this case treats any tags and statuses that could sway the answer to Yes as positive and any tags and statuses that could sway the answer to No as negative.",
+        "outcomes": [
+          {
+            "key": "extremeNo",
+            "range": "1·1",
+            "name": "Нет — и ещё как",
+            "nameEn": "Extreme No",
+            "text": "Две единицы — всегда крайнее «нет», какой бы ни была Сила.",
+            "textEn": "Double ones are always an Extreme No, regardless of Power."
+          },
+          {
+            "key": "no",
+            "range": "6−",
+            "name": "Нет",
+            "nameEn": "No",
+            "text": "6 и меньше: ответ — «нет».",
+            "textEn": "6 or less: The answer is No."
+          },
+          {
+            "key": "mixed",
+            "range": "7–9",
+            "name": "Сложно",
+            "nameEn": "It's complicated",
+            "text": "7–9: всё непросто — «да» с оговоркой или «нет» с исключением.",
+            "textEn": "7-9: It's complicated – a Yes with a caveat, or a No with an exception."
+          },
+          {
+            "key": "yes",
+            "range": "10+",
+            "name": "Да",
+            "nameEn": "Yes",
+            "text": "10 и больше: ответ — «да».",
+            "textEn": "10 or more: The answer is Yes."
+          },
+          {
+            "key": "extremeYes",
+            "range": "6·6",
+            "name": "Да — и ещё как",
+            "nameEn": "Extreme Yes",
+            "text": "Две шестёрки — всегда крайнее «да», какой бы ни была Сила.",
+            "textEn": "Double sixes are always an Extreme Yes, regardless of Power."
+          }
+        ],
+        "examples": [
+          {
+            "q": "Есть ли сейчас в этом лесу разбойники?",
+            "qEn": "Are there bandits currently in these woods?",
+            "plus": [
+              "подозрительная возня",
+              "хорошее укрытие"
+            ],
+            "plusEn": [
+              "suspicious activity",
+              "good hiding place"
+            ],
+            "minus": [
+              "регулярные армейские разъезды"
+            ],
+            "minusEn": [
+              "regular army patrols"
+            ],
+            "answers": [
+              "Ничуть. Более того, с разбоем здесь покончили десятки лет назад.",
+              "Нет, разбойников здесь нет.",
+              "Разбойники здесь есть, но держатся восточной части леса — или: нет, но говорят, разбойники из соседнего края расползаются сюда.",
+              "Да, разбойники постоянно промышляют в этих лесах.",
+              "Да — и они здесь прямо сейчас!"
+            ],
+            "answersEn": [
+              "Not at all. In fact, banditry here has been eradicated decades ago.",
+              "No, there are no bandits here.",
+              "There are bandits here, but they focus on the east part of the woods -or- no, there aren't, but word is bandits from the neighboring region are expanding.",
+              "Yes, bandits raid these woods regularly.",
+              "Yes, and they are here right now!"
+            ]
+          },
+          {
+            "q": "Убили ли королеву этой ночью?",
+            "qEn": "Has the Queen been assassinated overnight?",
+            "plus": [
+              "вероломная знать"
+            ],
+            "plusEn": [
+              "backstabbing gentry"
+            ],
+            "minus": [
+              "любима народом"
+            ],
+            "minusEn": [
+              "loved by the people"
+            ],
+            "answers": [
+              "Нет. Никому бы и в голову такое не пришло.",
+              "Нет, не этой ночью.",
+              "Нет, но её убьют завтра ночью — или: да, но она пережила покушение, едва-едва.",
+              "Да. Королева мертва.",
+              "Да — и заговорщики уже захватили власть!"
+            ],
+            "answersEn": [
+              "No. No one would ever contemplate such a thing.",
+              "No, not tonight.",
+              "No, but tomorrow night she will be -or- yes, but she survived the attack, barely.",
+              "Yes. The queen is dead.",
+              "Yes, and those behind it have already seized power!"
+            ]
+          }
+        ]
+      },
+      "interpretive": {
+        "rule": "Бросьте d66 и сверьтесь с таблицей толкований. Истолкуйте ответ на свой вопрос по мыслям и образам выпавшей строки: в столбце толкований — подсказки-понятия и люди. На следующей странице — готовые ответы: настроение персонажа, волшебное существо, черта местности и бытовая вещь.",
+        "ruleEn": "Roll d66 and compare the outcome to the Interpretive Question table. Interpret the answer to your question based on the ideas and concepts in the line you rolled. The Interpretations column contains inspirations for answers based on concepts and people. In the next page, you will find specific answers for a character's Attitude, types of Magical Beings, Terrain Features, and Everyday Items.",
+        "example": {
+          "q": "Я обыскиваю заброшенные руины замка Тамалин. Что я найду в следующей зале?",
+          "qEn": "As I explore the abandoned ruins of Tamalin Castle, what do I find in the next room?",
+          "rolls": [
+            {
+              "roll": "32",
+              "name": "Коса",
+              "text": "Тёмный дух смерти, что хочет пожать мою душу.",
+              "nameEn": "The Scythe",
+              "textEn": "I interpret this as a dark spirit of death that seeks to harvest my soul."
+            },
+            {
+              "roll": "13",
+              "name": "Старейшина",
+              "text": "Стареющий мудрец, обжившийся в этих руинах; он знает то, что мне может понадобиться.",
+              "nameEn": "The Elder",
+              "textEn": "I interpret this as an aging sage who has made this ruin his home, and holds knowledge I may need."
+            },
+            {
+              "roll": "63",
+              "name": "Подъёмный мост",
+              "text": "Странная баррикада из обломков и мусора — явно чтобы кого-то не впустить. Или не выпустить.",
+              "nameEn": "The Drawbridge",
+              "textEn": "I interpret this as a peculiar barricade made of rubble and debris, clearly to stop someone from entering – or from getting out."
+            }
+          ]
+        },
+        "tables": [
+          {
+            "key": "symbol",
+            "name": "Символ",
+            "nameEn": "Symbol",
+            "die": "d66",
+            "rows": [
+              {
+                "roll": "11",
+                "name": "Крестьянин",
+                "nameEn": "The Peasant",
+                "text": "Тяжкий труд. Желание большего. Круговорот и повторение. Невинный прохожий.",
+                "textEn": "Hard work. Yearning for more. Cycles and repetition. An innocent bystander."
+              },
+              {
+                "roll": "12",
+                "name": "Купец",
+                "nameEn": "The Merchant",
+                "text": "Вежливый спор. Сделки. Договоры и обещания. Бывалый человек.",
+                "textEn": "Polite conflict. Bargains. Contracts and promises. A worldly person."
+              },
+              {
+                "roll": "13",
+                "name": "Старейшина",
+                "nameEn": "The Elder",
+                "text": "Довольство. Мудрость лет. Взгляд в себя. Кто-то умудрённый опытом.",
+                "textEn": "Contentment. Wisdom of age. Introspection. Someone wise with experience."
+              },
+              {
+                "roll": "14",
+                "name": "Маршал",
+                "nameEn": "The Marshal",
+                "text": "Гордость. Воинское умение. Строй и порядок. Солдат или блюститель закона.",
+                "textEn": "Pride. Skill at arms. Organized and orderly. A soldier or law enforcer."
+              },
+              {
+                "roll": "15",
+                "name": "Ведьма",
+                "nameEn": "The Witch",
+                "text": "Уродство. Чутьё. Месть. Изгой.",
+                "textEn": "Ugliness. Intuition. Vengeance. An outcast."
+              },
+              {
+                "roll": "16",
+                "name": "Тавматург",
+                "nameEn": "The Thaumaturge",
+                "text": "Подготовка. Книжное знание. Традиция. Тот, кто владеет магией.",
+                "textEn": "Preparation. Studied knowledge. Tradition. A magic user."
+              },
+              {
+                "roll": "21",
+                "name": "Заблудшая овца",
+                "nameEn": "The Lost Sheep",
+                "text": "Сбиться с пути. Скитания. Поиск направления. Кто-то в беде.",
+                "textEn": "Getting lost. Wandering. Seeking a direction. Someone in distress."
+              },
+              {
+                "roll": "22",
+                "name": "Глупая гусыня",
+                "nameEn": "The Foolish Goose",
+                "text": "Неуверенность. Пустая трата времени. Блаженное неведение. Дурак или пьяница.",
+                "textEn": "Uncertainty. Wasting time. Blissful ignorance. A fool or drunkard."
+              },
+              {
+                "roll": "23",
+                "name": "Чёрный пёс",
+                "nameEn": "The Black Hound",
+                "text": "Дурные знаки. Невезение. Ненадёжные люди. Плут, вор или разбойник.",
+                "textEn": "Ill portents. Bad luck. Untrustworthy people. A rogue, thief, or brigand."
+              },
+              {
+                "roll": "24",
+                "name": "Сокол-соглядатай",
+                "nameEn": "The Spying Falcon",
+                "text": "Поиск сведений. Выход за пределы. Полёт. Охотник.",
+                "textEn": "Seeking information. Going beyond limits. Flying. A hunter."
+              },
+              {
+                "roll": "25",
+                "name": "Могучий конь",
+                "nameEn": "The Powerful Steed",
+                "text": "Быстрый путь. Надёжность и умеренность. Одоление невзгод. Скакун или повозка.",
+                "textEn": "Journeying fast. Reliability and moderation. Overcoming hardship. A mount or transport."
+              },
+              {
+                "roll": "26",
+                "name": "Голодный волк",
+                "nameEn": "The Hungry Wolf",
+                "text": "Поиск случая. Отчаяние. Голод. Одинокое чудовище или зверь.",
+                "textEn": "Seeking opportunity. Desperation. Hunger. A lone monster or beast."
+              },
+              {
+                "roll": "31",
+                "name": "Молот и зубило",
+                "nameEn": "The Hammer & Chisel",
+                "text": "Оставить след. Дерзость. Двойственность и дилеммы. Набор полезных инструментов.",
+                "textEn": "Making a mark. Boldness. Duality and dilemmas. A set of useful tools."
+              },
+              {
+                "roll": "32",
+                "name": "Коса",
+                "nameEn": "The Scythe",
+                "text": "Пожинать посеянное. Внезапная смерть или потеря. Пора жатвы. Опасное положение.",
+                "textEn": "Reaping what you have sown. Sudden death or loss. Harvest season. A dangerous situation."
+              },
+              {
+                "roll": "33",
+                "name": "Вилы",
+                "nameEn": "The Pitchfork",
+                "text": "Взяться за оружие. Угрозы и страхи. Телесная сила. Кто-то грозный.",
+                "textEn": "Taking up arms. Threats and fears. Physical strength. Someone threatening."
+              },
+              {
+                "roll": "34",
+                "name": "Фонарь",
+                "nameEn": "The Lantern",
+                "text": "Надежда. Учение. Быть замеченным или раскрытым. Источник знаний.",
+                "textEn": "Hope. Learning. Being seen or discovered. A source of knowledge."
+              },
+              {
+                "roll": "35",
+                "name": "Ткацкий стан",
+                "nameEn": "The Loom",
+                "text": "Сплетать воедино. Объединить силы. Сложное переплетение. Две угрозы заодно против вас.",
+                "textEn": "Weaving together. Combining forces. Complex interplay. Two threats combined against you."
+              },
+              {
+                "roll": "36",
+                "name": "Кузня",
+                "nameEn": "The Forge",
+                "text": "Создать новое. Сломать старое. Мастерство в ремесле. Мастерская или лавка.",
+                "textEn": "Making something new. Breaking down the old. Skill at a craft. A workshop or place of business."
+              },
+              {
+                "roll": "41",
+                "name": "Святилище",
+                "nameEn": "The Shrine",
+                "text": "Обряд. Скорбь. Красота. Жрец или шаман.",
+                "textEn": "Ceremony. Mourning. Beauty. A priest or shaman."
+              },
+              {
+                "roll": "42",
+                "name": "Перекрёсток",
+                "nameEn": "The Crossroads",
+                "text": "Выбор. Предложения помощи. Перемены в жизни. Случайная встреча.",
+                "textEn": "Choices. Offers of help. Changes in life. A chance meeting."
+              },
+              {
+                "roll": "43",
+                "name": "Ярмарка",
+                "nameEn": "The Village Fair",
+                "text": "Лад. Забавы и развлечения. Надежда на лучшее. Союзник или старый друг.",
+                "textEn": "Harmony. Diversions and entertainment. Optimism. An ally or old friend."
+              },
+              {
+                "roll": "44",
+                "name": "Колодец",
+                "nameEn": "The Well",
+                "text": "Искушение. Порча или осквернение. Опасные места. Таинственный незнакомец.",
+                "textEn": "Temptation. Taint or despoilment. Dangerous locations. A mysterious stranger."
+              },
+              {
+                "roll": "45",
+                "name": "Извилистая река",
+                "nameEn": "The Winding River",
+                "text": "Осложнения. Видеть красоту и великолепие. Заданный или суждённый путь. Неизбежная дорога.",
+                "textEn": "Complications. Witnessing beauty and splendor. A set or fated path. An unavoidable journey."
+              },
+              {
+                "roll": "46",
+                "name": "Гора",
+                "nameEn": "The Mountain",
+                "text": "Растущая трудность. Высокие цели или идеалы. Коварная местность. Препятствие.",
+                "textEn": "Increasing difficulty. Lofty goals or ideals. Treacherous landscape. An obstacle."
+              },
+              {
+                "roll": "51",
+                "name": "Великий паук",
+                "nameEn": "The Great Spider",
+                "text": "Подробные замыслы. Паутина власти. Средоточие чего-то обширного. Ловушка.",
+                "textEn": "Detailed plans. Webs of power. The center of something sprawling. A trap."
+              },
+              {
+                "roll": "52",
+                "name": "Принц фей",
+                "nameEn": "The Faerie Prince",
+                "text": "Мелкие тираны. Обольстительные люди. Глупые или порочные игры. Знатная особа.",
+                "textEn": "Petty tyrants. Alluring people. Silly or decadent games. A noble."
+              },
+              {
+                "roll": "53",
+                "name": "Мёртвый рыцарь",
+                "nameEn": "The Dead Knight",
+                "text": "Возвращение. Старые обещания или клятвы. Неумирающая любовь. Призрак прошлого.",
+                "textEn": "Returning. Old promises or oaths. Undying love. A ghost of the past."
+              },
+              {
+                "roll": "54",
+                "name": "Чародейка",
+                "nameEn": "The Sorceress",
+                "text": "Сила ради силы. Великие деяния. Потеря власти над собой. Кто-то жадный до власти.",
+                "textEn": "Power for its own sake. Great feats. Loss of control. Someone power hungry."
+              },
+              {
+                "roll": "55",
+                "name": "Кракен",
+                "nameEn": "The Kraken",
+                "text": "Глубинные, незримые или духовные силы. Внезапность. Тайна. Засада.",
+                "textEn": "Profound, unseen, or spiritual forces. Surprise. Mystery. An ambush."
+              },
+              {
+                "roll": "56",
+                "name": "Дракон",
+                "nameEn": "The Dragon",
+                "text": "Алчность. Удача. Царственная осанка. Кто-то богатый.",
+                "textEn": "Greed. Luck. Regal bearing. Someone wealthy."
+              },
+              {
+                "roll": "61",
+                "name": "Глашатай",
+                "nameEn": "The Herald",
+                "text": "Светские обязанности. Церемонность. Пророческие знамения. Новое лицо.",
+                "textEn": "Social engagements. Formality. Oracular portents. A new person."
+              },
+              {
+                "roll": "62",
+                "name": "Дорога тирана",
+                "nameEn": "The Tyrant's Road",
+                "text": "Много стражи или солдат. Разрушение. Посулы власти. Опасный путь.",
+                "textEn": "Many guards or soldiers. Destruction. The offers of power. A dangerous path."
+              },
+              {
+                "roll": "63",
+                "name": "Подъёмный мост",
+                "nameEn": "The Drawbridge",
+                "text": "Выставить защиту. Отступить. Спрятаться. Что-то перекрывает путь.",
+                "textEn": "Putting up defenses. Withdrawing. Hiding. Something blocking your path."
+              },
+              {
+                "roll": "64",
+                "name": "Верховный лорд",
+                "nameEn": "The High Lord",
+                "text": "Суд. Трудный выбор. Власть. Вождь или правитель.",
+                "textEn": "Judgement. Hard choices. Authority. A leader or ruler."
+              },
+              {
+                "roll": "65",
+                "name": "Кровавый венец",
+                "nameEn": "The Bloody Crown",
+                "text": "Насилие. Война. Политика. Две силы сталкиваются.",
+                "textEn": "Violence. War. Politics. Two forces clash with each other."
+              },
+              {
+                "roll": "66",
+                "name": "Пустой трон",
+                "nameEn": "The Empty Throne",
+                "text": "Отказ от долга. Провал власти. Кризис. Удобный случай.",
+                "textEn": "Abdication of duties. Failure of leadership. Crisis. An opportunity."
+              }
+            ]
+          },
+          {
+            "key": "attitude",
+            "name": "Настрой",
+            "nameEn": "Attitude",
+            "die": "d66",
+            "rows": [
+              {
+                "roll": "11",
+                "name": "радостный",
+                "nameEn": "Joyful"
+              },
+              {
+                "roll": "12",
+                "name": "довольный",
+                "nameEn": "Content"
+              },
+              {
+                "roll": "13",
+                "name": "нежный",
+                "nameEn": "Affectionate"
+              },
+              {
+                "roll": "14",
+                "name": "любопытный",
+                "nameEn": "Curious"
+              },
+              {
+                "roll": "15",
+                "name": "самодовольный",
+                "nameEn": "Smug"
+              },
+              {
+                "roll": "16",
+                "name": "гордый",
+                "nameEn": "Proud"
+              },
+              {
+                "roll": "21",
+                "name": "игривый",
+                "nameEn": "Playful"
+              },
+              {
+                "roll": "22",
+                "name": "сострадательный",
+                "nameEn": "Compassionate"
+              },
+              {
+                "roll": "23",
+                "name": "решительный",
+                "nameEn": "Determined"
+              },
+              {
+                "roll": "24",
+                "name": "терпеливый",
+                "nameEn": "Patient"
+              },
+              {
+                "roll": "25",
+                "name": "благодарный",
+                "nameEn": "Appreciative"
+              },
+              {
+                "roll": "26",
+                "name": "злой",
+                "nameEn": "Angry"
+              },
+              {
+                "roll": "31",
+                "name": "ревнивый",
+                "nameEn": "Jealous"
+              },
+              {
+                "roll": "32",
+                "name": "испуганный",
+                "nameEn": "Afraid"
+              },
+              {
+                "roll": "33",
+                "name": "отчаявшийся",
+                "nameEn": "Despairing"
+              },
+              {
+                "roll": "34",
+                "name": "недоверчивый",
+                "nameEn": "Distrustful"
+              },
+              {
+                "roll": "35",
+                "name": "неуверенный",
+                "nameEn": "Insecure"
+              },
+              {
+                "roll": "36",
+                "name": "раздражительный",
+                "nameEn": "Irritable"
+              },
+              {
+                "roll": "41",
+                "name": "одинокий",
+                "nameEn": "Lonely"
+              },
+              {
+                "roll": "42",
+                "name": "подавленный",
+                "nameEn": "Overwhelmed"
+              },
+              {
+                "roll": "43",
+                "name": "мстительный",
+                "nameEn": "Vindictive"
+              },
+              {
+                "roll": "44",
+                "name": "усталый",
+                "nameEn": "Weary"
+              },
+              {
+                "roll": "45",
+                "name": "разрывающийся",
+                "nameEn": "Conflicted"
+              },
+              {
+                "roll": "46",
+                "name": "тоскующий",
+                "nameEn": "Wistful"
+              },
+              {
+                "roll": "51",
+                "name": "безучастный",
+                "nameEn": "Apathetic"
+              },
+              {
+                "roll": "52",
+                "name": "недоверчиво-насмешливый",
+                "nameEn": "Skeptical"
+              },
+              {
+                "roll": "53",
+                "name": "беспокойный",
+                "nameEn": "Restless"
+              },
+              {
+                "roll": "54",
+                "name": "насмешливый",
+                "nameEn": "Mocking"
+              },
+              {
+                "roll": "55",
+                "name": "услужливый",
+                "nameEn": "Cooperative"
+              },
+              {
+                "roll": "56",
+                "name": "обороняющийся",
+                "nameEn": "Defensive"
+              },
+              {
+                "roll": "61",
+                "name": "хитрый, себе на уме",
+                "nameEn": "Manipulative"
+              },
+              {
+                "roll": "62",
+                "name": "непокорный",
+                "nameEn": "Rebellious"
+              },
+              {
+                "roll": "63",
+                "name": "послушный",
+                "nameEn": "Obedient"
+              },
+              {
+                "roll": "64",
+                "name": "строгий",
+                "nameEn": "Stern"
+              },
+              {
+                "roll": "65",
+                "name": "осуждающий",
+                "nameEn": "Judgemental"
+              },
+              {
+                "roll": "66",
+                "name": "скучающий",
+                "nameEn": "Bored"
+              }
+            ]
+          },
+          {
+            "key": "being",
+            "name": "Волшебное существо",
+            "nameEn": "Magical Being",
+            "die": "d66",
+            "rows": [
+              {
+                "roll": "11",
+                "name": "плут-оборотень",
+                "nameEn": "Shapeshifting trickster"
+              },
+              {
+                "roll": "12",
+                "name": "злой или добрый домашний дух",
+                "nameEn": "Malicious or helpful household spirit"
+              },
+              {
+                "roll": "13",
+                "name": "птицы со странными замыслами",
+                "nameEn": "Birds with strange agendas"
+              },
+              {
+                "roll": "14",
+                "name": "хитрая подземная фея",
+                "nameEn": "Sneaky underground faerie"
+              },
+              {
+                "roll": "15",
+                "name": "дух озера или реки",
+                "nameEn": "Lake or river spirit"
+              },
+              {
+                "roll": "16",
+                "name": "разумная коза или овца",
+                "nameEn": "Sapient goat or sheep"
+              },
+              {
+                "roll": "21",
+                "name": "страж моста или двери",
+                "nameEn": "Guardian of a bridge or door"
+              },
+              {
+                "roll": "22",
+                "name": "змей водопада",
+                "nameEn": "Waterfall serpent"
+              },
+              {
+                "roll": "23",
+                "name": "стайка пикси",
+                "nameEn": "Gaggle of pixies"
+              },
+              {
+                "roll": "24",
+                "name": "фея-дуэлянт",
+                "nameEn": "Fae duelist"
+              },
+              {
+                "roll": "25",
+                "name": "дух дерева или говорящее дерево",
+                "nameEn": "Tree spirit or talking tree"
+              },
+              {
+                "roll": "26",
+                "name": "дух-хранитель очага",
+                "nameEn": "Protective hearth spirit"
+              },
+              {
+                "roll": "31",
+                "name": "пьяный страж вина",
+                "nameEn": "Drunken wine guardian"
+              },
+              {
+                "roll": "32",
+                "name": "волшебный кот-воришка",
+                "nameEn": "Food-stealing magic cat"
+              },
+              {
+                "roll": "33",
+                "name": "мудрец со змеиным телом",
+                "nameEn": "Snake-bodied wise sage"
+              },
+              {
+                "roll": "34",
+                "name": "бродячий голем",
+                "nameEn": "Wandering golem"
+              },
+              {
+                "roll": "35",
+                "name": "дух, пробирающийся в сны",
+                "nameEn": "Dream-invading sprite"
+              },
+              {
+                "roll": "36",
+                "name": "лесной дух с конской головой",
+                "nameEn": "Horse-headed forest spirit"
+              },
+              {
+                "roll": "41",
+                "name": "проклятый рыболов",
+                "nameEn": "Cursed angler"
+              },
+              {
+                "roll": "42",
+                "name": "призрак, что водится у огня",
+                "nameEn": "Light-haunting ghost"
+              },
+              {
+                "roll": "43",
+                "name": "говорящий червь с человечьим лицом",
+                "nameEn": "Human-faced talking worm"
+              },
+              {
+                "roll": "44",
+                "name": "разумный лесной пожар",
+                "nameEn": "Intelligent wildfire"
+              },
+              {
+                "roll": "45",
+                "name": "грязь, которая помнит",
+                "nameEn": "Mud that remembers"
+              },
+              {
+                "roll": "46",
+                "name": "кто-то, запертый в зеркале",
+                "nameEn": "Someone trapped in a mirror"
+              },
+              {
+                "roll": "51",
+                "name": "бес, торгующий услугами",
+                "nameEn": "Favor-trading imp"
+              },
+              {
+                "roll": "52",
+                "name": "двойник",
+                "nameEn": "Doppelganger"
+              },
+              {
+                "roll": "53",
+                "name": "кричащая пещера",
+                "nameEn": "Screaming cave"
+              },
+              {
+                "roll": "54",
+                "name": "болтливое огромное насекомое",
+                "nameEn": "Talkative giant insect"
+              },
+              {
+                "roll": "55",
+                "name": "синекожий сказитель",
+                "nameEn": "Blue-skinned storyteller"
+              },
+              {
+                "roll": "56",
+                "name": "оживший скелет",
+                "nameEn": "Animated skeleton"
+              },
+              {
+                "roll": "61",
+                "name": "поющий порыв ветра",
+                "nameEn": "Singing gust of wind"
+              },
+              {
+                "roll": "62",
+                "name": "лицо в стене или в дереве",
+                "nameEn": "Face in a wall or tree"
+              },
+              {
+                "roll": "63",
+                "name": "призрак ребёнка",
+                "nameEn": "Ghost of a child"
+              },
+              {
+                "roll": "64",
+                "name": "парящая книга",
+                "nameEn": "Floating book"
+              },
+              {
+                "roll": "65",
+                "name": "демон, заключённый в самоцвет",
+                "nameEn": "Demon bound into a gemstone"
+              },
+              {
+                "roll": "66",
+                "name": "пара горящих глаз во тьме",
+                "nameEn": "Pair of glowing eyes in the darkness"
+              }
+            ]
+          },
+          {
+            "key": "terrain",
+            "name": "Местность",
+            "nameEn": "Terrain Feature",
+            "die": "d66",
+            "rows": [
+              {
+                "roll": "11",
+                "name": "горный хребет",
+                "nameEn": "Ridgeline"
+              },
+              {
+                "roll": "12",
+                "name": "долина",
+                "nameEn": "Valley"
+              },
+              {
+                "roll": "13",
+                "name": "плато",
+                "nameEn": "Plateau"
+              },
+              {
+                "roll": "14",
+                "name": "утёс",
+                "nameEn": "Cliff"
+              },
+              {
+                "roll": "15",
+                "name": "склон или холм",
+                "nameEn": "Slope or hill"
+              },
+              {
+                "roll": "16",
+                "name": "провал",
+                "nameEn": "Sinkhole"
+              },
+              {
+                "roll": "21",
+                "name": "горный перевал",
+                "nameEn": "Mountain pass"
+              },
+              {
+                "roll": "22",
+                "name": "река или ручей",
+                "nameEn": "River or brook"
+              },
+              {
+                "roll": "23",
+                "name": "водопад",
+                "nameEn": "Waterfall"
+              },
+              {
+                "roll": "24",
+                "name": "пруд или озеро",
+                "nameEn": "Pond or lake"
+              },
+              {
+                "roll": "25",
+                "name": "родник или гейзер",
+                "nameEn": "Spring or geyser"
+              },
+              {
+                "roll": "26",
+                "name": "болото или затопленная низина",
+                "nameEn": "Marsh or flooded area"
+              },
+              {
+                "roll": "31",
+                "name": "бухта или морской грот",
+                "nameEn": "Cove and/or sea cave"
+              },
+              {
+                "roll": "32",
+                "name": "дюны или пляж",
+                "nameEn": "Dunes or beach"
+              },
+              {
+                "roll": "33",
+                "name": "руины",
+                "nameEn": "Ruins"
+              },
+              {
+                "roll": "34",
+                "name": "пни",
+                "nameEn": "Tree stumps"
+              },
+              {
+                "roll": "35",
+                "name": "лес или роща",
+                "nameEn": "Forest or grove"
+              },
+              {
+                "roll": "36",
+                "name": "чаща",
+                "nameEn": "Thicket"
+              },
+              {
+                "roll": "41",
+                "name": "поляна",
+                "nameEn": "Clearing"
+              },
+              {
+                "roll": "42",
+                "name": "пещера или тоннель",
+                "nameEn": "Cave or tunnel"
+              },
+              {
+                "roll": "43",
+                "name": "степь",
+                "nameEn": "Prairie"
+              },
+              {
+                "roll": "44",
+                "name": "поле валунов",
+                "nameEn": "Boulder field"
+              },
+              {
+                "roll": "45",
+                "name": "пустыня или оазис",
+                "nameEn": "Desert or oasis"
+              },
+              {
+                "roll": "46",
+                "name": "сухое русло",
+                "nameEn": "Dry riverbed"
+              },
+              {
+                "roll": "51",
+                "name": "снежное поле",
+                "nameEn": "Snowfield"
+              },
+              {
+                "roll": "52",
+                "name": "крепость, сторожевая башня или замок",
+                "nameEn": "Keep, watchtower, or castle"
+              },
+              {
+                "roll": "53",
+                "name": "каменный круг или курган",
+                "nameEn": "Henge or cairn"
+              },
+              {
+                "roll": "54",
+                "name": "каменоломня",
+                "nameEn": "Quarry"
+              },
+              {
+                "roll": "55",
+                "name": "рудник",
+                "nameEn": "Mine"
+              },
+              {
+                "roll": "56",
+                "name": "перекрёсток",
+                "nameEn": "Crossroads"
+              },
+              {
+                "roll": "61",
+                "name": "деревня",
+                "nameEn": "Village"
+              },
+              {
+                "roll": "62",
+                "name": "мост",
+                "nameEn": "Bridge"
+              },
+              {
+                "roll": "63",
+                "name": "ферма, хутор или амбар",
+                "nameEn": "Farm, farmhouse, or barn"
+              },
+              {
+                "roll": "64",
+                "name": "постоялый двор или таверна",
+                "nameEn": "Inn or tavern"
+              },
+              {
+                "roll": "65",
+                "name": "ров или канал",
+                "nameEn": "Trench or canal"
+              },
+              {
+                "roll": "66",
+                "name": "храм или кладбище",
+                "nameEn": "Temple or burial grounds"
+              }
+            ]
+          },
+          {
+            "key": "item",
+            "name": "Вещь",
+            "nameEn": "Everyday Item",
+            "die": "d66",
+            "rows": [
+              {
+                "roll": "11",
+                "name": "гребень или шпилька",
+                "nameEn": "Comb or hairpin"
+              },
+              {
+                "roll": "12",
+                "name": "медальон",
+                "nameEn": "Locket"
+              },
+              {
+                "roll": "13",
+                "name": "перстень-печатка",
+                "nameEn": "Signet ring"
+              },
+              {
+                "roll": "14",
+                "name": "пояс или пряжка",
+                "nameEn": "Belt or buckle"
+              },
+              {
+                "roll": "15",
+                "name": "перчатки или шарф",
+                "nameEn": "Gloves or scarf"
+              },
+              {
+                "roll": "16",
+                "name": "шляпа",
+                "nameEn": "Hat"
+              },
+              {
+                "roll": "21",
+                "name": "сапоги",
+                "nameEn": "Boots"
+              },
+              {
+                "roll": "22",
+                "name": "кошель",
+                "nameEn": "Coin pouch"
+              },
+              {
+                "roll": "23",
+                "name": "носки",
+                "nameEn": "Socks"
+              },
+              {
+                "roll": "24",
+                "name": "бурдюк",
+                "nameEn": "Waterskin"
+              },
+              {
+                "roll": "25",
+                "name": "огниво",
+                "nameEn": "Tinderbox"
+              },
+              {
+                "roll": "26",
+                "name": "зубочистка",
+                "nameEn": "Toothpick"
+              },
+              {
+                "roll": "31",
+                "name": "иголка с ниткой",
+                "nameEn": "Sewing needle and thread"
+              },
+              {
+                "roll": "32",
+                "name": "деревянная миска",
+                "nameEn": "Wooden bowl"
+              },
+              {
+                "roll": "33",
+                "name": "глиняная кружка",
+                "nameEn": "Clay mug"
+              },
+              {
+                "roll": "34",
+                "name": "горшок или котелок",
+                "nameEn": "Pot or kettle"
+              },
+              {
+                "roll": "35",
+                "name": "фляга масла",
+                "nameEn": "Oil flask"
+              },
+              {
+                "roll": "36",
+                "name": "скалка",
+                "nameEn": "Rolling pin"
+              },
+              {
+                "roll": "41",
+                "name": "столовый нож",
+                "nameEn": "Eating knife"
+              },
+              {
+                "roll": "42",
+                "name": "чашка с блюдцем",
+                "nameEn": "Cup and saucer"
+              },
+              {
+                "roll": "43",
+                "name": "молоток",
+                "nameEn": "Hammer"
+              },
+              {
+                "roll": "44",
+                "name": "лопата",
+                "nameEn": "Shovel"
+              },
+              {
+                "roll": "45",
+                "name": "клещи",
+                "nameEn": "Tongs"
+              },
+              {
+                "roll": "46",
+                "name": "верёвка",
+                "nameEn": "Rope"
+              },
+              {
+                "roll": "51",
+                "name": "бочка",
+                "nameEn": "Barrel"
+              },
+              {
+                "roll": "52",
+                "name": "наковальня",
+                "nameEn": "Anvil"
+              },
+              {
+                "roll": "53",
+                "name": "карта или свиток",
+                "nameEn": "Map or scroll"
+              },
+              {
+                "roll": "54",
+                "name": "подсвечник",
+                "nameEn": "Candlestick"
+              },
+              {
+                "roll": "55",
+                "name": "скатка",
+                "nameEn": "Bedroll"
+              },
+              {
+                "roll": "56",
+                "name": "компас",
+                "nameEn": "Compass"
+              },
+              {
+                "roll": "61",
+                "name": "сундук",
+                "nameEn": "Chest"
+              },
+              {
+                "roll": "62",
+                "name": "кости или игральные карты",
+                "nameEn": "Dice or playing cards"
+              },
+              {
+                "roll": "63",
+                "name": "музыкальный инструмент",
+                "nameEn": "Musical instrument"
+              },
+              {
+                "roll": "64",
+                "name": "шкатулка с секретом",
+                "nameEn": "Puzzle box"
+              },
+              {
+                "roll": "65",
+                "name": "детская игрушка",
+                "nameEn": "Child's toy"
+              },
+              {
+                "roll": "66",
+                "name": "чётки",
+                "nameEn": "Prayer beads"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "conflict",
+      "name": "Конфликт",
+      "nameEn": "The Conflict Oracle",
+      "page": "B245–B247",
+      "lead": "Оракул конфликта создаёт вызов серии, приключения или сцены. В нём семь столбцов: от главного в конфликте к второстепенному и необязательному. Начните с броска d66 или выбора строки в столбце «Главный вызов». Затем переходите к следующим столбцам и бросайте d66 или выбирайте строку — по разу на столбец, сколько нужно, чтобы сцена ожила. Остановитесь, когда сцена станет достаточно ясной.",
+      "leadEn": "The Conflict Oracle is used to generate a Series Challenge, Adventure Challenge, or Scene Challenge. It has seven columns, starting from the core aspects of the conflict and going toward secondary and optional aspects. Start by rolling a d66 or picking an entry from the Central Challenge column. Continue to the other columns and roll additional d66s or pick entries as needed to flesh out your scene, once for each column. Stop once you feel the scene is sufficiently detailed.",
+      "scaleNote": "Для серии толкуйте ответы с размахом: край, королевство или целая сторона жизни (B240).",
+      "scaleNoteEn": "Interpret the results on a large scale (region, kingdom, or entire aspect of life).",
+      "example": {
+        "setup": "Повинуясь Квестам, Герой отправляется из родной деревни через поля, чтобы найти воровку, укравшую семейную реликвию.",
+        "setupEn": "Based on their Quests, the Hero sets out on a journey from their village through farmland to find a thief who stole a family heirloom.",
+        "scenes": [
+          {
+            "name": "Сцена 1",
+            "nameEn": "Scene 1",
+            "rows": [
+              [
+                "central",
+                "6-3",
+                "Главный злодей или главная напасть…",
+                "В этой сцене — сама воровка!",
+                "The main villain or major vexation…",
+                "This scene involves the Thief!"
+              ],
+              [
+                "threat",
+                "3-6",
+                "…нарушает покой или устои…",
+                "Она как-то нападает на меня — или играет с моим разумом?",
+                "disrupts the peace or stability of…",
+                "She accosts me somehow, or plays with my mind?"
+              ],
+              [
+                "target",
+                "1-3",
+                "Одного или всех Героев.",
+                "Это я!",
+                "One or all of the Heroes.",
+                "That's me!"
+              ]
+            ],
+            "concept": "Едва я выхожу из деревни, воровка сама подстерегает меня за одиноким деревом в поле. Она уверяет, что за её преступлением стоит великая причина, и грозит: пойдёшь за мной — умрёшь.",
+            "conceptEn": "Just as I leave my village, the thief herself ambushes me behind a lone tree in a field. She tries to convince me that there is some grand reason behind her crime, threatening that if I follow her, I will die."
+          },
+          {
+            "name": "Сцена 2 (позже в истории)",
+            "nameEn": "Scene 2 (later in the story)",
+            "rows": [
+              [
+                "central",
+                "2-4",
+                "Человек…",
+                "Пока не знаю кто.",
+                "A lone person…",
+                "Not sure yet who that is."
+              ],
+              [
+                "threat",
+                "4-1",
+                "…манипулирует или влияет на…",
+                "Нужно больше подробностей. Брошу ещё столбец.",
+                "is manipulating or influencing…",
+                "Need more information. I'll roll another column."
+              ],
+              [
+                "target",
+                "1-3",
+                "Невинного прохожего.",
+                "Хм. Значит, один человек манипулирует другим.",
+                "An innocent bystander.",
+                "Hmmm. So one person is manipulating another."
+              ],
+              [
+                "location",
+                "выбор",
+                "На дороге, тракте или большой тропе",
+                "Логично, что я на дороге.",
+                "On the roadway, highway, or major trails",
+                "It makes sense that I'm on the roads."
+              ],
+              [
+                "secondary",
+                "5-5",
+                "Целая группа таких же, как главный вызов",
+                "Похоже на секту. Кто-то вербует простака.",
+                "A whole group of the Central Challenge",
+                "It sounds like a cult. Someone is recruiting someone naive to a cult."
+              ],
+              [
+                "question",
+                "1-2",
+                "Толкование: что это за секта? Купец — вежливый спор, сделки, договоры и обещания, бывалый человек.",
+                "Это купеческая гильдия. Торговец пытается выманить у простака деньги.",
+                "Interpretive Question: What is this cult? The Merchant. Polite conflict. Bargains. Contracts and promises. A worldly person.",
+                "It's a mercantile guild. This peddler is trying to swindle someone out of their money."
+              ]
+            ],
+            "concept": "Иду по следам воровки и у придорожного святилища вижу, как торговец выманивает у мальчишки его подношение. Долг велит вмешаться…",
+            "conceptEn": "As I try to follow the footsteps of the thief, I pass by a wayside shrine where I see a merchant trying to swindle a young boy out of his offering. My duty obliges me to respond…"
+          }
+        ],
+        "note": "В книге у строки «Цель вызова» второй сцены стоит бросок 1-3, а ответ — «невинный прохожий» (по таблице это 34–36). Перенесено как в книге."
+      },
+      "columns": [
+        {
+          "key": "central",
+          "name": "Главный вызов",
+          "nameEn": "Central Challenge",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "A monster...",
+              "noteEn": "",
+              "text": "Чудовище…",
+              "note": ""
+            },
+            {
+              "roll": "14–16",
+              "textEn": "A natural disaster or hazard...",
+              "noteEn": "",
+              "text": "Стихийное бедствие или природная опасность…",
+              "note": ""
+            },
+            {
+              "roll": "21–23",
+              "textEn": "An animal or beast...",
+              "noteEn": "",
+              "text": "Животное или зверь…",
+              "note": ""
+            },
+            {
+              "roll": "24–26",
+              "textEn": "A person...",
+              "noteEn": "",
+              "text": "Человек…",
+              "note": ""
+            },
+            {
+              "roll": "31–33",
+              "textEn": "The terrain...",
+              "noteEn": "use a Landscape Journey, location Challenge, or Vignette",
+              "text": "Сама местность…",
+              "note": "путешествие-Местность, вызов-место или виньетка"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "A natural condition...",
+              "noteEn": "disease, hunger, weather",
+              "text": "Природное состояние…",
+              "note": "болезнь, голод, погода"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "An event, occurrence, or coincidence...",
+              "noteEn": "use an Occasion Journey, event Challenge, or Vignette",
+              "text": "Событие, происшествие или совпадение…",
+              "note": "путешествие-Событие, вызов-событие или виньетка"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "A community or organization...",
+              "noteEn": "",
+              "text": "Община или организация…",
+              "note": ""
+            },
+            {
+              "roll": "51–53",
+              "textEn": "An unseen force...",
+              "noteEn": "enchantment, curse, spirit",
+              "text": "Незримая сила…",
+              "note": "чары, проклятие, дух"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "An underling of the main villain or major vexation...",
+              "noteEn": "",
+              "text": "Подручный главного злодея или главной напасти…",
+              "note": ""
+            },
+            {
+              "roll": "61–63",
+              "textEn": "The main villain or major vexation...",
+              "noteEn": "",
+              "text": "Главный злодей или главная напасть…",
+              "note": ""
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "threat",
+          "name": "Угроза и последствия",
+          "nameEn": "Challenge Role, Threats & Consequences",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "...physically endangers...",
+              "noteEn": "Aggressor or Pursuer · cause bodily harm or death – Ill Tidings, or negative physical statuses",
+              "text": "…угрожает телу…",
+              "note": "Агрессор или Преследователь · ранить или убить — **Дурные вести** или отрицательные телесные статусы"
+            },
+            {
+              "roll": "14–16",
+              "textEn": "...socially or emotionally endangers...",
+              "noteEn": "Aggressor or Influence · ruin reputation or harm psyche – negative social or emotional statuses",
+              "text": "…угрожает положению или душевному покою…",
+              "note": "Агрессор или Влияние · погубить репутацию или ранить душу — отрицательные статусы общения и чувств"
+            },
+            {
+              "roll": "21–23",
+              "textEn": "...presents a dilemma...",
+              "noteEn": "Influence · threatens two things, only one can be prevented; roll twice on Target of the Challenge",
+              "text": "…ставит перед дилеммой…",
+              "note": "Влияние · грозит двум вещам, спасти можно только одну; бросьте «Цель вызова» дважды"
+            },
+            {
+              "roll": "24–26",
+              "textEn": "...drains, despoils, or corrupts...",
+              "noteEn": "Sapper · deplete resources or tags, despoiled, corrupted",
+              "text": "…истощает, оскверняет или развращает…",
+              "note": "Подрыватель · истощить запасы или теги, *осквернён*, *развращён*"
+            },
+            {
+              "roll": "31–33",
+              "textEn": "...stands as a major obstacle for...",
+              "noteEn": "Obstacle or Mystery · Blocked",
+              "text": "…встаёт серьёзной преградой для…",
+              "note": "Препятствие или Загадка · **Возможность закрыта**"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "...disrupts the peace or stability of...",
+              "noteEn": "Influence or Sapper · Complication or mental and emotional statuses",
+              "text": "…нарушает покой или устои…",
+              "note": "Влияние или Подрыватель · **Осложнение** или статусы разума и чувств"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "...is manipulating or influencing...",
+              "noteEn": "Influence · swayed",
+              "text": "…манипулирует или влияет на…",
+              "note": "Влияние · *поддался*"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "...is spying on, searching for, inquiring, or researching...",
+              "noteEn": "Watcher · Exposure, alert, gains tags",
+              "text": "…шпионит, ищет, выспрашивает или изучает…",
+              "note": "Наблюдатель · **Обнаружение**, *настороже*, получает теги"
+            },
+            {
+              "roll": "51–53",
+              "textEn": "...is tricking, fooling, infiltrating, or entrancing...",
+              "noteEn": "Influence or Sapper · loss of a resource, beguiled",
+              "text": "…обманывает, дурачит, проникает или зачаровывает…",
+              "note": "Влияние или Подрыватель · потеря запаса, *очарован*"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "...is progressing towards a crescendo to...",
+              "noteEn": "Countdown · use a progress Limit; roll again to determine its endgame, treating the result as especially dangerous or powerful",
+              "text": "…движется к развязке, чтобы…",
+              "note": "Обратный отсчёт · предел-счётчик; бросьте ещё раз, чтобы узнать, чем всё кончится, — и считайте итог особенно опасным или могучим"
+            },
+            {
+              "roll": "61–63",
+              "textEn": "...is hunting down / has stolen...",
+              "noteEn": "Pursuer or Quarry · seeks to capture, imprison, or possess -or- escape",
+              "text": "…охотится за… / похитил…",
+              "note": "Преследователь или Дичь · хочет поймать, заточить или завладеть — или сбежать"
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "target",
+          "name": "Цель вызова",
+          "nameEn": "Target of the Challenge",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "...one or all of the Heroes.",
+              "text": "…одного или всех Героев."
+            },
+            {
+              "roll": "14–16",
+              "textEn": "...a Quest-related person or group.",
+              "text": "…человека или группу, связанных с Квестом."
+            },
+            {
+              "roll": "21–23",
+              "textEn": "...a Quest-related object or magic.",
+              "text": "…вещь или магию, связанные с Квестом."
+            },
+            {
+              "roll": "24–26",
+              "textEn": "...a Quest-related ideal or goal.",
+              "text": "…идеал или цель, связанные с Квестом."
+            },
+            {
+              "roll": "31–33",
+              "textEn": "...a Quest-related location or region.",
+              "text": "…место или край, связанные с Квестом."
+            },
+            {
+              "roll": "34–36",
+              "textEn": "...an ally or innocent bystander.",
+              "text": "…союзника или невинного прохожего."
+            },
+            {
+              "roll": "41–43",
+              "textEn": "...a community or organization.",
+              "text": "…общину или организацию."
+            },
+            {
+              "roll": "44–46",
+              "textEn": "...an important resource.",
+              "text": "…важный запас."
+            },
+            {
+              "roll": "51–53",
+              "textEn": "...a nearby location or your camp.",
+              "text": "…место поблизости или ваш лагерь."
+            },
+            {
+              "roll": "54–56",
+              "textEn": "...the Hero's current goal.",
+              "text": "…нынешнюю цель Героя."
+            },
+            {
+              "roll": "61–63",
+              "textEn": "...something taken for granted, or the status quo.",
+              "text": "…то, что считалось само собой разумеющимся, или заведённый порядок."
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "location",
+          "name": "Место",
+          "nameEn": "Location",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "At home, in a village, or in a small building",
+              "text": "Дома, в деревне или в небольшом здании",
+              "areaEn": "Homestead & Village",
+              "area": "Усадьба и деревня",
+              "page": "B112"
+            },
+            {
+              "roll": "14–16",
+              "textEn": "A liminal or bucolic area, beyond the towns",
+              "text": "На окраине или в полях, за пределами городов",
+              "areaEn": "Outskirts & Fields",
+              "area": "Окраины и поля",
+              "page": "B122"
+            },
+            {
+              "roll": "21–23",
+              "textEn": "On the roadway, highway, or major trails",
+              "text": "На дороге, тракте или большой тропе",
+              "areaEn": "On the Trail",
+              "area": "В пути",
+              "page": "B130"
+            },
+            {
+              "roll": "24–26",
+              "textEn": "Off the beaten path or somewhere truly wild",
+              "text": "Вдали от торных путей, в настоящей глуши",
+              "areaEn": "In The Wilds",
+              "area": "В глуши",
+              "page": "B136"
+            },
+            {
+              "roll": "31–33",
+              "textEn": "At a port, out at sea, or along river",
+              "text": "В порту, в море или вдоль реки",
+              "areaEn": "Open Water",
+              "area": "Открытая вода",
+              "page": "B152"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "Somewhere forgotten, dark, or dismal",
+              "text": "В забытом, тёмном или унылом месте",
+              "areaEn": "Forsaken Places",
+              "area": "Забытые места",
+              "page": "B156"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "In a bustling area, with many people",
+              "text": "В людном месте, среди толпы",
+              "areaEn": "Town & City",
+              "area": "Город",
+              "page": "B162"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "In a castle, court, or other place of political power",
+              "text": "В замке, при дворе или в ином средоточии власти",
+              "areaEn": "The Castle",
+              "area": "Замок",
+              "page": "B168"
+            },
+            {
+              "roll": "51–53",
+              "textEn": "Near a violent conflict",
+              "text": "Рядом с кровавой схваткой",
+              "areaEn": "On the Battlefield",
+              "area": "Поле боя",
+              "page": "B176"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "Out in the wastelands, desert, or another desolate area",
+              "text": "В пустошах, пустыне или ином безжизненном краю",
+              "areaEn": "Blighted Badlands",
+              "area": "Проклятые пустоши",
+              "page": "B182"
+            },
+            {
+              "roll": "61–63",
+              "textEn": "Down in a ruins, dungeon, or magical laboratory",
+              "text": "В руинах, подземелье или магической лаборатории",
+              "areaEn": "Vaults of Darkness",
+              "area": "Логово тьмы",
+              "page": "B188"
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "unfolding",
+          "name": "Развитие вызова",
+          "nameEn": "Unfolding of the Challenge",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "Overt action or aggression",
+              "text": "Открытое действие или нападение"
+            },
+            {
+              "roll": "14–16",
+              "textEn": "Pleas or cries for help",
+              "text": "Мольбы или крики о помощи"
+            },
+            {
+              "roll": "21–23",
+              "textEn": "Mysterious, requires investigation",
+              "text": "Загадочно, требует расследования"
+            },
+            {
+              "roll": "24–26",
+              "textEn": "An offer, contract, inquiry, or temptation",
+              "text": "Предложение, договор, расспросы или искушение"
+            },
+            {
+              "roll": "31–33",
+              "textEn": "A Hero is affected first",
+              "text": "Первым задет кто-то из Героев"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "An ambush or surprise",
+              "text": "Засада или неожиданность"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "Slowly and gradually",
+              "text": "Медленно и постепенно"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "One Hero learns of it while alone or isolated",
+              "text": "Один Герой узнаёт об этом, оставшись один или отрезанным"
+            },
+            {
+              "roll": "51–53",
+              "textEn": "Sudden reveal upon entering or arriving",
+              "text": "Внезапно открывается, едва войдёшь или прибудешь"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "Only revealed near the end",
+              "text": "Открывается лишь под конец"
+            },
+            {
+              "roll": "61–63",
+              "textEn": "Hidden or removed, requires finding",
+              "text": "Спрятано или убрано — нужно найти"
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "secondary",
+          "name": "Второй вызов",
+          "nameEn": "Secondary Challenge (Role)",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "A bystander, or a group of them",
+              "noteEn": "Charge",
+              "text": "Прохожий или группа прохожих",
+              "note": "Подопечный"
+            },
+            {
+              "roll": "14–16",
+              "textEn": "The Heroes' vulnerable allies",
+              "noteEn": "Charge",
+              "text": "Уязвимые союзники Героев",
+              "note": "Подопечный"
+            },
+            {
+              "roll": "21–23",
+              "textEn": "An unrelated monster",
+              "noteEn": "Aggressor",
+              "text": "Постороннее чудовище",
+              "note": "Агрессор"
+            },
+            {
+              "roll": "24–26",
+              "textEn": "An unrelated animal or beast",
+              "noteEn": "Aggressor, Charge, Quarry",
+              "text": "Посторонний зверь или животное",
+              "note": "Агрессор, Подопечный, Дичь"
+            },
+            {
+              "roll": "31–33",
+              "textEn": "Terrain",
+              "noteEn": "location Challenge or Landscape Journey",
+              "text": "Местность",
+              "note": "вызов-место или путешествие-Местность"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "An event taking place",
+              "noteEn": "Occasion Journey",
+              "text": "Идущее событие",
+              "note": "путешествие-Событие"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "The weather, a hazard, or a trap",
+              "noteEn": "in a Journey, use a Vignette",
+              "text": "Погода, опасность или ловушка",
+              "note": "в путешествии — виньетка"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "The Heroes are separated or isolated",
+              "noteEn": "Complication, Blocked, or an Obstacle Challenge",
+              "text": "Героев разлучили или отрезали",
+              "note": "**Осложнение**, **Возможность закрыта** или вызов-Препятствие"
+            },
+            {
+              "roll": "51–53",
+              "textEn": "A pervasive negative emotion (jealousy, anger, hopelessness, etc.)",
+              "noteEn": "Sapper",
+              "text": "Всепроникающее тяжёлое чувство (ревность, гнев, безнадёжность…)",
+              "note": "Подрыватель"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "A group of the Central Challenge",
+              "noteEn": "Increase Might",
+              "text": "Целая группа таких же, как главный вызов",
+              "note": "Могущество выше"
+            },
+            {
+              "roll": "61–63",
+              "textEn": "Allies, minions, or offspring of the Central Challenge",
+              "noteEn": "same role as Central Challenge, or Support",
+              "text": "Союзники, приспешники или отродье главного вызова",
+              "note": "та же роль, что у главного вызова, или Опора"
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        },
+        {
+          "key": "tags",
+          "name": "Сюжетные теги",
+          "nameEn": "Story Tags",
+          "rows": [
+            {
+              "roll": "11–13",
+              "textEn": "No tag-worthy features",
+              "noteEn": "",
+              "text": "Ничего, что стоило бы тега",
+              "note": ""
+            },
+            {
+              "roll": "14–16",
+              "textEn": "Notable landscape features",
+              "noteEn": "sharp rocks, dense woods, spooky marshes, tall barley stalks",
+              "text": "Заметные черты местности",
+              "note": "острые скалы, густой лес, жуткие топи, высокий ячмень"
+            },
+            {
+              "roll": "21–23",
+              "textEn": "Dangerous or useful objects",
+              "noteEn": "roaring bonfire, alchemy supplies, stashed weapons, crates",
+              "text": "Опасные или полезные вещи",
+              "note": "ревущий костёр, алхимические припасы, припрятанное оружие, ящики"
+            },
+            {
+              "roll": "24–26",
+              "textEn": "People",
+              "noteEn": "town elder, gathering crowd, children at play",
+              "text": "Люди",
+              "note": "городской старейшина, собирающаяся толпа, играющие дети"
+            },
+            {
+              "roll": "31–33",
+              "textEn": "Condition",
+              "noteEn": "cold winds, bright sunlight, obscuring fog, eldritch glow",
+              "text": "Состояние",
+              "note": "холодный ветер, яркое солнце, скрывающий туман, жуткое свечение"
+            },
+            {
+              "roll": "34–36",
+              "textEn": "Mood",
+              "noteEn": "partying, somber mourning, eerie silence, desperate struggle",
+              "text": "Настроение",
+              "note": "гулянье, мрачная скорбь, жуткая тишина, отчаянная борьба"
+            },
+            {
+              "roll": "41–43",
+              "textEn": "Enchantments",
+              "noteEn": "warded-against-magic, wall of flames, supernatural gloom",
+              "text": "Чары",
+              "note": "защищён-от-магии, стена пламени, сверхъестественный мрак"
+            },
+            {
+              "roll": "44–46",
+              "textEn": "Notable structural features",
+              "noteEn": "battlements, rickety bridge, balcony, window",
+              "text": "Заметные черты строения",
+              "note": "зубцы стен, шаткий мостик, балкон, окно"
+            },
+            {
+              "roll": "51–53",
+              "textEn": "Animal or beast",
+              "noteEn": "bleating calf, climbing goat, barking dog",
+              "text": "Животное или зверь",
+              "note": "блеющий телёнок, коза на скале, лающий пёс"
+            },
+            {
+              "roll": "54–56",
+              "textEn": "Something out of place",
+              "noteEn": "ancient statue, foreign flora, oddly-colored tile",
+              "text": "Что-то не на своём месте",
+              "note": "древняя статуя, чужеземные растения, плитка странного цвета"
+            },
+            {
+              "roll": "61–63",
+              "textEn": "Sensory effects",
+              "noteEn": "loud noise, creepy vibes, putrid smell, blinding sunlight",
+              "text": "Ощущения",
+              "note": "громкий шум, жуть, гнилостный запах, слепящее солнце"
+            },
+            {
+              "roll": "64–66",
+              "text": "Бросьте ещё два раза",
+              "textEn": "Roll again twice",
+              "again": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "premade",
+      "name": "Готовый профиль",
+      "nameEn": "The Premade Profile Oracle",
+      "page": "B248–B249",
+      "lead": "Оракул готовых профилей перечисляет все профили вызовов, а также путешествия и виньетки из «Сумы опасностей» этой книги (с. B102). Он разбит по типичным краям фэнтези-мира — они в первом столбце.\n• Бросьте d66 на край из первого столбца или выберите его.\n• Бросьте d6 на вызов в столбце «Существа», «Люди» или «Места и события» — смотря что вы установили для сцены оракулом конфликта. Путешествия выделены.\n• Если вы играете путешествие, можно бросить на дополнительные виньетки по таблице виньеток.",
+      "leadEn": "The Premade Profile Oracle lists all the Challenge Profiles, as well as Journeys and Vignettes, that are available in this book in The Satchel of Perils (page 102). It is divided into typical fantasy areas listed in the first column.\n• Roll a d66 for a random area in the first column, or pick one.\n• Roll a d66 for a Challenge from the Creatures, People, or Places & Events columns, depending on what you established for the scene with the Conflict Oracle. Journeys are bolded.\n• If you're playing a Journey, you can roll for additional Vignettes in the Vignettes table.",
+      "example": "Например, Герой идёт в глушь за определённым чудовищем, но по пути встречает другого странника. Игрок решает не бросать, а выбрать край «В глуши», и бросает d6 в столбце «Люди» — выпадает 4. Похоже, Герою встретился Обезумевший дровосек. В этой сцене игрок возьмёт профиль вызова с указанной страницы.",
+      "exampleEn": "For example, a Hero forays into the wilderness in search of a specific monster, but on the way they encounter another wanderer. The player decides to pick the In The Wild category instead of rolling, and rolls a d6 on the People column, getting a 4. Looks like the Hero has crossed paths with a Maddened Woodcutter. The player will use the Challenge Profile on the given page in this scene.",
+      "columns": [
+        {
+          "key": "creatures",
+          "name": "Существа",
+          "nameEn": "Creatures: Monsters, Beasts, or Strange Beings"
+        },
+        {
+          "key": "people",
+          "name": "Люди",
+          "nameEn": "Persons & People"
+        },
+        {
+          "key": "places",
+          "name": "Места и события",
+          "nameEn": "Places & Events"
+        }
+      ],
+      "areas": [
+        {
+          "roll": "11–13",
+          "nameEn": "Homestead & Village",
+          "name": "Усадьба и деревня",
+          "page": "B112",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "House Hob",
+              "name": "Домовой",
+              "refs": [
+                "House Hob"
+              ],
+              "page": "B115"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Imposing Pet",
+              "name": "Грозная живность",
+              "refs": [
+                "Imposing Pet"
+              ],
+              "page": "B115"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Avoided Acquaintance",
+              "name": "Нежеланный знакомый",
+              "refs": [
+                "Avoided Acquaintance"
+              ],
+              "page": "B112"
+            },
+            {
+              "roll": "2",
+              "kind": "challenge",
+              "nameEn": "Commoner",
+              "name": "Простолюдин",
+              "refs": [
+                "Commoner"
+              ],
+              "page": "B113"
+            },
+            {
+              "roll": "3",
+              "kind": "challenge",
+              "nameEn": "Crafty Rumormonger",
+              "name": "Хитрая сплетница",
+              "refs": [
+                "Crafty Rumormonger"
+              ],
+              "page": "B114"
+            },
+            {
+              "roll": "4",
+              "kind": "challenge",
+              "nameEn": "Grumpy Keeper",
+              "name": "Ворчливый страж",
+              "refs": [
+                "Grumpy Keeper"
+              ],
+              "page": "B114"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Pastoral Priest or Priestess",
+              "name": "Сельский жрец или жрица",
+              "refs": [
+                "Pastoral Priest or Priestess"
+              ],
+              "page": "B116"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Respected Elder or Stern Magistrate",
+              "name": "Уважаемый старейшина или Суровый наместник",
+              "refs": [
+                "Respected Elder",
+                "Stern Magistrate"
+              ],
+              "page": "B117"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–3",
+              "kind": "journey",
+              "nameEn": "Harvest Festival",
+              "name": "Праздник урожая",
+              "refs": [
+                "Harvest Festival"
+              ],
+              "page": "B118"
+            },
+            {
+              "roll": "4–6",
+              "kind": "journey",
+              "nameEn": "Insular Hamlet",
+              "name": "Замкнутая деревушка",
+              "refs": [
+                "Insular Hamlet"
+              ],
+              "page": "B120"
+            }
+          ]
+        },
+        {
+          "roll": "14–16",
+          "nameEn": "Outskirts & Fields",
+          "name": "Окраины и поля",
+          "page": "B122",
+          "creatures": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Boggart",
+              "name": "Боггарт",
+              "refs": [
+                "Boggart"
+              ],
+              "page": "B124"
+            },
+            {
+              "roll": "3–4",
+              "kind": "challenge",
+              "nameEn": "Moldering Jack",
+              "name": "Гнилой Джек",
+              "refs": [
+                "Moldering Jack"
+              ],
+              "page": "B126"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Ominous Raven",
+              "name": "Зловещий ворон",
+              "refs": [
+                "Ominous Raven"
+              ],
+              "page": "B127"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Runaway Farm Animal",
+              "name": "Сбежавшая скотина",
+              "refs": [
+                "Runaway Farm Animal"
+              ],
+              "page": "B127"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Hedge Witch",
+              "name": "Знахарка",
+              "refs": [
+                "Hedge Witch"
+              ],
+              "page": "B125"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Lone Tracker",
+              "name": "Одинокий следопыт",
+              "refs": [
+                "Lone Tracker"
+              ],
+              "page": "B126"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Abandoned Well",
+              "name": "Заброшенный колодец",
+              "refs": [
+                "Abandoned Well"
+              ],
+              "page": "B122"
+            },
+            {
+              "roll": "2–3",
+              "kind": "challenge",
+              "nameEn": "An Honest Day’s Work",
+              "name": "Честный трудовой день",
+              "refs": [
+                "An Honest Day’s Work"
+              ],
+              "page": "B123"
+            },
+            {
+              "roll": "4",
+              "kind": "challenge",
+              "nameEn": "Backwoods Haunting",
+              "name": "Призрак глуши",
+              "refs": [
+                "Backwoods Haunting"
+              ],
+              "page": "B123"
+            },
+            {
+              "roll": "5–6",
+              "kind": "journey",
+              "nameEn": "Windswept Farmlands",
+              "name": "Обдуваемые поля",
+              "refs": [
+                "Windswept Farmlands"
+              ],
+              "page": "B128"
+            }
+          ]
+        },
+        {
+          "roll": "21–23",
+          "nameEn": "On the Trail",
+          "name": "В пути",
+          "page": "B130",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Dog Boys",
+              "name": "Псоглавцы",
+              "refs": [
+                "Dog Boys"
+              ],
+              "page": "B132"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Grabbing Gnome",
+              "name": "Цепкий гном",
+              "refs": [
+                "Grabbing Gnome"
+              ],
+              "page": "B133"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Ambitious Conjurer",
+              "name": "Честолюбивый заклинатель",
+              "refs": [
+                "Ambitious Conjurer"
+              ],
+              "page": "B130"
+            },
+            {
+              "roll": "3–4",
+              "kind": "challenge",
+              "nameEn": "Brutal Outlaw",
+              "name": "Жестокий разбойник",
+              "refs": [
+                "Brutal Outlaw"
+              ],
+              "page": "B131"
+            },
+            {
+              "roll": "5–6",
+              "kind": "challenge",
+              "nameEn": "Shrewd Merchant",
+              "name": "Хитрый торговец",
+              "refs": [
+                "Shrewd Merchant"
+              ],
+              "page": "B133"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Dismal Ferry Ride",
+              "name": "Унылая переправа",
+              "refs": [
+                "Dismal Ferry Ride"
+              ],
+              "page": "B131"
+            },
+            {
+              "roll": "3–4",
+              "kind": "journey",
+              "nameEn": "Insular Hamlet",
+              "name": "Замкнутая деревушка",
+              "refs": [
+                "Insular Hamlet"
+              ],
+              "page": "B120"
+            },
+            {
+              "roll": "5–6",
+              "kind": "journey",
+              "nameEn": "Lawless Roadway",
+              "name": "Беззаконный тракт",
+              "refs": [
+                "Lawless Roadway"
+              ],
+              "page": "B134"
+            }
+          ]
+        },
+        {
+          "roll": "24–26",
+          "nameEn": "In The Wilds",
+          "name": "В глуши",
+          "page": "B136",
+          "creatures": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Antlered Forest Spirit",
+              "name": "Рогатый лесной дух",
+              "refs": [
+                "Antlered Forest Spirit"
+              ],
+              "page": "B136"
+            },
+            {
+              "roll": "2",
+              "kind": "challenge",
+              "nameEn": "Big Cat or Protective Bear",
+              "name": "Большая кошка или Медведица-защитница",
+              "refs": [
+                "Big Cat",
+                "Protective Bear"
+              ],
+              "page": "B138"
+            },
+            {
+              "roll": "3",
+              "kind": "challenge",
+              "nameEn": "Fabled Bird of Prey",
+              "name": "Сказочная хищная птица",
+              "refs": [
+                "Fabled Bird of Prey"
+              ],
+              "page": "B139"
+            },
+            {
+              "roll": "4",
+              "kind": "challenge",
+              "nameEn": "Local Godling",
+              "name": "Местный божок",
+              "refs": [
+                "Local Godling"
+              ],
+              "page": "B140"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Monstrous Spider & Web",
+              "name": "Чудовищный паук и паутина",
+              "refs": [
+                "Monstrous Spider & Web"
+              ],
+              "page": "B141"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Will-o’-the-Wisp",
+              "name": "Блуждающий огонёк",
+              "refs": [
+                "Will-o’-the-Wisp"
+              ],
+              "page": "B143"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Bloodthirsty Reaver",
+              "name": "Кровожадный грабитель",
+              "refs": [
+                "Bloodthirsty Reaver"
+              ],
+              "page": "B139"
+            },
+            {
+              "roll": "4–5",
+              "kind": "challenge",
+              "nameEn": "Maddened Woodcutter",
+              "name": "Обезумевший дровосек",
+              "refs": [
+                "Maddened Woodcutter"
+              ],
+              "page": "B140"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Rampaging Giant",
+              "name": "Буйный великан",
+              "refs": [
+                "Rampaging Giant"
+              ],
+              "page": "B142"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Bewitching Glade",
+              "name": "Чарующая поляна",
+              "refs": [
+                "Bewitching Glade"
+              ],
+              "page": "B138"
+            },
+            {
+              "roll": "2",
+              "kind": "journey",
+              "nameEn": "Dark Forest",
+              "name": "Тёмный лес",
+              "refs": [
+                "Dark Forest"
+              ],
+              "page": "B144"
+            },
+            {
+              "roll": "3",
+              "kind": "journey",
+              "nameEn": "Echoing Cavern",
+              "name": "Гулкая пещера",
+              "refs": [
+                "Echoing Cavern"
+              ],
+              "page": "B146"
+            },
+            {
+              "roll": "4",
+              "kind": "journey",
+              "nameEn": "Mountain Pass",
+              "name": "Горный перевал",
+              "refs": [
+                "Mountain Pass"
+              ],
+              "page": "B148"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Megalith",
+              "name": "Мегалит",
+              "refs": [
+                "Megalith"
+              ],
+              "page": "B141"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Wrathwood Tree",
+              "name": "Гневное древо",
+              "refs": [
+                "Wrathwood Tree"
+              ],
+              "page": "B143"
+            }
+          ]
+        },
+        {
+          "roll": "31–33",
+          "nameEn": "Open Water",
+          "name": "Открытая вода",
+          "page": "B152",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Drowning Beauty",
+              "name": "Утопленница-красавица",
+              "refs": [
+                "Drowning Beauty"
+              ],
+              "page": "B152"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Kraken",
+              "name": "Кракен",
+              "refs": [
+                "Kraken"
+              ],
+              "page": "B153"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Raiding Longboat",
+              "name": "Ладья налётчиков",
+              "refs": [
+                "Raiding Longboat"
+              ],
+              "page": "B153"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Brutal Outlaw",
+              "name": "Жестокий разбойник",
+              "refs": [
+                "Brutal Outlaw"
+              ],
+              "page": "B131"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–2",
+              "kind": "journey",
+              "nameEn": "Echoing Cavern",
+              "name": "Гулкая пещера",
+              "refs": [
+                "Echoing Cavern"
+              ],
+              "page": "B146"
+            },
+            {
+              "roll": "3–6",
+              "kind": "journey",
+              "nameEn": "Treacherous Waters",
+              "name": "Коварные воды",
+              "refs": [
+                "Treacherous Waters"
+              ],
+              "page": "B154"
+            }
+          ]
+        },
+        {
+          "roll": "34–36",
+          "nameEn": "Forsaken Places",
+          "name": "Забытые места",
+          "page": "B156",
+          "creatures": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Bargaining Devil",
+              "name": "Торгующийся дьявол",
+              "refs": [
+                "Bargaining Devil"
+              ],
+              "page": "B156"
+            },
+            {
+              "roll": "2–3",
+              "kind": "challenge",
+              "nameEn": "Changeling",
+              "name": "Подменыш",
+              "refs": [
+                "Changeling"
+              ],
+              "page": "B157"
+            },
+            {
+              "roll": "4",
+              "kind": "challenge",
+              "nameEn": "Otherworldly Assailant",
+              "name": "Потусторонний налётчик",
+              "refs": [
+                "Otherworldly Assailant"
+              ],
+              "page": "B159"
+            },
+            {
+              "roll": "5–6",
+              "kind": "challenge",
+              "nameEn": "Unshriven Revenant",
+              "name": "Неупокоенный мертвец",
+              "refs": [
+                "Unshriven Revenant"
+              ],
+              "page": "B159"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Keeper of Thresholds",
+              "name": "Хранитель порогов",
+              "refs": [
+                "Keeper of Thresholds"
+              ],
+              "page": "B158"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Ragged Jester",
+              "name": "Оборванный шут",
+              "refs": [
+                "Ragged Jester"
+              ],
+              "page": "B158"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–4",
+              "kind": "journey",
+              "nameEn": "Forlorn Ruins",
+              "name": "Забытые руины",
+              "refs": [
+                "Forlorn Ruins"
+              ],
+              "page": "B160"
+            },
+            {
+              "roll": "5–6",
+              "kind": "journey",
+              "nameEn": "Morose Mire",
+              "name": "Унылая топь",
+              "refs": [
+                "Morose Mire"
+              ],
+              "page": "B150"
+            }
+          ]
+        },
+        {
+          "roll": "41–43",
+          "nameEn": "Town & City",
+          "name": "Город",
+          "page": "B162",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Plague Rats",
+              "name": "Чумные крысы",
+              "refs": [
+                "Plague Rats"
+              ],
+              "page": "B162"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Stained Saint",
+              "name": "Витражный святой",
+              "refs": [
+                "Stained Saint"
+              ],
+              "page": "B192"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Nimble Pickpocket",
+              "name": "Ловкий карманник",
+              "refs": [
+                "Nimble Pickpocket"
+              ],
+              "page": "B162"
+            },
+            {
+              "roll": "3",
+              "kind": "challenge",
+              "nameEn": "Obsessive Cultist",
+              "name": "Одержимый культист",
+              "refs": [
+                "Obsessive Cultist"
+              ],
+              "page": "B163"
+            },
+            {
+              "roll": "4",
+              "kind": "challenge",
+              "nameEn": "Outlaw Overlord",
+              "name": "Владыка преступного мира",
+              "refs": [
+                "Outlaw Overlord"
+              ],
+              "page": "B164"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Rival Bard",
+              "name": "Соперник-бард",
+              "refs": [
+                "Rival Bard"
+              ],
+              "page": "B165"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Tavern Lark",
+              "name": "Кабацкий весельчак",
+              "refs": [
+                "Tavern Lark"
+              ],
+              "page": "B165"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–3",
+              "kind": "journey",
+              "nameEn": "Bewildering City",
+              "name": "Сбивающий с толку город",
+              "refs": [
+                "Bewildering City"
+              ],
+              "page": "B166"
+            },
+            {
+              "roll": "4",
+              "kind": "journey",
+              "nameEn": "Crafting",
+              "name": "Ремесло",
+              "refs": [
+                "Crafting"
+              ],
+              "page": "B194"
+            },
+            {
+              "roll": "5–6",
+              "kind": "journey",
+              "nameEn": "Provisioning",
+              "name": "Снаряжение в путь",
+              "refs": [
+                "Provisioning"
+              ],
+              "page": "B196"
+            }
+          ]
+        },
+        {
+          "roll": "44–46",
+          "nameEn": "The Castle",
+          "name": "Замок",
+          "page": "B168",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Imposing Pet",
+              "name": "Грозная живность",
+              "refs": [
+                "Imposing Pet"
+              ],
+              "page": "B115"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Plague Rats",
+              "name": "Чумные крысы",
+              "refs": [
+                "Plague Rats"
+              ],
+              "page": "B162"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Ardent Knight",
+              "name": "Пылкий рыцарь",
+              "refs": [
+                "Ardent Knight"
+              ],
+              "page": "B168"
+            },
+            {
+              "roll": "2",
+              "kind": "challenge",
+              "nameEn": "Distrustful Ruler",
+              "name": "Недоверчивый правитель",
+              "refs": [
+                "Distrustful Ruler"
+              ],
+              "page": "B169"
+            },
+            {
+              "roll": "3–4",
+              "kind": "challenge",
+              "nameEn": "Plotting Courtier",
+              "name": "Придворный интриган",
+              "refs": [
+                "Plotting Courtier"
+              ],
+              "page": "B170"
+            },
+            {
+              "roll": "5",
+              "kind": "challenge",
+              "nameEn": "Sadistic Gaoler",
+              "name": "Тюремщик-садист",
+              "refs": [
+                "Sadistic Gaoler"
+              ],
+              "page": "B171"
+            },
+            {
+              "roll": "6",
+              "kind": "challenge",
+              "nameEn": "Catspaw",
+              "name": "Подосланный убийца",
+              "refs": [
+                "Catspaw"
+              ],
+              "page": "B169"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–3",
+              "kind": "journey",
+              "nameEn": "Battle at the Gates",
+              "name": "Битва у ворот",
+              "refs": [
+                "Battle at the Gates"
+              ],
+              "page": "B172"
+            },
+            {
+              "roll": "4–6",
+              "kind": "journey",
+              "nameEn": "Noble Banquet",
+              "name": "Пир знати",
+              "refs": [
+                "Noble Banquet"
+              ],
+              "page": "B174"
+            }
+          ]
+        },
+        {
+          "roll": "51–53",
+          "nameEn": "On the Battlefield",
+          "name": "Поле боя",
+          "page": "B176",
+          "creatures": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Fabled Bird of Prey",
+              "name": "Сказочная хищная птица",
+              "refs": [
+                "Fabled Bird of Prey"
+              ],
+              "page": "B139"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Swarm of Insects",
+              "name": "Рой насекомых",
+              "refs": [
+                "Swarm of Insects"
+              ],
+              "page": "B183"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Battlefield Leader",
+              "name": "Полководец",
+              "refs": [
+                "Battlefield Leader"
+              ],
+              "page": "B176"
+            },
+            {
+              "roll": "2",
+              "kind": "challenge",
+              "nameEn": "Bombardier",
+              "name": "Бомбардир",
+              "refs": [
+                "Bombardier"
+              ],
+              "page": "B177"
+            },
+            {
+              "roll": "3",
+              "kind": "challenge",
+              "nameEn": "Frontier Healer",
+              "name": "Полевой лекарь",
+              "refs": [
+                "Frontier Healer"
+              ],
+              "page": "B178"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Soldier",
+              "name": "Солдат",
+              "refs": [
+                "Soldier"
+              ],
+              "page": "B179"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–2",
+              "kind": "journey",
+              "nameEn": "Battle at the Gates",
+              "name": "Битва у ворот",
+              "refs": [
+                "Battle at the Gates"
+              ],
+              "page": "B172"
+            },
+            {
+              "roll": "3–6",
+              "kind": "journey",
+              "nameEn": "Ongoing Battle",
+              "name": "Идущая битва",
+              "refs": [
+                "Ongoing Battle"
+              ],
+              "page": "B180"
+            }
+          ]
+        },
+        {
+          "roll": "54–56",
+          "nameEn": "Blighted Badlands",
+          "name": "Проклятые пустоши",
+          "page": "B182",
+          "creatures": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Corrupted Vermin",
+              "name": "Осквернённая тварь",
+              "refs": [
+                "Corrupted Vermin"
+              ],
+              "page": "B182"
+            },
+            {
+              "roll": "3–4",
+              "kind": "challenge",
+              "nameEn": "Greedy Dragon",
+              "name": "Алчный дракон",
+              "refs": [
+                "Greedy Dragon"
+              ],
+              "page": "B184"
+            },
+            {
+              "roll": "5–6",
+              "kind": "challenge",
+              "nameEn": "Swarm of Insects",
+              "name": "Рой насекомых",
+              "refs": [
+                "Swarm of Insects"
+              ],
+              "page": "B183"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Bloodthirsty Reaver",
+              "name": "Кровожадный грабитель",
+              "refs": [
+                "Bloodthirsty Reaver"
+              ],
+              "page": "B139"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Lone Tracker",
+              "name": "Одинокий следопыт",
+              "refs": [
+                "Lone Tracker"
+              ],
+              "page": "B126"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–2",
+              "kind": "journey",
+              "nameEn": "Desolate Wasteland",
+              "name": "Пустошь",
+              "refs": [
+                "Desolate Wasteland"
+              ],
+              "page": "B186"
+            },
+            {
+              "roll": "3–4",
+              "kind": "journey",
+              "nameEn": "Morose Mire",
+              "name": "Унылая топь",
+              "refs": [
+                "Morose Mire"
+              ],
+              "page": "B150"
+            },
+            {
+              "roll": "5–6",
+              "kind": "challenge",
+              "nameEn": "Stagnant Thoughts",
+              "name": "Застоявшиеся думы",
+              "refs": [
+                "Stagnant Thoughts"
+              ],
+              "page": "B183"
+            }
+          ]
+        },
+        {
+          "roll": "61–63",
+          "nameEn": "Vaults of Darkness",
+          "name": "Логово тьмы",
+          "page": "B188",
+          "creatures": [
+            {
+              "roll": "1–2",
+              "kind": "challenge",
+              "nameEn": "Immortal Vampire",
+              "name": "Бессмертный вампир",
+              "refs": [
+                "Immortal Vampire"
+              ],
+              "page": "B190"
+            },
+            {
+              "roll": "3–4",
+              "kind": "challenge",
+              "nameEn": "Stained Saint",
+              "name": "Витражный святой",
+              "refs": [
+                "Stained Saint"
+              ],
+              "page": "B192"
+            },
+            {
+              "roll": "5–6",
+              "kind": "challenge",
+              "nameEn": "Twisted Creation",
+              "name": "Искажённое творение",
+              "refs": [
+                "Twisted Creation"
+              ],
+              "page": "B193"
+            }
+          ],
+          "people": [
+            {
+              "roll": "1",
+              "kind": "challenge",
+              "nameEn": "Dark Tyrant",
+              "name": "Тёмный тиран",
+              "refs": [
+                "Dark Tyrant"
+              ],
+              "page": "B188"
+            },
+            {
+              "roll": "2–3",
+              "kind": "challenge",
+              "nameEn": "Heartless Warlock",
+              "name": "Бессердечный чернокнижник",
+              "refs": [
+                "Heartless Warlock"
+              ],
+              "page": "B189"
+            },
+            {
+              "roll": "4–6",
+              "kind": "challenge",
+              "nameEn": "Swarming Minions",
+              "name": "Полчища приспешников",
+              "refs": [
+                "Swarming Minions"
+              ],
+              "page": "B191"
+            }
+          ],
+          "places": [
+            {
+              "roll": "1–3",
+              "kind": "challenge",
+              "nameEn": "Compactor Trap",
+              "name": "Давильная ловушка",
+              "refs": [
+                "Compactor Trap"
+              ],
+              "page": "B191"
+            },
+            {
+              "roll": "4–6",
+              "kind": "vignettes",
+              "nameEn": "Roll in Locks & Traps Vignettes",
+              "name": "Бросьте по виньеткам «Замки и ловушки»",
+              "page": "B203"
+            }
+          ]
+        },
+        {
+          "roll": "64–66",
+          "nameEn": "Roll again twice",
+          "name": "Бросьте ещё два раза",
+          "again": true,
+          "placesNote": "Бросьте d6. Соберите путешествие из стольких виньеток.",
+          "placesNoteEn": "Roll d6. Make a Journey out of that many Vignettes."
+        }
+      ],
+      "vignettes": [
+        {
+          "roll": "1",
+          "nameEn": "Chance Encounters",
+          "name": "Случайные встречи",
+          "page": "B200",
+          "items": [
+            {
+              "roll": "1",
+              "nameEn": "Angry Locals",
+              "name": "Разгневанные местные",
+              "page": "B200"
+            },
+            {
+              "roll": "2",
+              "nameEn": "Cartographer",
+              "name": "Картограф",
+              "page": "B200"
+            },
+            {
+              "roll": "3",
+              "nameEn": "Enchanter's Demesne",
+              "name": "Владения чародея",
+              "page": "B200"
+            },
+            {
+              "roll": "4",
+              "nameEn": "Plea For Assistance",
+              "name": "Просьба о помощи",
+              "page": "B200"
+            },
+            {
+              "roll": "5",
+              "nameEn": "Stampede",
+              "name": "Паническое бегство стада",
+              "page": "B200"
+            },
+            {
+              "roll": "6",
+              "nameEn": "Vindictive Challenger",
+              "name": "Мстительный обвинитель",
+              "page": "B200"
+            }
+          ]
+        },
+        {
+          "roll": "2",
+          "nameEn": "Environmental Conditions",
+          "name": "Погода и стихия",
+          "page": "B201",
+          "items": [
+            {
+              "roll": "1",
+              "nameEn": "Blizzard",
+              "name": "Метель",
+              "page": "B201"
+            },
+            {
+              "roll": "2",
+              "nameEn": "Heatwave",
+              "name": "Зной",
+              "page": "B201"
+            },
+            {
+              "roll": "3",
+              "nameEn": "Heavy Rain",
+              "name": "Ливень",
+              "page": "B201"
+            },
+            {
+              "roll": "4",
+              "nameEn": "Obscuring Fog",
+              "name": "Скрывающий туман",
+              "page": "B201"
+            },
+            {
+              "roll": "5",
+              "nameEn": "Thunderous Storm",
+              "name": "Гроза",
+              "page": "B201"
+            },
+            {
+              "roll": "6",
+              "nameEn": "Wildfire",
+              "name": "Лесной пожар",
+              "page": "B201"
+            }
+          ]
+        },
+        {
+          "roll": "3",
+          "nameEn": "Mishaps",
+          "name": "Злоключения",
+          "page": "B202",
+          "items": [
+            {
+              "roll": "1",
+              "nameEn": "Dwindling Supplies",
+              "name": "Припасы на исходе",
+              "page": "B202"
+            },
+            {
+              "roll": "2",
+              "nameEn": "Exhaustion",
+              "name": "Изнеможение",
+              "page": "B202"
+            },
+            {
+              "roll": "3",
+              "nameEn": "Injury",
+              "name": "Травма",
+              "page": "B202"
+            },
+            {
+              "roll": "4",
+              "nameEn": "Lost Companion",
+              "name": "Пропавший спутник",
+              "page": "B202"
+            },
+            {
+              "roll": "5",
+              "nameEn": "Sickness",
+              "name": "Болезнь",
+              "page": "B202"
+            },
+            {
+              "roll": "6",
+              "nameEn": "Worn-Down Transportation",
+              "name": "Изношенный транспорт",
+              "page": "B202"
+            }
+          ]
+        },
+        {
+          "roll": "4",
+          "nameEn": "Locks & Traps",
+          "name": "Замки и ловушки",
+          "page": "B203",
+          "items": [
+            {
+              "roll": "1",
+              "nameEn": "Boobytrapped Chest or Cursed Item",
+              "name": "Сундук с ловушкой или Проклятая вещь",
+              "page": "B203",
+              "refs": [
+                "Boobytrapped Chest",
+                "Cursed Item"
+              ]
+            },
+            {
+              "roll": "2",
+              "nameEn": "Hidden Pit",
+              "name": "Скрытая яма",
+              "page": "B203"
+            },
+            {
+              "roll": "3",
+              "nameEn": "Puzzle Or Riddle Door or Warded Passageway",
+              "name": "Дверь с загадкой или Заговорённый проход",
+              "page": "B203",
+              "refs": [
+                "Puzzle Or Riddle Door",
+                "Warded Passageway"
+              ]
+            },
+            {
+              "roll": "4",
+              "nameEn": "Snare Or Bear Trap",
+              "name": "Силок или капкан",
+              "page": "B203",
+              "refs": [
+                "Snare Or Bear Trap"
+              ]
+            },
+            {
+              "roll": "5",
+              "nameEn": "Tripwire Or Pressure Plate",
+              "name": "Растяжка или нажимная плита",
+              "page": "B204",
+              "refs": [
+                "Tripwire Or Pressure Plate"
+              ]
+            },
+            {
+              "roll": "6",
+              "nameEn": "Grease Patch",
+              "name": "Скользкий пол",
+              "page": "B204"
+            }
+          ]
+        },
+        {
+          "roll": "5",
+          "nameEn": "Poignant Moments",
+          "name": "Трогательные мгновения",
+          "page": "B204",
+          "items": [
+            {
+              "roll": "1",
+              "nameEn": "Cautionary Tale",
+              "name": "Поучительная история",
+              "page": "B205"
+            },
+            {
+              "roll": "2",
+              "nameEn": "Deep Conversation",
+              "name": "Задушевный разговор",
+              "page": "B205"
+            },
+            {
+              "roll": "3",
+              "nameEn": "Down At The Pub",
+              "name": "В трактире",
+              "page": "B205"
+            },
+            {
+              "roll": "4",
+              "nameEn": "Inspiring Vista",
+              "name": "Вдохновляющий вид",
+              "page": "B204"
+            },
+            {
+              "roll": "5",
+              "nameEn": "Marching Song",
+              "name": "Походная песня",
+              "page": "B205"
+            },
+            {
+              "roll": "6",
+              "nameEn": "Overgrown Shrine",
+              "name": "Заросшее святилище",
+              "page": "B205"
+            }
+          ]
+        },
+        {
+          "roll": "6",
+          "nameEn": "Pick from a randomly selected Journey",
+          "name": "Возьмите виньетку из случайно выбранного путешествия",
+          "items": []
+        }
+      ],
+      "notes": [
+        "В книге — «бросьте d66» на вызов в столбце, но строки столбцов размечены по d6 (1–6); значит, d6."
+      ]
+    },
+    {
+      "key": "builder",
+      "name": "Конструктор профиля",
+      "nameEn": "The Profile Builder",
+      "page": "B250",
+      "lead": "Конструктор помогает быстро собрать профиль вызова, уже описанного в сцене.",
+      "leadEn": "The Profile Builder helps you quickly create a Challenge Profile for a Challenge that has been described in the scene.",
+      "steps": [
+        {
+          "key": "might",
+          "name": "Могущество",
+          "nameEn": "Step 1: Mighty Aspects",
+          "text": "Посчитайте темы Приключения и Величия у своего Героя (для группы — в среднем). Уменьшите число тем Приключения на одну или перенесите одну из Величия в Приключение. Столько аспектов Могущества будет у вызова. Решите, что это за аспекты: размер, число, умение, магия, влияние, хитрость, богатство и так далее.",
+          "textEn": "Count your Hero's number of Adventure and Greatness themes (use an average for a group). Reduce the number for Adventure by one, or move 1 from Greatness to Adventure. That is the number of Mighty aspects your Challenge will have. Decide what are these aspects: size, numbers, skill, magic, influence, cunning, riches, etc."
+        },
+        {
+          "key": "rating",
+          "name": "Рейтинг вызова",
+          "nameEn": "Step 2: Challenge Rating",
+          "text": "Бросьте d6. В начале приключения бросьте две кости и возьмите меньшую, ближе к концу — большую.\n• Выпало 1–5 — это рейтинг вызова (CR).\n• Выпало 6 — поднимите Могущество: добавьте аспект Приключения или сделайте имеющийся аспект Приключения аспектом Величия. Бросайте снова, пока не получите рейтинг.\nВ серии «Гора» см. «Могущество по актам» (с. B71).",
+          "textEn": "Roll a d6. If you are at the beginning of your adventure, roll two dice and pick the lower one; if you are approaching its end, pick the higher.\n• If the result is 1 to 5, that is your Challenge Rating (CR).\n• If you rolled a 6, increase Might: add one Adventure aspect or change an existing Adventure aspect to Greatness. Roll again until you have a Challenge Rating.\nIf you are playing a Mountain-style series, see Matching Might To Act (page 71)."
+        },
+        {
+          "key": "limits",
+          "name": "Пределы",
+          "nameEn": "Step 3: Limits",
+          "text": "Выберите трудный, средний и (или) лёгкий способ одолеть вызов; каждый станет Пределом: ранить, убедить, обмануть, запугать, уничтожить, усмирить, развеять, изгнать, поймать, сбежать и так далее. Максимум: трудный = CR+1, средний = CR, лёгкий = CR−1 (если 0 — убрать Предел).\nЕсли вызов идёт к развязке, завершению или превращению, дайте ему предел-счётчик 4.",
+          "textEn": "Choose a hard, medium, and/or easy way to overcome the Challenge; each one will become a Limit such as harm, convince, trick, threaten, destroy, subdue, dispel, banish, catch, escape, etc. Set a maximum for each: hard = CR+1; medium = CR; easy = CR - 1 (If zero, remove the Limit)\nIf the Challenge is working toward a crescendo, completion, or transformation, give it a progress Limit of 4."
+        },
+        {
+          "key": "tags",
+          "name": "Теги и статусы",
+          "nameEn": "Step 4: Tags & Statuses",
+          "text": "Выберите теги и статусы — лучшую защиту и главный напор вызова. Помните: теги и статусы ослабляют действия Героя и не изображают активные способности вызова.\n• Тегов — столько, сколько CR.\n• Статусов — на столько уровней, сколько CR.",
+          "textEn": "Choose tags and statuses to represent the top defenses and offensive edge of this Challenge. Remember: tags and statuses weaken Hero actions, and do not represent the Challenge's active abilities.\n• Tags: As many as its CR\n• Statuses: As many tiers as its CR"
+        },
+        {
+          "key": "threats",
+          "name": "Угрозы и последствия",
+          "nameEn": "Step 5: Threats & Consequences",
+          "text": "Определите роль вызова и по оракулу «Действие вызова» выберите его угрозы и последствия.\n• Главное последствие даёт или снимает статус уровня CR (или половину CR тегами, с округлением вверх).\n• Все прочие последствия дают или снимают статус уровня половины CR с округлением вверх (или один тег при CR 1–4 и два тега при CR 5).",
+          "textEn": "Determine the Role of the Challenge and use the Challenge Action Oracle (next page) to choose its Threats & Consequences.\n• The main Consequence deals or removes a status with a tier equal to its CR (or half CR in tags, rounded up).\n• All other Consequences deal or remove a status with a tier equal to half CR, rounded up (or one tag for CR 1-4, and two tags for CR 5)."
+        }
+      ],
+      "example": {
+        "name": "Бобр-страж",
+        "nameEn": "Beaver Kin Defender",
+        "text": "Герой (одна тема Приключения) выходит к плотине, которую сторожит осторожный бобр из бобрового народа.\n1) Могущество: поначалу никакого (на одну меньше, чем у Героя).\n2) CR: Рассказчик выбрасывает 6 и добавляет аспект Приключения — «ловкость на болотах». Второй бросок — 3, значит CR +++.\n3) Пределы: драка — самый трудный путь, поэтому *ранить* 4 (CR+1). Дальше — успокоить, ведь бобр осторожен: *успокоить* 3 (как CR). Наконец, если Герой выманит стража от плотины, того легко обогнать на суше: *обогнать* 2 (CR−1).\n4) Теги и статусы: 3 тега и 3 уровня статусов (как CR): плотина, деревянное копьё, деревянный щит, *настороже-1*, *подозрителен-2*.\n5) Угрозы и последствия: роль — Препятствие. Глядя в оракул «Действие вызова», Рассказчик переделывает последствия под вызов (угроз нет). Главным выбрано третье последствие — статус уровня CR (3); все прочие — вдвое слабее (с округлением вверх — 2) или один тег.\n1. Не подпускает никого к своей плотине и не пускает через неё (**Возможность закрыта**)\n2. Укрепляется за колючей деревянной баррикадой (получает *укреплён-2*)\n3. Метает деревянное копьё в незваных гостей (*ранен-3*)\n4. Упирается против одного подхода в разговоре (вычеркнуть один тег)\n5. Чья-то нога застревает меж брёвен плотины (*связан-2*)\n6. Зовёт подмогу (**Новый вызов**: появляется ещё один страж)",
+        "textEn": "The Hero (one Adventure theme) comes across a dam guarded by a cautious Beaver Kin.\n1) Might: Initially, none (one less than the Hero).\n2) CR: The Narrator rolls 6, adding an Adventure aspect: \"Wetland deftness\". A second roll gets a 3, so the CR is +++.\n3) Limits: Fighting them is the hardest way through, so harm 4 (CR+1). Next comes reassuring, as they are cautious: reassure 3 (same as CR). Finally, if the Hero can draw them away from the dam, the Defender can be easily outrun 2 overland (CR-1).\n4) Tags & Statuses: 3 tags and 3 status tiers (same as CR): dam, wooden spear, wooden shield, alert-1, suspicious-2.\n5) Threats & Consequences: Its Role is Obstacle. Looking at the Challenge Action Oracle, the Narrator revises the Consequences to match the Challenge (there are no Threats). The third Consequence is chosen to be its main, dealing a status equal to CR (tier 3); all others deal half as much (rounded up, tier 2) or one tag.\n1. Refuse to let someone near or across their dam (Blocked)\n2. Fortify themselves behind a spiky wooden barricade (gain fortified-2)\n3. Throw a wooden spear at unwanted guests (wounded-3)\n4. Entrench themselves against a specific social approach (scratch one tag)\n5. Someone's foot gets caught between the dam logs (restrained-2)\n6. Call reinforcements (New Challenge: another Defender shows up)"
+      }
+    },
+    {
+      "key": "action",
+      "name": "Действие вызова",
+      "nameEn": "The Challenge Action Oracle",
+      "page": "B251–B253",
+      "lead": "Оракул действий вызова помогает выбрать, что вызов сделает, — по его роли (с. B110), выбранной, когда вы бросали оракул конфликта для сцены.\n• Найдите роль вызова в таблице.\n• Бросьте d6. Таблица укажет последствие, которое вот-вот случится, и угрозу, которой можно предупредить о нём Героя.",
+      "leadEn": "The Challenge Action Oracle helps you choose an action for your Challenge based on their Role (page 110) which was chosen when you rolled the Conflict Oracle for the scene.\n• Find the Challenge Role on the Challenge Action Oracle table.\n• Roll a d6. The table will point you to a specific Consequence that is about to occur, and offer a Threat you can use to warn the Hero of what is about to happen.",
+      "roles": [
+        {
+          "role": "Агрессор",
+          "roleEn": "Aggressor",
+          "actions": [
+            {
+              "name": "Атаковать",
+              "nameEn": "Attack",
+              "threat": "Броситься или сойтись с явным намерением убить",
+              "threatEn": "Rush or clash with obvious violent intent",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Ударить, защищаясь (дать слабый вредный статус и получить *парирует-1* или *под-защитой-1*)",
+                  "textEn": "Strike defensively (give a weak harmful status, and gain parry-1 or guarded-1)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Ударить с силой (дать вредный статус, например *ранен*)",
+                  "textEn": "Strike with force (give a harmful status such as wounded)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Яростно наброситься (дать сильный вредный статус, но получить *на-виду-1*)",
+                  "textEn": "Lash out with a violent strike (give a strong harmful status, but gain exposed-1)"
+                }
+              ]
+            },
+            {
+              "name": "Теснить",
+              "nameEn": "Maneuver",
+              "threat": "Донимать, изводить или грозить",
+              "threatEn": "Harry, harass, or threaten",
+              "consequences": [
+                {
+                  "roll": "4",
+                  "text": "Поставить в невыгодное положение (отрицательный статус позиции, например *лежит*) или перекрыть путь (**Возможность закрыта**)",
+                  "textEn": "Put in a compromised position (negative positional status such as prone) or block movement (Blocked)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Обезоружить или пробить защиту (вычеркнуть тег или ослабить полезный статус) — или напугать, сбить с толку (*запуган* или *сбит-с-толку*)",
+                  "textEn": "Disarm or lower defenses (scratch a tag or reduce a positive status) or strike with fear or confusion (intimidated or confused)"
+                }
+              ]
+            },
+            {
+              "name": "Созвать",
+              "nameEn": "Rally",
+              "threat": "Позвать или подать знак подмоге",
+              "threatEn": "Call or signal for reinforcements",
+              "consequences": [
+                {
+                  "roll": "6",
+                  "text": "Подмога прибыла (**Новый вызов** или Могущество выше)",
+                  "textEn": "Reinforcements arrive (New Challenge or increase Might)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Подопечный",
+          "roleEn": "Charge",
+          "actions": [
+            {
+              "name": "Следовать",
+              "nameEn": "Follow",
+              "threat": "Неуклюже пытаться не отставать от Героя",
+              "threatEn": "Try to match the Hero's steps, inadequately",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Наделать шума или отвлечь (**Обнаружение**, снять *скрыт* или *отвлечён*)",
+                  "textEn": "Make too much noise or distract (Exposure, remove hidden, or distracted)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Вдруг пропасть — отстать от Героя или забрести куда-то (**Осложнение**)",
+                  "textEn": "Suddenly be gone, having been separated from the Hero or wandered off (Complication)"
+                }
+              ]
+            },
+            {
+              "name": "Оплошать",
+              "nameEn": "Blunder",
+              "threat": "В панике или по беспечности двинуться навстречу опасности",
+              "threatEn": "Move toward danger in a panicked or oblivious state",
+              "consequences": [
+                {
+                  "roll": "3",
+                  "text": "Шагнуть прямо навстречу беде (**Осложнение** или получить *на-виду* или *в-панике*)",
+                  "textEn": "Move right into the path of danger (Complication, or gain exposed or panicked)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Звать на помощь (**Обнаружение**, **Новый вызов** или дать *рвётся-помочь*)",
+                  "textEn": "Scream for help (Exposure, New Challenge, or give compelled-to-help)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Попасться, угодить в ловушку или запутаться (получить *связан*)",
+                  "textEn": "Become captured, trapped, or entangled (gain restrained)"
+                }
+              ]
+            },
+            {
+              "name": "Пострадать",
+              "nameEn": "Be hurt",
+              "threat": "Попасть под удар или в прямую опасность",
+              "threatEn": "Come under attack or immediate danger",
+              "consequences": [
+                {
+                  "roll": "6",
+                  "text": "Получить вред или рану, быть может смертельную (получить вредный статус или **Дурные вести**)",
+                  "textEn": "Suffer harm or injury, possibly fatal (gain a harmful status, or Ill Tidings)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Обратный отсчёт",
+          "roleEn": "Countdown",
+          "actions": [
+            {
+              "name": "Ухудшиться",
+              "nameEn": "Get worse",
+              "threat": "Продолжать продвигаться",
+              "threatEn": "Continue to progress",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Продвинуться (получить *продвигается-1*)",
+                  "textEn": "Advance (gain progress-1)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Продвинуться напором, раня всякого, кто мешает (получить *продвигается-1* и дать вредный статус)",
+                  "textEn": "Advance aggressively, harming any opposition (gain progress-1 and give a harmful status)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Ухудшиться явно и устрашающе (получить *продвигается-1* и дать *встревожен* или *напуган*)",
+                  "textEn": "Worsen in an obvious and terrifying way (gain progress-1 and give worried or scared)"
+                }
+              ]
+            },
+            {
+              "name": "Вырваться",
+              "nameEn": "Break out",
+              "threat": "Начать подтачивать то, что сдерживает или ограничивает его ход",
+              "threatEn": "Begin to undermine restraints or limitations on its progress",
+              "consequences": [
+                {
+                  "roll": "4",
+                  "text": "Прорвать помеху (вычеркнуть теги или снять мешающие статусы)",
+                  "textEn": "Shatter through a hinderance (scratch tags or remove hindering statuses)"
+                }
+              ]
+            },
+            {
+              "name": "Защищаться",
+              "nameEn": "Defend",
+              "threat": "Позвать или подать знак защитникам, чтобы ход не прервался",
+              "threatEn": "Signal or call upon defenders to ensure its progress",
+              "consequences": [
+                {
+                  "roll": "5",
+                  "text": "Призвать нового защитника (**Новый вызов** или Могущество защитников выше)",
+                  "textEn": "Summon a new defender (New Challenge or increase Might of defenders)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Защитник хода нападает (бросьте по Агрессору или Влиянию)",
+                  "textEn": "A defender of the process attacks (roll on Aggressor or Influence)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Загадка",
+          "roleEn": "Mystery",
+          "actions": [
+            {
+              "name": null,
+              "nameEn": null,
+              "threat": null,
+              "threatEn": null,
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Условия ухудшаются, правду раскрыть труднее (получить скрывающий статус или тег, например *в-тумане-2* или «потревоженные улики»)",
+                  "textEn": "Conditions worsen, making revealing the truth harder (gain obscuring status or tag such a foggy-2 or disturbed evidence)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Полезный источник сведений иссякает или исчерпан (вычеркнуть тег)",
+                  "textEn": "A useful source of information runs dry or is exhausted (scratch a tag)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Улики неубедительны или правдивы лишь отчасти (**Да, но…**)",
+                  "textEn": "Clues are inconclusive or only part-true (Yes, But...)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Правда ускользает (получить *запутано* или дать свидетелю *держит-язык-за-зубами* или *околдован*)",
+                  "textEn": "The truth is slipping away (gain confounding, or give a witness tight-lipped or bewitched)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Сыщики платят свою цену: раздосадованы, что дело не движется, потрясены находкой и так далее",
+                  "textEn": "The investigators pay a price: frustrated by lack of progress, shocked by what they find, etc."
+                },
+                {
+                  "roll": "6",
+                  "text": "Важная улика или свидетель ускользает от сыщиков (**Новый вызов** с ролью Дичь) — или кто-то встаёт, чтобы их отвадить (**Новый вызов** с ролью Агрессор)",
+                  "textEn": "A vital clue or witness escapes the investigators (New Challenge with the Quarry role) or a someone steps up to repel the investigators (New Challenge with the Aggressor role)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Препятствие",
+          "roleEn": "Obstacle",
+          "actions": [
+            {
+              "name": null,
+              "nameEn": null,
+              "threat": null,
+              "threatEn": null,
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Один из путей запечатан, перекрыт или разрушен (**Возможность закрыта**)",
+                  "textEn": "A possible way through is sealed, blocked, or ruined (Blocked)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Стать (или оказаться) труднее для прохода (получить полезный статус или тег, например «крутой подъём», «зарос колючками», *пылает-3*)",
+                  "textEn": "Become (or be revealed to be) more difficult to pass (gain a positive status or tag such as steep incline, covered in brambles, flaming-3)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Ранить того, кто его трогает или пытается пройти (дать вредный статус)",
+                  "textEn": "Harm someone interacting with it or attempting to pass (give a harmful status)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Сломать инструмент, истощить запас или обесценить полезное умение (ослабить статус-запас или вычеркнуть тег)",
+                  "textEn": "Break a tool, exhaust a resource, or make a useful skill irrelevant (reduce a resource status or scratch a tag)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Опутать, оплести паутиной, обездвижить или иначе сковать проходящих (дать *связан*)",
+                  "textEn": "Entangle, web, paralyze, or otherwise restrain passers-through (give restrained)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Призвать или породить стражей (**Новый вызов** с ролью Агрессор или Наблюдатель)",
+                  "textEn": "Summon or spawn guardians (New Challenge, with the Aggressor or Watcher role)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Преследователь",
+          "roleEn": "Pursuer",
+          "actions": [
+            {
+              "name": "Гнаться",
+              "nameEn": "Give chase",
+              "threat": "Спешить к добыче",
+              "threatEn": "Move with haste towards the quarry",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Подбираться всё ближе (добавить статус на предел *поймать* или *выследить*)",
+                  "textEn": "Draw closer and closer (add a status on the catch or track Limit)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Набрать ход (получить *ускорен-1* и добавить статус на предел *поймать* или *выследить*)",
+                  "textEn": "Gain momentum (gain speeding-1, and add a status on the catch or track Limit)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Одолеть преграду (вычеркнуть тег преграды и добавить статус на предел *поймать* или *выследить*)",
+                  "textEn": "Overcome an obstacle (scratch an obstacle tag and add a status on the catch or track Limit)"
+                }
+              ]
+            },
+            {
+              "name": "Задержать",
+              "nameEn": "Hinder",
+              "threat": "Готовить удар или уловку, чтобы замедлить добычу",
+              "threatEn": "Prepare an attack or a trick that would slow its quarry down",
+              "consequences": [
+                {
+                  "roll": "4",
+                  "text": "Заставить добычу замедлиться или выдать себя (дать мешающий статус, например *хромает* или *замедлен*, или вычеркнуть тег движения, скакуна или повозки)",
+                  "textEn": "Force the quarry to slow or reveal itself (give a hindering status, such as hobbled or slow, or scratch a movement, mount, or transport tag)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Создать преграду впереди или загнать погоню на неё (создать тег преграды)",
+                  "textEn": "Create an obstacle up ahead or steer the chase into one (create an obstacle tag)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Отрезать путь бегства в одну сторону (**Возможность закрыта**)",
+                  "textEn": "Maneuver to block escape in a specific path (Blocked)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Влияние",
+          "roleEn": "Influence",
+          "actions": [
+            {
+              "name": "Заманить",
+              "nameEn": "Entice",
+              "threat": "Зазвать кого-то в разговор",
+              "threatEn": "Beckon someone to engage in conversation",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Произвести впечатление (получить *дружелюбен* или дать *любопытен*)",
+                  "textEn": "Make an impression (gain friendly or give curious)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Угадать или раскрыть тайну или слабость (**Обнаружение** и получить на это тег)",
+                  "textEn": "Discern or reveal a secret or weakness (Exposure and gain a tag for it)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Привлечь, посулив желанное (дать побуждающий статус, например *заинтересован* или *очарован*, или получить притягательный тег)",
+                  "textEn": "Attract, offering something desired (give a compelling status such as interested or beguiled, or gain a desirable tag)"
+                }
+              ]
+            },
+            {
+              "name": "Убедить",
+              "nameEn": "Convince",
+              "threat": "Говорить так, что хочется слушать",
+              "threatEn": "Speak in a compelling way",
+              "consequences": [
+                {
+                  "roll": "4",
+                  "text": "Обезоружить сопротивление или посеять сомнение в себе (вычеркнуть тег или ослабить полезный статус)",
+                  "textEn": "Disarm resistance or sow self-doubt (scratch a tag or reduce a positive status)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Сильно повлиять (дать побуждающий статус, например *убеждён* или *соблазнён*)",
+                  "textEn": "Strongly influence (give a compelling status such as convinced or tempted)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Заключить сделку или вынудить выбрать (дать *в-долгу* и желанный тег — или **Заставить Героя выбрать**)",
+                  "textEn": "Make a deal or press to choose (give indebted and a desired tag, or Force The Hero To Choose)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Дичь",
+          "roleEn": "Quarry",
+          "actions": [
+            {
+              "name": "Бежать",
+              "nameEn": "Flee",
+              "threat": "Уйти от погони быстротой или хитростью",
+              "threatEn": "Escape its pursuers with great speed or cunning",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Оторваться дальше (добавить статус на предел *обогнать* или *сбежать*)",
+                  "textEn": "Move further away (add a status on the outrun or escape Limit)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Набрать ход или замести следы (получить *ускорен-1* или *скрыт-1* и добавить статус на предел *обогнать* или *сбежать*)",
+                  "textEn": "Gain momentum or mask their tracks (gain speeding-1 or hidden-1, and add a status on the outrun or escape Limit)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Миновать преграду (вычеркнуть тег преграды и добавить статус на предел *обогнать* или *сбежать*)",
+                  "textEn": "Clear an obstacle (scratch an obstacle tag and add a status on the outrun or escape Limit)"
+                }
+              ]
+            },
+            {
+              "name": "Помешать",
+              "nameEn": "Hinder",
+              "threat": "Изловчиться или придумать, как поставить преграду на пути погони",
+              "threatEn": "Maneuver or devise a way to put obstacles in the way of its pursuer",
+              "consequences": [
+                {
+                  "roll": "4",
+                  "text": "Замедлить или запутать погоню отвлекающим манёвром или порчей её умений (дать мешающий статус или вычеркнуть тег)",
+                  "textEn": "Slow or confuse the pursuer with diversions or by impairing abilities (give a hindering status or scratch a tag)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Поставить преграду на пути погони (создать тег преграды)",
+                  "textEn": "Put an obstacle in the pursuer's path (create an obstacle tag)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Втянуть в погоню кого-то ещё (**Новый вызов**)",
+                  "textEn": "Draw another party into the chase (New Challenge)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Опора",
+          "roleEn": "Support",
+          "actions": [
+            {
+              "name": "Помочь",
+              "nameEn": "Aid",
+              "threat": "Броситься на помощь своим",
+              "threatEn": "Rush to the help of their allies",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Усилить своих (дать *воодушевлён*, *уверен*, *полон-сил* и т. п. или поднять их Могущество)",
+                  "textEn": "Empower their allies (give inspired, confident, energized, etc., or increase their Might)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Защитить своих, отвести удар или дать укрытие (дать защитный статус, например *под-защитой* или *ограждён*, теги укрытия вроде «баррикада» — или **Возможность закрыта**)",
+                  "textEn": "Protect their allies, block an attack, or create cover (give a defensive status such as guarded or warded, or cover tags such as barricade, or Blocked)"
+                },
+                {
+                  "roll": "3",
+                  "text": "Исцелить своих или вернуть им силы (ослабить мешающий или вредный статус)",
+                  "textEn": "Heal their allies or restore their strength (reduce a hindering or harmful status)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Вернуть своим умения (восстановить исходные теги вызова)",
+                  "textEn": "Recover their allies' abilities (restore a Challenge's original tags)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Дать своим новое подспорье или умение (создать тег)",
+                  "textEn": "Grant their allies a new asset or ability (create a tag)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Поднять или заменить павшего (**Новый вызов**: вернуть одолённый вызов)",
+                  "textEn": "Restore or replace a fallen ally (New Challenge: bring a defeated Challenge back)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Наблюдатель",
+          "roleEn": "Watcher",
+          "actions": [
+            {
+              "name": "Дозор",
+              "nameEn": "Patrol",
+              "threat": "Высматривать всё подозрительное",
+              "threatEn": "Look out for anything suspicious",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Заметить то, что встревожит или заставит быть начеку (получить *настороже* или *подозрителен*)",
+                  "textEn": "Notice something that makes them agitated or vigilant (gain alert or suspicious)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Увидеть добычу или найти следы чьих-то дел (**Обнаружение**)",
+                  "textEn": "Spot its quarry, or find evidence of activity (Exposure)"
+                }
+              ]
+            },
+            {
+              "name": "Сужать круг",
+              "nameEn": "Close in",
+              "threat": "Неуклонно подбираться, отсекая лишнее",
+              "threatEn": "Approach steadily, narrowing down the options",
+              "consequences": [
+                {
+                  "roll": "3",
+                  "text": "Убрать помехи на пути к правде (снять скрывающий тег или статус, например «маскировка», *скрыт* или *загадочен*)",
+                  "textEn": "Remove obstacles in their path to the truth (remove a concealing tag or status, such as disguise, hidden, or mysterious)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Отрезать путь бегства или увёрток (**Возможность закрыта**)",
+                  "textEn": "Close down a path of escape or evasion (Blocked)"
+                }
+              ]
+            },
+            {
+              "name": "Изучать",
+              "nameEn": "Study",
+              "threat": "Разбираться, что происходит",
+              "threatEn": "Work to figure out what is going on",
+              "consequences": [
+                {
+                  "roll": "5",
+                  "text": "Раскрыть важное о добыче или её замыслах (**Обнаружение** и снять статусы или теги готовности)",
+                  "textEn": "Reveal vital information about their quarry or their plans (Exposure, and remove preparedness statuses or tags)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Разгадать следующий ход добычи (**Обнаружение** и получить *подготовлен*)",
+                  "textEn": "Figure out their quarry's next move (Exposure and gain prepared)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "role": "Подрыватель",
+          "roleEn": "Sapper",
+          "actions": [
+            {
+              "name": "Присматриваться",
+              "nameEn": "Measure",
+              "threat": "Изучать Героя и его действия в поисках слабого места",
+              "threatEn": "Study the Hero and their actions, seeking a weak point",
+              "consequences": [
+                {
+                  "roll": "1",
+                  "text": "Найти слабость Героя (**Обнаружение** или дать отрицательный тег) или пробить его защиту (вычеркнуть тег)",
+                  "textEn": "Identify a Hero's weakness (Exposure or give a negative tag) or break their defenses (scratch a tag)"
+                },
+                {
+                  "roll": "2",
+                  "text": "Занять выгодную позицию (*выгодная-позиция*) или затаиться в тени или на краю (получить *скрыт*)",
+                  "textEn": "Find an advantageous-position or hide in the shadows or on the fringes (gain hidden)"
+                }
+              ]
+            },
+            {
+              "name": "Подтачивать",
+              "nameEn": "Weaken",
+              "threat": "Ударить по самой силе или возможностям Героя",
+              "threatEn": "Make a move against a Hero's very strength or capabilities",
+              "consequences": [
+                {
+                  "roll": "3",
+                  "text": "Изводить Героя или вытягивать из него силы (дать мешающий статус, например *обессилен*, *в-отчаянии*, *хромает*, *ослаблен*, *на-виду* и т. п.)",
+                  "textEn": "Harry the Hero or sap their strength (give a hindering status such as drained, despaired, hobbled, weakened, exposed, etc.)"
+                },
+                {
+                  "roll": "4",
+                  "text": "Истощить важный запас (ослабить статус-запас, например *припасы*, или дать статус нехватки, например *мало-стрел*)",
+                  "textEn": "Deplete an important resource (reduce a resource status, such as supplies, or give a scarcity status, such as low-on-arrows)"
+                },
+                {
+                  "roll": "5",
+                  "text": "Испортить полезное умение, вещь, позицию или дело (вычеркнуть тег, ослабить полезный статус или отбросить статус-счётчик)",
+                  "textEn": "Sabotage a useful ability, item, position, or process (scratch a tag, reduce a positive status, or set back a progress status)"
+                },
+                {
+                  "roll": "6",
+                  "text": "Поставить преграду на пути Героя (создать тег преграды)",
+                  "textEn": "Put an obstacle in a Hero's path (create an obstacle tag)"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "consequence",
+      "name": "Последствия",
+      "nameEn": "The Consequence Oracle",
+      "page": "B254",
+      "lead": "Оракул последствий помогает выбрать последствия действия, не связанные с вызовом. Так бывает, когда у действия не было угрозы или оно отвело угрозу вызова, но последствия всё равно случились — из-за исхода 7–9 (или других правил).\n• Бросьте d66, найдите строку и истолкуйте её для своего положения — или бросьте d6 для более точного итога.\nПомните: исход 7–9 можно истолковать и как удар вызова исподтишка. Тогда ищите последствие в профиле вызова или в оракуле «Действие вызова» (с. B251).",
+      "leadEn": "The Consequences Oracle helps you choose non-Challenge Consequences for an action. This happens when an action had no Threat or blocked a Threat from a Challenge but still generated Consequences due to a 7-9 outcome (or other rules).\n• Roll a d66, find the matching Consequence, and interpret it for your situation or roll a d6 for a more specific result.\nRemember, you can still interpret a 7-9 outcome as an Attack of Opportunity from a Challenge. In such a case, look for the Challenge's Consequence in its profile or use the Challenge Action Oracle (page 251).",
+      "rows": [
+        {
+          "roll": "11–14",
+          "nameEn": "A New Danger",
+          "textEn": "The Hero ran into a new Challenge or a new Threat from an existing Challenge.",
+          "effectEn": "New Challenge, Complication, optionally give the Hero surprised",
+          "name": "Новая опасность",
+          "text": "Герой наткнулся на новый вызов или на новую угрозу уже известного.",
+          "effect": "**Новый вызов**, **Осложнение**; можно дать Герою *застигнут-врасплох*",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Hero is surprised or unprepared",
+              "text": "Герой застигнут врасплох или не готов"
+            },
+            {
+              "roll": "2",
+              "textEn": "Hero is startled or scared",
+              "text": "Герой испуган или в ужасе"
+            },
+            {
+              "roll": "3",
+              "textEn": "Hero is exposed or distracted",
+              "text": "Герой открыт или отвлечён"
+            },
+            {
+              "roll": "4",
+              "textEn": "Scratch ally tag(s)",
+              "text": "Вычеркнуть тег(и) союзника"
+            },
+            {
+              "roll": "5",
+              "textEn": "Scratch Hero tool or weapon",
+              "text": "Вычеркнуть инструмент или оружие Героя"
+            },
+            {
+              "roll": "6",
+              "textEn": "Scratch Hero ability",
+              "text": "Вычеркнуть умение Героя"
+            }
+          ]
+        },
+        {
+          "roll": "15–22",
+          "nameEn": "Collateral Damage",
+          "textEn": "The action unintentionally affects something or someone that the Hero did not want to affect.",
+          "effectEn": "Give an ally a negative status or scratch their tags, Ill Tidings",
+          "name": "Побочный урон",
+          "text": "Действие ненароком задело то или того, кого Герой задевать не хотел.",
+          "effect": "дать союзнику отрицательный статус или вычеркнуть его теги, **Дурные вести**",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Ally is wounded",
+              "text": "Союзник ранен"
+            },
+            {
+              "roll": "2",
+              "textEn": "Ally suffers Effects of action",
+              "text": "Союзника задевают Эффекты действия"
+            },
+            {
+              "roll": "3",
+              "textEn": "Scratch ally tool or weapon",
+              "text": "Вычеркнуть инструмент или оружие союзника"
+            },
+            {
+              "roll": "4",
+              "textEn": "Scratch useful scene tag",
+              "text": "Вычеркнуть полезный тег сцены"
+            },
+            {
+              "roll": "5",
+              "textEn": "Create obstacle or hazard",
+              "text": "Создать преграду или опасность"
+            },
+            {
+              "roll": "6",
+              "textEn": "An innocent is hurt (Ill Tidings)",
+              "text": "Пострадал невинный (**Дурные вести**)"
+            }
+          ]
+        },
+        {
+          "roll": "23–26",
+          "nameEn": "Exposure",
+          "textEn": "The Hero betrays vital information to their adversaries such as their location, identity, intentions, or plan of action.",
+          "effectEn": "Exposure, give the Challenge an advantageous tag or status",
+          "name": "Обнаружение",
+          "text": "Герой выдаёт врагам важное: где он, кто он, что задумал, как намерен действовать.",
+          "effect": "**Обнаружение**, дать вызову выгодный тег или статус",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Hero's location",
+              "text": "Где Герой"
+            },
+            {
+              "roll": "2",
+              "textEn": "Hero's abilities",
+              "text": "Что Герой умеет"
+            },
+            {
+              "roll": "3",
+              "textEn": "Hero's intentions",
+              "text": "Что Герой задумал"
+            },
+            {
+              "roll": "4",
+              "textEn": "Hero's weaknesses",
+              "text": "Слабости Героя"
+            },
+            {
+              "roll": "5",
+              "textEn": "Hero's identity",
+              "text": "Кто Герой"
+            },
+            {
+              "roll": "6",
+              "textEn": "Reroll and apply to ally",
+              "text": "Перебросьте и отнесите к союзнику"
+            }
+          ]
+        },
+        {
+          "roll": "31–34",
+          "nameEn": "Expenditure",
+          "textEn": "The Hero expends resources (stamina, arrows, ingredients, mana, etc.).",
+          "effectEn": "Scratch a tag, give a negative status like exhausted, or reduce the Hero's resource status like mana",
+          "name": "Расход",
+          "text": "Герой тратит запасы (выносливость, стрелы, ингредиенты, ману и т. п.).",
+          "effect": "вычеркнуть тег, дать отрицательный статус вроде *утомлён* или ослабить статус-запас Героя вроде *мана*",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Hero is tired",
+              "text": "Герой устал"
+            },
+            {
+              "roll": "2",
+              "textEn": "Scratch Hero tool or weapon",
+              "text": "Вычеркнуть инструмент или оружие Героя"
+            },
+            {
+              "roll": "3",
+              "textEn": "Hero is low-on-[resource]",
+              "text": "У Героя *мало-[запаса]*"
+            },
+            {
+              "roll": "4",
+              "textEn": "Hero is disheartened",
+              "text": "Герой пал духом"
+            },
+            {
+              "roll": "5",
+              "textEn": "Reduce Hero positive status",
+              "text": "Ослабить полезный статус Героя"
+            },
+            {
+              "roll": "6",
+              "textEn": "Roll again twice",
+              "text": "Бросьте ещё два раза"
+            }
+          ]
+        },
+        {
+          "roll": "35–42",
+          "nameEn": "Harm",
+          "textEn": "The Hero was harmed during the course of their action.",
+          "effectEn": "Give a negative status such as bleeding, burned, upset",
+          "name": "Вред",
+          "text": "Герой пострадал, пока действовал.",
+          "effect": "дать отрицательный статус, например *истекает-кровью*, *обожжён*, *расстроен*",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Hero is wounded or bleeding",
+              "text": "Герой ранен или истекает кровью"
+            },
+            {
+              "roll": "2",
+              "textEn": "Hero is humiliated or embarrassed",
+              "text": "Герой унижен или смущён"
+            },
+            {
+              "roll": "3",
+              "textEn": "Hero is burned or poisoned",
+              "text": "Герой обожжён или отравлен"
+            },
+            {
+              "roll": "4",
+              "textEn": "Hero becomes sick",
+              "text": "Герой заболел"
+            },
+            {
+              "roll": "5",
+              "textEn": "Hero is knocked-back or prone",
+              "text": "Герой отброшен или лежит"
+            },
+            {
+              "roll": "6",
+              "textEn": "Hero must pay (short-on-coin)",
+              "text": "Герою приходится платить (*мало-монет*)"
+            }
+          ]
+        },
+        {
+          "roll": "43–46",
+          "nameEn": "Imperfect Execution",
+          "textEn": "The Hero didn't get everything they wanted out of the action.",
+          "effectEn": "Yes, but…, add a negative story tag or status",
+          "name": "Неполный успех",
+          "text": "Герой получил от действия не всё, чего хотел.",
+          "effect": "**Да, но…**, добавить отрицательный сюжетный тег или статус",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Shoddy (add negative tag)",
+              "text": "Халтурно (добавить отрицательный тег)"
+            },
+            {
+              "roll": "2",
+              "textEn": "Incomplete or spotty",
+              "text": "Незавершённо или урывками"
+            },
+            {
+              "roll": "3",
+              "textEn": "Unreliable or chancy",
+              "text": "Ненадёжно или как повезёт"
+            },
+            {
+              "roll": "4",
+              "textEn": "Expires sooner than expected",
+              "text": "Кончится раньше, чем ждали"
+            },
+            {
+              "roll": "5",
+              "textEn": "Vague, indefinite or undecisive",
+              "text": "Расплывчато, неопределённо или нерешительно"
+            },
+            {
+              "roll": "6",
+              "textEn": "Roll again and also seems-fine",
+              "text": "Бросьте ещё раз — и вдобавок *вроде-всё-в-порядке*"
+            }
+          ]
+        },
+        {
+          "roll": "51–54",
+          "nameEn": "Loss of Advantage",
+          "textEn": "The Hero lost an advantage they previously had or worked to achieve.",
+          "effectEn": "Remove or reduce a Hero's beneficial status or scratch their beneficial tags",
+          "name": "Потеря преимущества",
+          "text": "Герой лишился преимущества, которое имел или добыл трудом.",
+          "effect": "снять или ослабить полезный статус Героя или вычеркнуть его полезные теги",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Scratch Hero tool or weapon",
+              "text": "Вычеркнуть инструмент или оружие Героя"
+            },
+            {
+              "roll": "2",
+              "textEn": "Reduce Hero positive status",
+              "text": "Ослабить полезный статус Героя"
+            },
+            {
+              "roll": "3",
+              "textEn": "Lose favorable position",
+              "text": "Потерять выгодную позицию"
+            },
+            {
+              "roll": "4",
+              "textEn": "Block best path to goal (Blocked)",
+              "text": "Перекрыть лучший путь к цели (**Возможность закрыта**)"
+            },
+            {
+              "roll": "5",
+              "textEn": "Reduce opponent negative status",
+              "text": "Ослабить вредный статус противника"
+            },
+            {
+              "roll": "6",
+              "textEn": "Scratch positive scene tag",
+              "text": "Вычеркнуть полезный тег сцены"
+            }
+          ]
+        },
+        {
+          "roll": "55–62",
+          "nameEn": "Side Effects",
+          "textEn": "The Hero's action had unexpected or unwanted results.",
+          "effectEn": "Create a negative tag in the scene or give the Hero a negative status or tag",
+          "name": "Побочные эффекты",
+          "text": "У действия Героя неожиданные или нежеланные плоды.",
+          "effect": "создать отрицательный тег сцены или дать Герою отрицательный статус или тег",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "Hero is distracted",
+              "text": "Герой отвлечён"
+            },
+            {
+              "roll": "2",
+              "textEn": "Hero is restrained",
+              "text": "Герой связан"
+            },
+            {
+              "roll": "3",
+              "textEn": "Hero is humiliated",
+              "text": "Герой унижен"
+            },
+            {
+              "roll": "4",
+              "textEn": "Hero is wanted or marked",
+              "text": "Героя разыскивают или он помечен"
+            },
+            {
+              "roll": "5",
+              "textEn": "Create obstacle or hazard",
+              "text": "Создать преграду или опасность"
+            },
+            {
+              "roll": "6",
+              "textEn": "Scratch Hero ability",
+              "text": "Вычеркнуть умение Героя"
+            }
+          ]
+        },
+        {
+          "roll": "63–66",
+          "nameEn": "Wasted Time",
+          "textEn": "The Hero spent too much time on this action, allowing other negative complications to unfold.",
+          "effectEn": "Advance a progress status, Block a missed course of action, make the conditions worse with tags or Complications",
+          "name": "Потерянное время",
+          "text": "Герой слишком долго возился с действием, и другие беды успели развернуться.",
+          "effect": "продвинуть статус-счётчик, применить **Возможность закрыта** к упущенному пути, ухудшить обстановку тегами или **Осложнениями**",
+          "specific": [
+            {
+              "roll": "1",
+              "textEn": "It's too late to... (Blocked)",
+              "text": "Уже поздно… (**Возможность закрыта**)"
+            },
+            {
+              "roll": "2",
+              "textEn": "Hero and allies are tired",
+              "text": "Герой и союзники устали"
+            },
+            {
+              "roll": "3",
+              "textEn": "A New Danger (see above)",
+              "text": "Новая опасность (см. выше)"
+            },
+            {
+              "roll": "4",
+              "textEn": "Create a negative conditions tag",
+              "text": "Создать отрицательный тег обстановки"
+            },
+            {
+              "roll": "5",
+              "textEn": "An opponent advances (Comp')",
+              "text": "Противник продвинулся (**Осложнение**)"
+            },
+            {
+              "roll": "6",
+              "textEn": "time-passes-1. At tier 4, roll again but make it much worse.",
+              "text": "*время-идёт-1*. На уровне 4 бросьте снова — но сделайте много хуже."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "revelation",
+      "name": "Откровения",
+      "nameEn": "The Revelations Oracle",
+      "page": "B255",
+      "lead": "Оракул откровений открывает знание уровня серии — подробности, что двигают эпическое странствие вперёд в серии «Гора». Полное объяснение — в разделе «Серия „Гора“ соло или в коопе» (с. B71).\nБерите его, когда Герои сделали важное открытие, но вы не знаете, какое именно: например, когда наконец добрались до отшельников-друидов и могут узнать причину мора, или когда открыли древний том, спрятанный в руинах, и он раскрывает тайну злого чернокнижника.\nТаблица разделена на три акта модели «Гора». От акта к акту откровения всё драматичнее: сначала — о местных опасностях на пути Героев, затем всё ближе к Великой опасности (вызову серии) и её Агентам. Если вы ещё не знаете, что такое Великая опасность, оракул конфликта (с. B245) поможет её очертить.\n• Бросьте d66 и прочтите откровение в столбце своего акта — I, II или III. Истолкуйте его по обстоятельствам.",
+      "leadEn": "The Revelations Oracle is used to reveal series-level lore and details that propel your epic journey forward in a Mountain-style series. Read the full explanation under Playing A Solo Or Co-Op Mountain Series (page 71).\nUse this oracle whenever your Hero(es) makes a major discovery but you're not sure what it is. This could be when they finally reach the reclusive druids and have a chance to learn about the cause for the plague, or when they open an ancient tome hidden in a ruin that reveals a secret about the evil warlock.\nThe table is divided into the three Acts of the Mountain model. The revelations become more dramatic from Act to Act, initially referring to the local dangers that your Hero may encounter on their journey, and then building up towards revealing the Great Danger (the Series Challenge) and its Agents. If you don't know yet what the Great Danger is, use the Conflict Oracle (page 245) to help flesh that out.\n• Roll a d66 and read the revelation in the column corresponding to the Act you're in – I, II, or III. Interpret the result based on the situation you're in.",
+      "acts": [
+        "I",
+        "II",
+        "III"
+      ],
+      "rows": [
+        {
+          "roll": "11–14",
+          "act1": "Дому Героев грозит невиданная прежде опасность.",
+          "act1En": "The Heroes' home is facing a never before seen danger.",
+          "act2": "Большой мир опасен.",
+          "act2En": "The greater world is dangerous.",
+          "act3": "Великой опасности хватает сил достичь своей цели, и она готовится к последнему шагу.",
+          "act3En": "The Great Danger has the power to reach their end goal and is making final preparations."
+        },
+        {
+          "roll": "15–22",
+          "act1": "У опасностей общий источник.",
+          "act1En": "The dangers are caused by a common source.",
+          "act2": "Иные опасности большого мира могут стать и союзниками, орудиями, знанием и так далее.",
+          "act2En": "Some of the greater world's dangers can also become allies, tools, lore, etc.",
+          "act3": "У Великой опасности есть свойства, делающие её непобедимой или неудержимой.",
+          "act3En": "The Great Danger has certain attributes that make it invincible or unstoppable."
+        },
+        {
+          "roll": "23–26",
+          "act1": "Источник опасности рядом.",
+          "act1En": "The source of the danger is nearby.",
+          "act2": "Героям нужно вырасти, чтобы встретить могучие опасности мира.",
+          "act2En": "The Heroes must grow in order to face the world's mighty dangers.",
+          "act3": "У Великой опасности есть уязвимость или слабость.",
+          "act3En": "The Great Danger has a vulnerability or weakness."
+        },
+        {
+          "roll": "31–34",
+          "act1": "Героям нечем встретить эту опасность.",
+          "act1En": "The Heroes are unequipped to deal with this danger.",
+          "act2": "У всех встреченных опасностей один невероятно могучий источник — Великая опасность.",
+          "act2En": "All dangers faced so far have an immensely powerful common source - the Great Danger.",
+          "act3": "Одоление определённого Агента особым образом ослабит или обнажит Великую опасность.",
+          "act3En": "Overcoming a specific Agent will weaken or expose the Great Danger in a specific way."
+        },
+        {
+          "roll": "35–42",
+          "act1": "Кто-то поблизости знает больше — то, что нужно, чтобы встретить опасность.",
+          "act1En": "Someone nearby has the greater knowledge needed to face the danger.",
+          "act2": "Великая опасность грозит многим местам, как и дому Героев.",
+          "act2En": "Many places are threatened by the Great Danger, like the Heroes' home.",
+          "act3": "Особое место, вещь, умение или союзник могут ударить по слабостям Великой опасности.",
+          "act3En": "A unique place, item, ability, or ally can exploit the Great Danger's weaknesses."
+        },
+        {
+          "roll": "43–46",
+          "act1": "Скрытая сила или запас помогут Героям одолеть опасность.",
+          "act1En": "A hidden strength or resource can help the Heroes overcome the danger.",
+          "act2": "Великая опасность заметила Героев и хочет их остановить.",
+          "act2En": "The Great Danger has noticed the Heroes and seeks to stop them.",
+          "act3": "Путь к победе над Великой опасностью требует столь же великой цены или жертвы.",
+          "act3En": "The path to overcoming the Great Danger demands an equally great price or sacrifice."
+        },
+        {
+          "roll": "51–54",
+          "act1": "Чтобы найти способ одолеть опасность, нужно пуститься в опасное предприятие.",
+          "act1En": "A dangerous undertaking is needed to find a way to overcome the danger.",
+          "act2": "У Великой опасности есть определённая конечная цель, к которой она стремится.",
+          "act2En": "The Great Danger has a specific end goal toward which it strives.",
+          "act3": "Цену, которую Герой платить не хочет, можно обменять на другую, но устроить это крайне трудно.",
+          "act3En": "A price that the Hero is unwilling to pay may be traded for another, but arranging this is extremely difficult."
+        },
+        {
+          "roll": "55–62",
+          "act1": "Эта опасность рождена большей угрозой укладу жизни Героев.",
+          "act1En": "This danger originates from a bigger threat to the Heroes' way of life.",
+          "act2": "Часть силы Великой опасности несут могучие места, существа или создания — Агенты.",
+          "act2En": "Some of the Great Danger's power is carried by powerful places, creatures, or beings - the Agents.",
+          "act3": "Великая опасность вот-вот нанесёт последний удар.",
+          "act3En": "The Great Danger will launch its final stroke imminently."
+        },
+        {
+          "roll": "63–66",
+          "act1": "Большая угроза породит новые опасности, если Герои не поднимутся ей навстречу.",
+          "act1En": "A greater threat will produce more dangers if the Heroes don't rise to meet it.",
+          "act2": "Есть способ одолеть или обойти одного из главных Агентов Великой опасности.",
+          "act2En": "There is a way to overcome or circumvent one of the Great Danger's chief Agents.",
+          "act3": "Теперь Герои могут подступиться к Великой опасности и попытаться её остановить.",
+          "act3En": "The Heroes are now able to approach the Great Danger and make their attempt to stop it."
+        }
+      ]
+    }
+  ],
+  "article": {
+    "name": "Игра с оракулом",
+    "name_original": "The Oracle: Solo and Co-op Play",
+    "description": "Оракул — набор таблиц, что подсказывают, что будет дальше: игра соло или в коопе без отдельного Рассказчика, или помощь Рассказчику за столом. Семь оракулов и порядок игры с ними.",
+    "uid": "litm.ref.rule.oracle_play",
+    "data": {
+      "page": "B238–B241",
+      "steps": [
+        "Подготовьте игру: сеттинг и жанр, Герои, при двух и больше Героях — Содружество.",
+        "Вызов серии (по желанию): оракул «Конфликт» с размахом края, королевства или целой стороны жизни.",
+        "Первое приключение: оракул «Конфликт» — вызов приключения, затем ставки и зацепки.",
+        "Следующая сцена: оракул «Конфликт» — главный вызов, место, развитие, другие вызовы.",
+        "Профиль вызова: оракул «Готовый профиль» или «Конструктор профиля».",
+        "Играйте сцену игровым циклом: Задать сцену, Действие, Последствия — с оракулами «Вопрос», «Действие вызова», «Последствия» и «Откровения».",
+        "Подведите итог сцены (и приключения), раздайте награды, переходите к следующей сцене — или к привалу."
+      ],
+      "related": [
+        {
+          "name": "Оракулы",
+          "page": "B242"
+        },
+        {
+          "name": "Игровой цикл",
+          "page": "A144"
+        },
+        {
+          "name": "Привал и передышка",
+          "page": "A179"
+        },
+        {
+          "name": "Реакции",
+          "page": "A162"
+        }
+      ],
+      "sections": [
+        {
+          "head": "Соло и кооп",
+          "headEn": "Solo and Co-op Play",
+          "page": "B238",
+          "text": "Оракул — набор подручных средств, которые помогают представить, что будет дальше в вашей истории. С ним можно играть в Legend in the Mist соло (в одиночку) или в коопе (с другими), когда никто из игроков не берёт на себя роль Рассказчика.\n\nВ соло и коопе у истории всё равно есть Рассказчик — это вы. Вы (а в коопе — все за столом) попеременно говорите голосом Героя и голосом Рассказчика. Чтобы играть с оракулом, нужно знать правила из «Как играть» (том I, с. A142) и «Ведение сессии» (с. B16).",
+          "textEn": "The Oracle is a set of tools that help you imagine what happens next in your story. It allows you to play Legend In The Mist in solo mode (on your own) or in co-op mode (with others) without a single player acting as the Narrator.\n\nWhen you play the game in solo or co-op mode, your story still has the Narrator – you. You (and everyone in the group, in co-op) alternate between the Hero and Narrator voices. To use the Oracle, you will need to be familiar with the rules of the game explained under How To Play (Vol I, page 142) and Narrating A Session (page 16)."
+        },
+        {
+          "head": "Толкование оракула",
+          "headEn": "Interpreting The Oracle",
+          "page": "B238",
+          "text": "Оракул на следующих страницах даёт случайные ответы, из которых рождаются новые положения, — но это лишь одно из подручных средств. Готовых ответов на ваши вопросы он не выдаёт: он опирается на то, как вы творчески истолкуете результат в контексте своей истории.\n\nДопустим, вы забрели в Ведьмин лес [Witchwood] и спросили оракул конфликта о следующей сцене. Оракул говорит, что вызов в этой сцене — сама местность; вы представляете, что, быть может, Герой продирается сквозь вечнозелёную чащу. Или вы в сцене со взбешённым поваром, и оракул действий говорит, что тот нападает, — может, он издаёт такой рёв, что вас пробирает до костей, а может, швыряет в вас тесак. Толкование за вами.",
+          "textEn": "The Oracle presented over the next pages can provide random answers that help create new situations, but it is just another tool at your disposal. The Oracle does not generate complete answers to your questions. Instead, it relies on your creative interpretations of the results, in the context of your story.\n\nFor example, let's say you venture into the Witchwood and use the Conflict Oracle to discover the next scene. The Oracle says the terrain itself as a Challenge in this scene; you imagine that maybe it is about your Hero struggling through the evergreen thicket. Or, if you are in a scene with a furious cook and the Action Oracle tells you they attack, perhaps they give a fearsome shout that rattles you to your core, or perhaps they throw a cleaver at you – the interpretation is up to you."
+        },
+        {
+          "head": "Пусть ведёт воображение",
+          "headEn": "Let Your Creativity Lead You",
+          "page": "B239",
+          "text": "Оракулом можно и не пользоваться. Когда нужно сделать выбор или придумать новые подробности (сцену, вызов, поворот), всегда можно положиться на воображение, изобретательность, чутьё рассказчика, здравый смысл — и так решить, как развернётся история.",
+          "textEn": "You don't have to use the Oracle. Whenever you are faced with a choice or with the need to come up with new details (a scene, a Challenge, a development), you can always use your imagination, creativity, storytelling flair, reasoning, and so on, in order to decide how the story unfolds."
+        },
+        {
+          "head": "Пусть ведёт история",
+          "headEn": "Let The Story Lead You",
+          "page": "B239",
+          "text": "Исходы оракула вас не ограничивают. Если сама история уже подсказывает, что грядёт, или ответ оракула не вяжется с положением дел, — следуйте своему видению повествования.",
+          "textEn": "You're not limited by the outcomes of the oracle. If the fiction already sparks some ideas in your mind about what's coming, or if the Oracle's answer doesn't quite fit your current situations, go with your own vision of the narrative."
+        },
+        {
+          "head": "И для обычного Рассказчика",
+          "headEn": "It's For Classic Narrators, Too!",
+          "page": "B239",
+          "text": "Рассказчик, ведущий обычную ролевую группу, тоже может опираться на оракул, принимая решения за столом: какую сцену играть дальше или что делают вызовы.",
+          "textEn": "A Narrator guiding a classic roleplaying group can use the Oracle to help make decisions at the table, such as what scene to play next or what actions Challenges take."
+        },
+        {
+          "head": "Игра вдвоём",
+          "headEn": "Duo Mode",
+          "page": "B239",
+          "text": "Многие любят отправляться в приключения парой! С оракулом можно сыграть кооп на двух Героев — или один игрок ведёт Героя, а другой Рассказчика, причём Рассказчик может вести и своего Героя или спутника-NPC, а может и не вести. Если Герой один, подумайте, не дать ли ему сюжетную тему Спутника (с. B42).",
+          "textEn": "Many players like to go on an adventure in pairs! You can use the Oracle to play a co-op adventure for two Heroes, or you can have one player be the Hero and the other be the Narrator, where the Narrator may or may not control their own Hero, or a companion NPC. If there is only one Hero, consider giving them a Companion story theme (page 42)."
+        },
+        {
+          "head": "Броски d6 и d66",
+          "headEn": "Rolling d6 and d66",
+          "page": "B239",
+          "text": "Одним таблицам нужно число от 1 до 6 — его даёт одна шестигранная кость или кость Legend in the Mist. Это обозначают как бросок d6.\n\nДругим нужно двузначное число, где каждая цифра от 1 до 6, — это бросок d66. Бросьте две шестигранные кости или две кости Legend in the Mist. Одна кость — десятки, другая — единицы; сложите их в число: 1 и 2 — это 12, 6 и 3 — 63 и так далее.",
+          "textEn": "Some tables call for a single number between 1 and 6, which is achieved by rolling a single six-sided die or a Legend In The Mist die. This is annotated as rolling a d6.\n\nOther tables call for a two-digit number where each digit is between 1 and 6. This is known as rolling a d66. Roll two six-sided dice or two Legend In The Mist dice. Treat one die as the tens digit and the other as the ones digit, and put them together to get the result: 1 and 2 is 12, 6 and 3 is 63, and so on."
+        },
+        {
+          "head": "Журнал",
+          "headEn": "Keeping a Journal",
+          "page": "B239",
+          "text": "Журнал (или другая запись) помогает помнить всё, что случилось в истории, — особенно в долгих одиночных странствиях. Когда история продвигается, запишите в журнал фразу-другую. Теги и статусы можно выделять или подчёркивать, чтобы легче было следить за ними.\n\nПравильного и неправильного способа вести журнал приключений нет. Можно писать голосом своего Героя, Рассказчика или даже другого персонажа, наблюдающего за делами Героя. В журнале может быть не только текст: делайте наброски, рисуйте карты — всё, что оживляет историю.\n\nЖурнал можно сделать частью действий. Когда Герой действует, опишите действие в журнале одним-двумя предложениями. При подсчёте Силы считаются только те теги и статусы, которые попали в это описание.",
+          "textEn": "Using a journal (or other written record) can help you keep track of all that has happened in your story, especially over long solo journeys. Whenever something moves the story along, write a sentence or two in your journal. You can highlight or underline tags and statuses to make them easier to track.\n\nThere is no right or wrong way to keep an adventure journal. You can write it in the voice of your Hero, the Narrator, or even another character in the story witnessing your Hero's actions. Your journal can contain more than just words; sketch, draw maps, or do anything else that brings your story to life.\n\nYou can incorporate your journal into your actions. Whenever your Hero acts, write a description of the action in your journal in a sentence or two. When counting Power, tags and statuses only count if you include them in the description of your action."
+        },
+        {
+          "head": "Семь оракулов",
+          "headEn": "The Individual Oracles",
+          "page": "B239",
+          "text": "Оракул состоит из семи частей:\n• «Вопрос» — ответ «да / нет» или ответ-образ;\n• «Конфликт» — подробности следующей сцены, приключения или серии;\n• «Готовый профиль» — случайный профиль вызова из этой книги;\n• «Конструктор профиля» — свой профиль вызова на ходу;\n• «Действие вызова» — следующее действие вызова;\n• «Последствия» — последствия действия Героя;\n• «Откровения» — для серии «Гора» (с. B54).",
+          "textEn": "The Oracle consists of seven parts:\n• The Question Oracle, used to receive a yes/no answer or a conceptual answer\n• The Conflict Oracle, used to discover the details of the next scene, adventure, or series\n• The Premade Profile Oracle, used to pick at random a Challenge Profile from this book\n• The Profile Builder, used to generate a custom Challenge Profile on the fly\n• The Challenge Action Oracle, used to discover a Challenge's next action\n• The Consequence Oracle, used to discover Consequences to the Hero's action\n• The Revelations Oracle, used when playing a Mountain-style series (page 54)"
+        },
+        {
+          "head": "До начала истории",
+          "headEn": "Before the Story Begins",
+          "page": "B240",
+          "text": "**1. Подготовьте игру**\n• Выберите сеттинг и жанр.\n• Создайте Героя (Героев).\n• Если Героев двое и больше — создайте Содружество.\n\n**2. Узнайте вызов серии (по желанию)**\nВ серии, где главный злодей или беда известны с начала, узнайте их оракулом «Конфликт» (с. B245). Толкуйте результат с размахом: край, королевство или целая сторона жизни.\nВ серии, где это с начала не известно, вы создадите его по ходу игры. См. «Серия „Гора“ соло или в коопе» (с. B71).",
+          "textEn": "1. Set up your game\n• Choose the setting and genre\n• Create your Hero(es)\n• If you have two or more Heroes, create your Fellowship\n\n2. Discover the Series Challenge (Optional)\nIn a series where the main villain or problem is known at the start, use the Conflict Oracle (page 245) to discover who or what it is. Interpret the results on a large scale (region, kingdom, or entire aspect of life).\nIn a series where it is not known at the start, you will create it during the game. See Playing a Solo or Co-Op Mountain Series (page 71)."
+        },
+        {
+          "head": "Подготовка сцены",
+          "headEn": "Setting Up a Scene",
+          "page": "B240",
+          "text": "**3. Узнайте первое приключение**\n*Вызов приключения.* Возьмите оракул «Конфликт» (с. B245) и истолкуйте результат как беду или положение, которые не разрешить за одну сцену.\n*Ставки приключения.* Запишите, зачем Герой пускается в это приключение и какие его Квесты поставлены на карту.\n*Зацепки.* Знает ли Герой о вызове приключения? Если да — откуда? Если нет — что выводит его на этот путь? Что толкает Героя в дорогу или навстречу невзгодам?\n\n**4. Узнайте следующую сцену**\nОракул «Конфликт» (с. B245) откроет главный вызов сцены, чем он мешает Герою, где всё происходит, как разворачивается и какие ещё вызовы здесь есть.\n\n**5. Выберите или создайте профиль вызова**\nГлавному и второстепенным вызовам сцены нужен профиль. Можно:\n• выбрать или выбросить готовый профиль из этой книги оракулом «Готовый профиль» (с. B248);\n• быстро собрать свой «Конструктором профиля» (с. B250).",
+          "textEn": "3. Discover your first adventure\nAdventure Challenge: Use the Conflict Oracle (page 245) and interpret the results as a problem or situation that cannot be resolved in one scene.\nAdventure Stakes: Note why your Hero embarks on this adventure and which of their Quests are at stake.\nAdventure Hooks: Is your Hero aware of the Adventure Challenge? If yes, how did they learn about it? If not, what sets them on a path toward it? What drives your Hero to set out on a journey or face adversity?\n\n4. Discover the next scene\nUse the Conflict Oracle (page 245) to reveal the central Challenge in the scene, how it gets in your Hero's way, where it takes place, how it unfolds, and what other Challenges are present.\n\n5. Choose or create a Challenge Profile\nThe scene's main and secondary Challenges need a Challenge Profile. You can:\n• Use the Premade Profile Oracle (page 248) to pick or roll a premade profile in this book.\n• Use the Profile Builder (page 250) to quickly create one on the fly."
+        },
+        {
+          "head": "Игра сцены",
+          "headEn": "Playing a Scene",
+          "page": "B241",
+          "text": "**6. Играйте сцену игровым циклом** (с. B20)\n\n*Задать сцену.*\n• Опишите сцену: по подробностям из оракула «Конфликт» (шаг 4) нарисуйте картину. Неясные подробности проясните оракулом «Вопрос» (с. B242).\n• Ставки сцены: свяжите большие ставки приключения со ставками сцены. Почему этот миг важен?\n• Введите вызовы и обозначьте угрозы: выведите главный и второстепенные вызовы сцены (шаги 4 и 5). Возьмите угрозу из их профиля (шаг 5) или из оракула «Действие вызова» (с. B251) и опишите её себе.\n\n*Действие.* Совершите действие Героя (том I, с. A149), отвечая на положение, и разрешите его как обычно.\n\n*Последствия.*\n• От вызовов: из профиля вызова (шаг 5) или из оракула «Действие вызова» (с. B251). Если последствий несколько, пронумеруйте их и бросьте d6 (на ненумерованное число — перебросьте).\n• От действия Героя (обычно при 7–9): оракул «Последствия» (с. B254).\n• От тегов слабости Героя: выберите тег слабости, чтобы задействовать его, и подберите подходящее последствие — или возьмите его из оракула «Последствия» (с. B254).\nДайте Герою отреагировать (том I, с. A162), если это уместно.\n\nПовторяйте игровой цикл (Задать сцену, Действие, Последствия), пока вызовы не одолены и (или) ставки сцены не выиграны, проиграны или отложены — тогда сцена кончается.\n\n*Откровения.* В серии «Гора» (с. B54), когда Герои узнают что-то важное о «Великой опасности» и её приспешниках (вызов серии из шага 2), берите оракул «Откровения» (с. B255).\n\n**7. Подведите итог сцены (и приключения)**\n• Свяжите оборванные нити (развязка).\n• Подумайте о последствиях сцены (и приключения).\n• Раздайте награды за сцену (и приключение).\n\nВернитесь к шагу 4, чтобы узнать следующую сцену (или к шагу 3 — следующее приключение), и опишите, что ведёт Героя из нынешней сцены (или приключения) в следующую. Или сделайте перерыв по правилам привала и передышки (том I, с. A179).",
+          "textEn": "6. Play the scene using the Game Loop: (page 20)\n\nEstablish\n• Describe the scene: Use the details from the Conflict Oracle (step 4) to paint a picture of the situation. Use the Question Oracles (page 242) to answer any unclear details.\n• Set the scene stakes: Connect the greater stakes of the adventure with the stakes of the scene. Why does this moment matter?\n• Introduce Challenges & make Threats: Introduce the main or secondary Challenges of the scene (Step 4 and 5). Pick a Threat from their Challenge Profile (step 5) or use the Challenge Action Oracle (page 251). Describe it to yourself.\n\nAction: Take a Hero action (Vol. I, page 149), responding to the situation, and resolve it normally.\n\nConsequences\n• From Challenges: Use the Challenge Profile (step 5) or the Challenge Action Oracle (page 251). Randomizing: If there is more than one Consequence listed, assign a number to each and roll a d6 to choose between them (reroll if you get an unassinged number).\n• From the Hero's action (usually on a 7-9 roll): Use the Consequences Oracle (page 254).\n• From Hero's weakness tags: Choose a weakness tag to invoke. Pick an apt Consequence or use the Consequences Oracle (page 254).\nAllow your Hero to react (Vol I, page 162), if appropriate.\n\nRepeat the Game Loop (Establish, Action, Consequence) until the Challenges are overcome and/or the scene stakes have been won, lost, or deferred, marking the end of the scene.\n\nRevelations: In a Mountain-style series (page 54), whenever the Hero(es) discovers something important about the \"Great Danger\" and its minions (the Series Challenge in step 2), use the Revelation Oracle (page 255).\n\n7. Wrap up the scene (and adventure)\n• Tie up loose ends (denouement)\n• Consider scene (and adventure) Consequences\n• Give out scene (and adventure) rewards\n\nReturn to step 4 to discover the next scene (or step 3 for the next adventure) and describe what leads your Hero from the current scene (or adventure) to the next. Or, take a break and use Camp and Sojourn rules (Vol I,page 179)."
+        }
+      ]
+    }
+  }
+}

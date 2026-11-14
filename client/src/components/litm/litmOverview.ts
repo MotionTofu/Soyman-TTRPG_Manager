@@ -5,6 +5,7 @@ import { plural } from "./litmBookText";
 import { OWN_LOCATION } from "./litmChallenge";
 import { grimoireOf } from "./litmGrimoire";
 import { journeysOf } from "./litmJourneys";
+import { oraclesOf } from "./litmOracles";
 import { rulesOf } from "./litmRules";
 import { storeOf } from "./litmStore";
 import { treasuresOf } from "./litmTreasury";
@@ -12,7 +13,7 @@ import { waysOf } from "./litmWays";
 
 /** Что в разделе — строкой доски. */
 export const UNIT_NOTES: Record<LitmCatalog, string> = {
-  rules: "как играть, теги, статусы, пределы, привал, оракулы",
+  rules: "как играть, теги, статусы, пределы, привал",
   grimoire: "что получить действием и сколько это стоит",
   themes: "по Могуществу; Содружество — своя тема",
   tropes: "быстрое создание героя",
@@ -21,6 +22,7 @@ export const UNIT_NOTES: Record<LitmCatalog, string> = {
   treasury: "реликвии и влияние — сюжетные темы",
   challenges: "места книги и ваши",
   journeys: "местности, события, предприятия",
+  oracles: "броски для соло, кооператива и игры с Рассказчиком",
 };
 
 const n = (k: number, one: string, few: string, many: string) => `${k} ${plural(k, one, few, many)}`;
@@ -60,6 +62,8 @@ export function bookUnits(catalog: LitmCatalog, entries: CompendiumEntry[]): str
       return [n(book.length - addons, "профиль", "профиля", "профилей"), addons ? n(addons, "надстройка", "надстройки", "надстроек") : "", own ? n(own, "свой", "своих", "своих") : ""]
         .filter(Boolean).join(" · ");
     }
+    case "oracles":
+      return n(oraclesOf(entries).length, "оракул", "оракула", "оракулов");
     case "journeys":
       return n(journeysOf(entries).reduce((s, g) => s + g.journeys.length, 0), "путешествие", "путешествия", "путешествий");
   }

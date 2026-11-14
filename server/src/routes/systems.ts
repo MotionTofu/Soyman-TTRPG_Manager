@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { AuthedRequest } from "../services/auth";
+import { requireAuth, type AuthedRequest } from "../services/auth";
 import fs from "fs";
 import multer from "multer";
 import os from "os";
@@ -497,6 +497,62 @@ systemsRouter.get("/entries/batch", (req, res) => {
     .prepare(`SELECT * FROM compendium_entries WHERE id IN (${placeholders})`)
     .all(...capped) as EntryRow[];
   res.json(rows.map(parseEntry));
+});
+
+// Только печатный профиль вызова для результата оракула. Свои вызовы,
+// заметки и другие статблоки остаются за обычным ограничением доступа.
+systemsRouter.get("/:id/litm-book-challenges/:entryId", requireAuth(), (req, res) => {
+  const row = db.prepare(`
+    SELECT b.content FROM compendium_entries e
+    JOIN systems s ON s.id = e.system_id AND s.code = 'litm'
+    JOIN system_sections sec ON sec.id = e.section_id AND sec.kind = 'monster'
+    JOIN statblocks b ON b.owner_type = 'compendium_entry' AND b.owner_id = e.id AND b.format = 'litm_challenge'
+    WHERE s.id = ? AND e.id = ? AND e.kind = 'monster' AND e.name_original <> ''
+      AND json_valid(e.data) AND json_extract(e.data, '$.location') <> 'Свои'
+      AND json_extract(e.data, '$.locationEn') <> '' AND json_extract(e.data, '$.page') <> ''
+      AND b.archived_at IS NULL
+    ORDER BY CASE b.kind WHEN 'full' THEN 0 ELSE 1 END, b.id LIMIT 1
+  `).get(req.params.id, req.params.entryId) as { content: string } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  // The card only renders these fields. Keep raw statblock content and any
+  // unrelated metadata out of the player-facing response.
+  try {
+    const content = JSON.parse(row.content);
+    const fields = [
+      "titleEn", "rating", "roles", "location", "locationEn", "page", "description",
+      "limitList", "tagList", "mightList", "specialList", "threatList",
+      "role", "might", "limits", "tagsAndStatuses", "threatsConsequences", "specialFeatures",
+    ];
+    res.json({ content: JSON.stringify(Object.fromEntries(fields.map((field) => [field, content[field]]))) });
+  } catch {
+    res.status(404).json({ error: "not found" });
+  }
+});
+
+// The builder creates the catalog entry and its profile as one operation.
+systemsRouter.post("/:id/litm-challenges", requireAuth("gm"), (req, res) => {
+  const { name, name_original, description, data, profile } = req.body ?? {};
+  if (typeof name !== "string" || !name.trim() || !data || typeof data !== "object" ||
+      !profile || typeof profile !== "object" || !Array.isArray(profile.threatList)) {
+    return res.status(400).json({ error: "Нужны название и профиль Вызова" });
+  }
+  const sectionId = db.prepare(`SELECT sec.id FROM system_sections sec JOIN systems s ON s.id = sec.system_id
+    WHERE s.id = ? AND s.code = 'litm' AND sec.kind = 'monster' ORDER BY sec.position, sec.id LIMIT 1`).pluck().get(req.params.id);
+  if (typeof sectionId !== "number") return res.status(404).json({ error: "Раздел «Вызовы» не найден" });
+  const id = db.transaction(() => {
+    const position = db.prepare("SELECT COALESCE(MAX(position), -1) + 1 FROM compendium_entries WHERE section_id = ? AND parent_id IS NULL").pluck().get(sectionId);
+    const { lastInsertRowid } = db.prepare(`INSERT INTO compendium_entries
+      (system_id, section_id, kind, name, name_original, description, data, position)
+      VALUES (?, ?, 'monster', ?, ?, ?, ?, ?)`).run(
+      req.params.id, sectionId, name.trim(), typeof name_original === "string" ? name_original.trim() : "",
+      typeof description === "string" ? description : "", JSON.stringify(data), position
+    );
+    db.prepare(`INSERT INTO statblocks (owner_type, owner_id, kind, format, content, updated_at)
+      VALUES ('compendium_entry', ?, 'full', 'litm_challenge', ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))`)
+      .run(lastInsertRowid, JSON.stringify(profile));
+    return lastInsertRowid;
+  }).immediate();
+  return res.status(201).json(parseEntry(db.prepare("SELECT * FROM compendium_entries WHERE id = ?").get(id) as EntryRow));
 });
 
 systemsRouter.get("/entries/:entryId", (req, res) => {

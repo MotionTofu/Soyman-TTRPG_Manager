@@ -1,0 +1,77 @@
+/* Доска Litm-Pult-Oracle: справа от ленты, на телефоне во весь экран. */
+.modal-backdrop:has(> .lp-oracle) {
+  padding: 0;
+  justify-content: flex-end;
+  align-items: stretch;
+}
+.modal.lp-oracle {
+  width: min(100%, 40rem);
+  max-width: none;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  background: var(--lb-sheet);
+  border: var(--edge-width) solid var(--lb-edge);
+  border-block: 0;
+  border-inline-end: 0;
+}
+.lp-oracle .modal-x { color: var(--lb-ink); }
+.lp-oracle__head, .lp-oracle__tabs, .lp-oracle__tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
+}
+.lp-oracle__head {
+  min-height: var(--sp-9);
+  padding: var(--sp-4) var(--sp-9) var(--sp-4) var(--sp-6);
+  border-bottom: var(--edge-width) solid var(--lb-edge);
+}
+.lp-oracle__head h2 {
+  margin: 0;
+  font: 700 var(--fs-h2)/1.1 var(--lb-serif);
+}
+.lp-oracle__head a { margin-inline-start: auto; }
+.lp-oracle__tabs {
+  flex-wrap: nowrap;
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--lb-line);
+}
+.lp-oracle__tabs .d-seg { flex: 1; min-width: 0; }
+.lp-oracle__tab-short { display: none; }
+.lp-oracle__tabs select { width: 5.5em; color: var(--lb-ink); background: var(--lb-sheet); }
+.lp-oracle__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-4) var(--sp-6) var(--sp-6);
+}
+.lp-oracle__tools { justify-content: space-between; }
+.lp-oracle__tools > span { color: var(--lb-ink2); font-size: var(--fs-data); }
+.lp-oracle__source { margin: var(--sp-4) 0; }
+.lp-oracle__source select { max-width: 100%; }
+.lp-oracle__effects { justify-content: flex-end; margin: var(--sp-4) 0; }
+.lp-oracle__feed ul { padding-inline-start: var(--sp-7); margin: var(--sp-3) 0; overflow-wrap: anywhere; }
+.lp-oracle__feed li { padding-block: var(--sp-2); }
+.lp-oracle .lo-area, .lp-oracle .lo-layout { grid-template-columns: minmax(0, 1fr); }
+.lp-oracle .lo-profiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) {
+  .modal.lp-oracle { width: 100%; border: 0; }
+  .lp-oracle__head { padding-inline-start: var(--sp-4); }
+  .lp-oracle__head a { margin-inline-start: 0; }
+  .lp-oracle__tabs, .lp-oracle__body { padding-inline: var(--sp-4); }
+  .lp-oracle__tabs { gap: var(--sp-2); }
+  .lp-oracle__tab-long { display: none; }
+  .lp-oracle__tab-short { display: inline; }
+  .lp-oracle__tabs .d-seg button { min-width: 0; flex: 1 0 auto; padding-inline: var(--sp-2); font-size: var(--fs-meta); }
+  .lp-oracle__tabs select { padding-inline-start: var(--sp-2); font-size: var(--fs-meta); }
+  .lp-oracle .lo-table { table-layout: fixed; }
+  .lp-oracle .lo-table tr:first-child > :first-child { width: 5em; }
+  .lp-oracle .lo-table button:not(.lo-value) { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  .lp-oracle .lo-table :is(.lb-cq, .lb-status) { white-space: normal; }
+  .lp-oracle .lo-profiles { grid-template-columns: minmax(0, 1fr); }
+  .lp-oracle .lo-rollbar:has(> .lo-roll) { bottom: 0; }
+}

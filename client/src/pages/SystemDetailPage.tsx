@@ -1,5 +1,7 @@
 import "./system-d.css";
 import { Fragment, useMemo, useRef, useState } from "react";
+import { useCurrentUser } from "../api/currentUser";
+import { LitmOraclesToc } from "../components/litm/LitmOraclesView";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
@@ -47,11 +49,13 @@ export function SystemDetailPage() {
   const navigate = useNavigate();
 
   const run = useAction();
+  const { user } = useCurrentUser();
+  const canEdit = user?.role !== "player";
   const system = useResource<System>(systemPaths.detail(systemId)).data ?? null;
   const sections = useResource<SystemSection[]>(systemPaths.sections(systemId)).data ?? NO_SECTIONS;
-  const campaigns = useResource<Campaign[]>(systemPaths.campaigns(systemId)).data ?? NO_CAMPAIGNS;
-  const allGroups = useResource<SystemGroup[]>(systemPaths.groups()).data ?? NO_GROUPS;
-  const ofSystem = useResource<SystemGroup[]>(systemPaths.groupsOf(systemId)).data;
+  const campaigns = useResource<Campaign[]>(canEdit ? systemPaths.campaigns(systemId) : null).data ?? NO_CAMPAIGNS;
+  const allGroups = useResource<SystemGroup[]>(canEdit ? systemPaths.groups() : null).data ?? NO_GROUPS;
+  const ofSystem = useResource<SystemGroup[]>(canEdit ? systemPaths.groupsOf(systemId) : null).data;
   const systemGroupIds = useMemo(() => new Set((ofSystem ?? []).map((g) => g.id)), [ofSystem]);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -217,6 +221,7 @@ export function SystemDetailPage() {
     return catalog === "grimoire" ? <LitmGrimoireToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
       : catalog === "rules" ? <LitmRulesToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
       : catalog === "ways" ? <LitmWaysToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
+      : catalog === "oracles" ? <LitmOraclesToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
       : catalog === "journeys" ? <LitmJourneysToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} /> : null;
   };
   const tocNav = (withGrim: boolean) => <nav className={`sys-toc__items${system.code === "litm" ? " sys-toc__items--litm" : ""}`} aria-label="Разделы системы">
@@ -235,7 +240,7 @@ export function SystemDetailPage() {
       // вовсе: попасть на обзор можно было только щелчком по названию
       // системы — приём, о котором неоткуда узнать.
       systemNavigation={<>
-        <aside className="sys-toc"><div className="sys-toc__head"><div className="sys-toc__name">{system.name}</div><div className="row">{system.code && <span className="sys-stamp">{system.code}</span>}<button type="button" className="sys-toc__more" aria-label="Ещё действия" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }); }}>⋯</button></div></div>{tocNav(true)}</aside>
+        <aside className="sys-toc"><div className="sys-toc__head"><div className="sys-toc__name">{system.name}</div><div className="row">{system.code && <span className="sys-stamp">{system.code}</span>}{canEdit && <button type="button" className="sys-toc__more" aria-label="Ещё действия" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }); }}>⋯</button>}</div></div>{tocNav(true)}</aside>
         <div className="sys-toc-mobile"><button type="button" className="d-btn" aria-haspopup="dialog" onClick={() => setTocOpen(true)}><span>{currentSection?.name ?? "Обзор"}{currentSection ? ` ${sectionCounts[currentSection.id] ?? "…"}` : ""}</span><span>Разделы ▾</span></button></div>
       </>}
       sheet
@@ -244,19 +249,14 @@ export function SystemDetailPage() {
       badges={system.code && <span className="sys-stamp">{system.code}</span>}
       // Все четыре действия системы редки — наведение порядка в справочнике,
       // обмен файлами, архивация. Ни одно не заслуживает места в шапке.
-      actions={[
-        { label: "Привести справочник в порядок", onClick: () => setTidying(true) },
-        { label: "Экспорт", onClick: () => setExporting(true) },
-        { label: "Импорт", onClick: () => importInputRef.current?.click() },
-        { label: "Архивировать", danger: true, onClick: archiveSystem },
-      ]}
+      actions={canEdit ? systemActions : undefined}
       overlays={
         <>
           {confirmDialog}
           {alertDialog}
           {menuAt && <ContextMenu {...menuAt} items={systemActions} onClose={() => setMenuAt(null)} />}
-          {tocOpen && <Modal ariaLabel="Разделы системы" className="sys-toc-sheet" onClose={() => setTocOpen(false)}><h2>{system.name}</h2>{toc}<button type="button" className="d-btn" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.top }); }}>Действия системы ⋯</button></Modal>}
-          <SectionBackground />
+          {tocOpen && <Modal ariaLabel="Разделы системы" className="sys-toc-sheet" onClose={() => setTocOpen(false)}><h2>{system.name}</h2>{toc}{canEdit && <button type="button" className="d-btn" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.top }); }}>Действия системы ⋯</button>}</Modal>}
+          {canEdit && <SectionBackground />}
           {/* Импорт — файловое поле; пункт меню щёлкает по нему. */}
           <input
             ref={importInputRef}

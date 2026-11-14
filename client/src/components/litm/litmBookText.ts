@@ -58,7 +58,7 @@ export function isLitmThemesSection(name: string | null | undefined): boolean {
   return name === "Могущество и Темы" || name === "Темы";
 }
 
-export type LitmCatalog = "challenges" | "themes" | "tropes" | "grimoire" | "rules" | "ways" | "store" | "treasury" | "journeys";
+export type LitmCatalog = "challenges" | "themes" | "tropes" | "grimoire" | "rules" | "ways" | "store" | "treasury" | "journeys" | "oracles";
 
 /** Какой каталог «сказочной книги» у раздела LitM — или никакого. */
 export function litmCatalogOf(systemCode: string | null | undefined, section: SystemSection): LitmCatalog | null {
@@ -68,6 +68,7 @@ export function litmCatalogOf(systemCode: string | null | undefined, section: Sy
   if (section.kind === "magic_way") return "ways";
   if (section.kind === "mechanic_backpack_category") return "store";
   if (section.kind === "treasure") return "treasury";
+  if (section.kind === "oracle") return "oracles";
   if (section.kind === "journey") return "journeys";
   if (isLitmThemesSection(section.name)) return "themes";
   if (section.name === "Гримуар действий") return "grimoire";

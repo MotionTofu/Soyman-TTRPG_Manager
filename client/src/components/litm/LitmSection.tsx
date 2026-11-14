@@ -9,6 +9,7 @@ import { LitmRulesView } from "./LitmRulesView";
 import { LitmWaysView } from "./LitmWaysView";
 import { LitmStoreView } from "./LitmStoreView";
 import { LitmTreasuryView } from "./LitmTreasuryView";
+import { LitmOraclesView } from "./LitmOraclesView";
 import { LitmJourneysView } from "./LitmJourneysView";
 import { LitmThemesView } from "./LitmThemesView";
 import { LitmTropesView } from "./LitmTropesView";
@@ -42,6 +43,7 @@ export function LitmSection({ systemCode, systemId, section, focusEntryId, child
       {catalog === "ways" && <LitmWaysView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
       {catalog === "store" && <LitmStoreView systemId={systemId} entries={entries} selectedId={focusEntryId} />}
       {catalog === "treasury" && <LitmTreasuryView systemId={systemId} entries={entries} selectedId={focusEntryId} />}
+      {catalog === "oracles" && <LitmOraclesView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
       {catalog === "journeys" && <LitmJourneysView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} />}
     </section>
   );

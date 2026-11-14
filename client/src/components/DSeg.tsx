@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
+
 // Сегмент тушью «Д» (docs/design-system.md §6.6): подразделы внутри вкладки.
 // На телефоне ряд не переносится, а прокручивается вбок (блок «Кампании», Q3).
 export interface DSegItem<T extends string> {
   id: T;
-  label: string;
+  label: ReactNode;
   /** Счётчик машинописью; 0 и пусто не показываются. */
   count?: number;
 }
@@ -14,7 +16,7 @@ export function DSeg<T extends string>({
   label,
 }: {
   items: readonly DSegItem<T>[];
-  value: T;
+  value: T | undefined;
   onChange: (id: T) => void;
   /** Подпись для чтеца экрана. */
   label: string;
