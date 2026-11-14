@@ -239,22 +239,129 @@
   border: var(--edge-width) solid var(--edge);
   padding: var(--sp-2) var(--sp-3);
 }
-.pdf-reader__entity-panel { position: absolute; top: 0; bottom: 0; z-index: 9; display: flex; flex-direction: column; width: min(24rem, 32%); min-width: 19rem; background: var(--paper, #e9e5dd); color: var(--ink, #1c1c1c); box-shadow: 0 0 16px #0005; }
-.pdf-reader__entity-panel.is-right { right: 0; border-left: 1px solid var(--line, #888); }
-.pdf-reader__entity-panel.is-left { left: 0; border-right: 1px solid var(--line, #888); }
-.pdf-reader__entity-scroll { display: grid; align-content: start; gap: .75rem; overflow: auto; padding: .8rem .9rem 1.3rem; }
-.pdf-reader__entity-scroll label { display: grid; gap: .25rem; font-size: .82rem; font-weight: 700; }
-.pdf-reader__entity-scroll select, .pdf-reader__entity-scroll input, .pdf-reader__entity-scroll textarea { width: 100%; min-width: 0; padding: .42rem; font: inherit; }
-.pdf-reader__entity-scroll textarea { min-height: 9rem; resize: vertical; font-weight: 400; }
-.pdf-reader__entity-switch { display: flex; gap: .25rem; }
-.pdf-reader__entity-switch button { flex: 1; }
-.pdf-reader__entity-switch button[aria-pressed="true"] { background: var(--ink, #333); color: var(--paper, #fff); }
-.pdf-reader__entity-linked { padding: .55rem; border: 1px solid var(--line, #888); }
-.pdf-reader__entity-linked summary { cursor: pointer; font-weight: 700; }
-.pdf-reader__entity-linked button { display: block; width: 100%; margin-top: .4rem; padding: .35rem; text-align: left; }
-.pdf-reader__entity-quote { padding: .6rem; background: #fff3df; }
-.pdf-reader__entity-quote blockquote { max-height: 6rem; overflow: auto; margin: .4rem 0; white-space: pre-wrap; font-size: .85rem; }
-.pdf-reader__entity-error { color: #a33920; }
+.pdf-reader__entity-panel {
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+}
+.pdf-reader__entity-scroll {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-5) var(--sp-5) var(--sp-6);
+}
+.pdf-reader__entity-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.pdf-reader__entity-field {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--muted);
+  font: var(--fs-micro)/1.3 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.pdf-reader__entity-select { position: relative; min-width: 0; }
+.pdf-reader__entity-chevron {
+  position: absolute;
+  inset: 50% var(--sp-4) auto auto;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted);
+  font: var(--fs-label) var(--font-body);
+}
+.pdf-reader__entity-field .d-select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  text-overflow: ellipsis;
+  font: var(--fs-label) var(--font-body);
+}
+.pdf-reader__entity-select > select {
+  appearance: none;
+  padding-inline-end: var(--sp-6);
+}
+.pdf-reader__entity-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: var(--edge-width) solid var(--edge);
+  background: var(--field);
+}
+.pdf-reader__entity-editor:focus-within { outline: 1px solid var(--edge); outline-offset: 1px; }
+.pdf-reader__entity-preview {
+  max-height: 5rem;
+  overflow: auto;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-4) 0;
+  font: var(--fs-label)/1.4 var(--font-body);
+  overflow-wrap: anywhere;
+}
+.pdf-reader__entity-textbox {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.pdf-reader__entity-textbox > :is(textarea, .pdf-reader__entity-markup) {
+  width: 100%;
+  margin: 0;
+  padding: var(--sp-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font: var(--fs-label)/1.4 var(--font-body);
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+.pdf-reader__entity-textbox textarea {
+  position: relative;
+  display: block;
+  min-height: 120px;
+  resize: vertical;
+  color: var(--ink);
+}
+.pdf-reader__entity-preview + .pdf-reader__entity-textbox textarea { min-height: 72px; }
+.pdf-reader__entity-textbox textarea:focus { outline: none; }
+.pdf-reader__entity-markup {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: transparent;
+}
+.pdf-reader__entity-editor mark { background: color-mix(in srgb, var(--acid) 60%, transparent); color: inherit; }
+.pdf-reader__entity-scroll > p { margin: 0; }
+.pdf-reader__entity-hint { color: var(--muted); font: var(--fs-meta)/1.35 var(--font-body); }
+.pdf-reader__entity-insert { padding-inline: var(--sp-4); }
+.pdf-reader__entity-submit, .pdf-reader__entity-submit:hover {
+  background: var(--acid);
+  color: var(--acid-text);
+  font-weight: 600;
+}
+.pdf-reader__entity-submit:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--acid-text); }
+.pdf-reader__entity-submit:disabled { opacity: .55; cursor: not-allowed; }
+.pdf-reader__entity-linked { padding: var(--sp-4); border: 1px solid var(--line); }
+.pdf-reader__entity-linked summary { cursor: pointer; font: 500 var(--fs-label) var(--font-ui); }
+.pdf-reader__entity-linked button {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 30px;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  text-align: left;
+  white-space: normal;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.pdf-reader__entity-error { color: var(--danger); }
 .pdf-reader__composer { z-index: 11; inset: 0 0 auto auto; width: var(--pdf-notes-width); max-height: 85%; overflow: auto; }
 .pdf-reader__composer-head { margin: -.65rem -.65rem .6rem; }
 .pdf-reader__composer blockquote { max-height: 5rem; overflow: auto; margin: .4rem 0; padding: .4rem; background: #fff3df; font-style: italic; }
@@ -315,7 +422,6 @@
 @media (max-width: 760px) {
   .pdf-reader { height: calc(100dvh - 7rem); }
   .pdf-reader__viewport { --pdf-notes-width: min(21rem, 88%); }
-  .pdf-reader__entity-panel { width: min(24rem, 65%); min-width: 0; }
   .pdf-reader__viewport.has-left-entity > .pdf-reader__notes { visibility: hidden; }
   .pdf-reader__notes { box-shadow: -8px 0 20px #0005; }
 }
@@ -480,7 +586,7 @@
   box-shadow: none;
   background: var(--sheet);
 }
-.pdf-reader__note-detail blockquote, .pdf-reader__entity-quote,
+.pdf-reader__note-detail blockquote,
 .pdf-reader__composer blockquote { background: var(--field); }
 .pdf-reader__header .library-file-controls { flex-direction: column; align-items: stretch; }
 .pdf-reader__controls > .pdf-reader__panel-trigger, .pdf-reader__sheet-backdrop { display: none; }
