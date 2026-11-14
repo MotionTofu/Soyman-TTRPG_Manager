@@ -265,6 +265,9 @@
   color: var(--sheet);
 }
 .pdf-reader__header .pdf-reader__icon-button { width: 32px; padding: 0; }
+.pdf-reader__icon-button svg { width: 17px; height: 17px; }
+.pdf-reader__controls > .d-btn svg { width: 14px; height: 14px; }
+.pdf-reader__search svg { width: 16px; height: 16px; }
 .pdf-reader__header .pdf-reader__icon-button[aria-pressed="true"] { background: var(--acid); color: var(--acid-text); }
 .pdf-reader__bookmark-slot:empty { display: none; }
 .pdf-reader__bookmark-slot { display: flex; }

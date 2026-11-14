@@ -564,7 +564,7 @@ export function PdfReaderPage() {
               {resource.file_url && <button type="button" onClick={() => void download()}>Скачать PDF</button>}
               {notes.length > 0 && <button type="button" onClick={() => void downloadNotes()}>Скачать заметки .md</button>}
               <FileBookControls page={page} pageCount={pageCount} ready={ready}
-                readerHeader={{ actions: bookmarkSlot, bookmarkIcon: <NavIcon name="bookmark" size={17} /> }}
+                readerHeader={{ actions: bookmarkSlot, bookmarkIcon: <NavIcon name="bookmark" /> }}
                 onRestore={value => { if (Number.isInteger(value) && value > 0 && value <= pageCount && readerRef.current?.viewer) readerRef.current.viewer.currentPageNumber = value; }} />
             </div>
           </details>
@@ -572,7 +572,7 @@ export function PdfReaderPage() {
         <div className="pdf-reader__controls">
           <button ref={outlineButtonRef} type="button" aria-expanded={outlineOpen} aria-controls="pdf-reader-outline"
             className="d-btn" onClick={() => setOutlineOpen((value) => !value)} disabled={!ready}>
-            <NavIcon name="menu" size={14} /> Главы
+            <NavIcon name="menu" /> Главы
           </button>
           <div className="pdf-reader__stepper" role="group" aria-label="Страницы PDF">
             <button type="button" onClick={() => goToPage(page - 1)} disabled={!ready || page <= 1} aria-label="Предыдущая страница">‹</button>
@@ -599,7 +599,7 @@ export function PdfReaderPage() {
           {!panelOpen && <button type="button" className="d-btn pdf-reader__panel-desktop"
             onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>}
           <label className="pdf-reader__search">
-            <NavIcon name="search" size={16} />
+            <NavIcon name="search" />
             <input aria-label="Поиск в PDF" type="search" placeholder="Поиск в PDF" value={query} onChange={(event) => search(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") search(query, true); }} disabled={!ready} />
           </label>
