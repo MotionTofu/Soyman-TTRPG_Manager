@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MentionText } from "../components/mentions/MentionText";
 import type { PdfNote, PdfReaderPreferences } from "./pdfNotes";
 import { ReaderNoteCard } from "../components/ReaderNoteCard";
@@ -13,12 +13,22 @@ type NoteActions = {
   onReattach: (note: PdfNote) => void;
 };
 
-function NoteCard({ note, active, actions, onOpen }: { note: PdfNote; active: boolean; actions: NoteActions; onOpen: (note: PdfNote) => void }) {
-  return <ReaderNoteCard note={note} active={active} general={note.page_number == null} locationLabel={note.page_number == null ? "Вся книга" : `Стр. ${note.page_number}`} staleLabel="Проверьте привязку к PDF" canLocate={note.page_number != null} actions={actions} onOpen={onOpen} />;
+function noteLabel(note: PdfNote, numbers: ReadonlyMap<string, number>) {
+  if (note.page_number == null) return "Вся книга";
+  const number = numbers.get(note.id);
+  return number == null ? `Стр. ${note.page_number}` : `№${number} · Стр. ${note.page_number} · Цитата`;
 }
 
-function MarginLane({ metric, notes, activeId, actions, onOpen }: {
-  metric: PageMetric; notes: PdfNote[]; activeId: string | null; actions: NoteActions; onOpen: (note: PdfNote) => void;
+function NoteCard({ note, numberMap, active, actions, onOpen }: {
+  note: PdfNote; numberMap: ReadonlyMap<string, number>; active: boolean; actions: NoteActions; onOpen: (note: PdfNote) => void;
+}) {
+  return <ReaderNoteCard note={note} active={active} general={note.page_number == null} locationLabel={noteLabel(note, numberMap)}
+    editInHeader staleLabel="Проверьте привязку к PDF" canLocate={note.page_number != null} actions={actions} onOpen={onOpen} />;
+}
+
+function MarginLane({ metric, notes, noteNumbers, activeId, actions, onOpen }: {
+  metric: PageMetric; notes: PdfNote[]; noteNumbers: ReadonlyMap<string, number>;
+  activeId: string | null; actions: NoteActions; onOpen: (note: PdfNote) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -59,13 +69,14 @@ function MarginLane({ metric, notes, activeId, actions, onOpen }: {
   // инлайн-стиль намеренно — дорожка заметок стоит по измеренной странице PDF
   return <div ref={ref} className="pdf-reader__notes-lane" style={{ top: metric.top, height: metric.height }}>
     <div className="pdf-reader__notes-lane-heading">Стр. {metric.page} · {notes.length} заметок</div>
-    {notes.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={onOpen} />)}
+    {notes.map((note) => <NoteCard key={note.id} note={note} numberMap={noteNumbers} active={activeId === note.id} actions={actions} onOpen={onOpen} />)}
   </div>;
 }
 
-export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuous, onContinuousChange, onAddNote, ready, actions, activeId,
+export function PdfNotesPanel({ notes, noteNumbers, preferences, onPreferenceChange, continuous, onContinuousChange, onAddNote, ready, actions, activeId,
   container, viewer, zoom, layoutTick, loading, error }: {
   notes: PdfNote[];
+  noteNumbers: ReadonlyMap<string, number>;
   preferences: PdfReaderPreferences;
   onPreferenceChange: (patch: Partial<PdfReaderPreferences>) => void;
   continuous: boolean;
@@ -94,12 +105,8 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuo
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [openedNoteId, actions]);
-  const sorted = useMemo(() => [...notes].sort((a, b) =>
-    (a.page_number ?? 0) - (b.page_number ?? 0) ||
-    (a.anchors[0]?.rects[0]?.y ?? 0) - (b.anchors[0]?.rects[0]?.y ?? 0) ||
-    a.created_at.localeCompare(b.created_at)), [notes]);
-  const general = sorted.filter((note) => note.page_number == null);
-  const pageNotes = sorted.filter((note) => note.page_number != null);
+  const general = notes.filter((note) => note.page_number == null);
+  const pageNotes = notes.filter((note) => note.page_number != null);
   const groups = new Map<number, PdfNote[]>();
   for (const note of pageNotes) {
     const page = note.page_number!;
@@ -129,13 +136,13 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuo
       </div>
       <div className="pdf-reader__notes-actions">
         <button type="button" disabled={!ready} onClick={onAddNote}>+ Общая заметка</button>
-        <label><input type="checkbox" checked={preferences.show_highlights}
+        <label><input className="pdf-reader__highlight-toggle" type="checkbox" checked={preferences.show_highlights}
           onChange={(event) => onPreferenceChange({ show_highlights: event.target.checked })} /> Подсветка</label>
       </div>
     </div>
     {!continuous && preferences.note_mode === "margins" && general.length > 0 &&
       <div className="pdf-reader__notes-general"><strong>Ко всей книге</strong>
-        {general.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={openNote} />)}
+        {general.map((note) => <NoteCard key={note.id} note={note} numberMap={noteNumbers} active={activeId === note.id} actions={actions} onOpen={openNote} />)}
       </div>}
     <div ref={scrollRef} className="pdf-reader__notes-scroll" onScroll={(event) => {
       if (!continuous && preferences.note_mode === "margins" && container && Math.abs(container.scrollTop - event.currentTarget.scrollTop) > 1)
@@ -145,8 +152,8 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuo
       {error && <p role="alert">{error}</p>}
       {!loading && !error && !notes.length && <p className="pdf-reader__notes-empty">Выделите цитату в PDF или создайте общую заметку.</p>}
       {continuous ? <div className="pdf-reader__notes-list">
-        {sorted.map(note => <article key={note.id} className="pdf-reader__note-card">
-          <h3>{note.page_number ? `Страница ${note.page_number}` : "Общая заметка"}</h3>
+        {notes.map(note => <article key={note.id} className="pdf-reader__note-card">
+          <h3>{noteLabel(note, noteNumbers)}</h3>
           {note.quote && <blockquote>{note.quote}</blockquote>}
           <MentionText text={note.body} />
           {note.needs_reattach && <p>Проверьте привязку к PDF</p>}
@@ -154,15 +161,18 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuo
             <button type="button" onClick={() => actions.onLocate(note)}>К цитате</button>}
         </article>)}
       </div> : preferences.note_mode === "list" ?
-        <div className="pdf-reader__notes-list">{sorted.map((note) => <NoteCard key={note.id} note={note} active={activeId === note.id} actions={actions} onOpen={openNote} />)}</div> :
+        <div className="pdf-reader__notes-list">{notes.map((note) => <NoteCard key={note.id} note={note} numberMap={noteNumbers} active={activeId === note.id} actions={actions} onOpen={openNote} />)}</div> :
         // инлайн-стиль намеренно — высота полотна заметок повторяет прокрутку читалки
         <div className="pdf-reader__notes-canvas" style={{ height: Math.max(viewer?.scrollHeight ?? 0, container?.clientHeight ?? 0) }}>
-          {metrics.map(({ metric, group }) => <MarginLane key={metric.page} metric={metric} notes={group} activeId={activeId} actions={actions} onOpen={openNote} />)}
+          {metrics.map(({ metric, group }) => <MarginLane key={metric.page} metric={metric} notes={group} noteNumbers={noteNumbers} activeId={activeId} actions={actions} onOpen={openNote} />)}
         </div>}
     </div>
     {openedNote && <div className="pdf-reader__note-detail" role="dialog" aria-label="Полная заметка">
       <div className="pdf-reader__note-detail-head">
-        <strong>{openedNote.page_number == null ? "Вся книга" : `Страница ${openedNote.page_number}`}</strong>
+        <div>
+          <strong>{noteLabel(openedNote, noteNumbers)}</strong>
+          <time dateTime={openedNote.created_at}>{new Date(openedNote.created_at).toLocaleDateString("ru-RU")}</time>
+        </div>
         <button type="button" onClick={closeNote} aria-label="Закрыть полную заметку">×</button>
       </div>
       {openedNote.needs_reattach && <div className="pdf-reader__note-stale">Проверьте привязку к PDF</div>}

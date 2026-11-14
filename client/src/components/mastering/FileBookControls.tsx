@@ -5,7 +5,7 @@ import {Link,useLocation,useParams} from "react-router-dom";
 import {useAction,useResource,write} from "../../data/hooks";
 import type {LibraryBook,LibraryCatalog} from "./libraryTypes";
 
-export function FileBookControls({page,pageCount,ready=false,onRestore,readerHeader}:{page?:number;pageCount?:number;ready?:boolean;onRestore?:(page:number)=>void;readerHeader?:{actions:HTMLElement|null;bookmarkIcon:ReactNode}}){
+export function FileBookControls({page,pageCount,ready=false,onRestore,readerHeader}:{page?:number;pageCount?:number;ready?:boolean;onRestore?:(page:number)=>void;readerHeader?:{actions:HTMLElement|null;bookmarkIcon:ReactNode;metadata:HTMLElement|null}}){
  const location=useLocation(),{id}=useParams(),run=useAction();
  const context=(location.state as {library?:{bookId:number;order:number[]};from?:string}|null)?.library;
  const listing=useResource<LibraryCatalog>(context?null:`/book-library/books?source_id=${id}&source_type=resource`);
@@ -31,6 +31,10 @@ export function FileBookControls({page,pageCount,ready=false,onRestore,readerHea
   {readerHeader?.bookmarkIcon??bookmarkLabel}</button>;
  return <>
   {readerHeader?.actions&&createPortal(bookmark,readerHeader.actions)}
+  {book&&readerHeader?.metadata&&createPortal(
+   [book.department_name,book.section_name].filter(Boolean).map(name=>` · ${name}`).join(""),
+   readerHeader.metadata,
+  )}
   <div className="library-file-controls" aria-label="Книги на полке">
    {bookId&&<WorkbookLinks bookId={bookId}/>}
    {previous?<Link to={target(previous.id)} title={previous.title} state={{library:{bookId:previous.id,order}}}>← Предыдущая</Link>:<button disabled>← Предыдущая</button>}

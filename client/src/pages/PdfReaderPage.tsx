@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from "pdfjs-dist";
 import { EventBus, PDFViewer, PDFLinkService, PDFFindController } from "pdfjs-dist/web/pdf_viewer.mjs";
@@ -69,6 +69,7 @@ export function PdfReaderPage() {
   const outlineCloseRef = useRef<HTMLButtonElement>(null);
   const selectionMenuRef = useRef<HTMLDivElement>(null);
   const [bookmarkSlot, setBookmarkSlot] = useState<HTMLSpanElement | null>(null);
+  const [metadataSlot, setMetadataSlot] = useState<HTMLElement | null>(null);
   const [page, setPage] = useState(1);
   const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [bagMessage, setBagMessage] = useState("");
@@ -83,6 +84,13 @@ export function PdfReaderPage() {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [expandedOutline, setExpandedOutline] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState<PdfNote[]>([]);
+  const orderedNotes = useMemo(() => [...notes].sort((a, b) =>
+    (a.page_number ?? Number.POSITIVE_INFINITY) - (b.page_number ?? Number.POSITIVE_INFINITY) ||
+    (a.anchors[0]?.rects[0]?.y ?? 0) - (b.anchors[0]?.rects[0]?.y ?? 0) ||
+    (a.anchors[0]?.rects[0]?.x ?? 0) - (b.anchors[0]?.rects[0]?.x ?? 0) ||
+    a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)), [notes]);
+  const noteNumbers = useMemo(() => new Map(orderedNotes.filter((note) => note.page_number != null && note.quote)
+    .map((note, index) => [note.id, index + 1])), [orderedNotes]);
   const [preferences, setPreferences] = useState<PdfReaderPreferences>(DEFAULT_PDF_PREFERENCES);
   const preferencesRef = useRef(preferences);
   const requestedNotes = useRef<string | null>(null);
@@ -291,44 +299,65 @@ export function PdfReaderPage() {
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !ready) return;
-    const clear = () => viewer.querySelectorAll(".pdf-reader__highlight-layer").forEach((layer) => layer.remove());
-    const layers = new Map<number, HTMLDivElement>();
+    const clear = () => viewer.querySelectorAll(".pdf-reader__highlight-layer, .pdf-reader__pin-layer").forEach((layer) => layer.remove());
+    const layers = new Map<number, { overlay: HTMLDivElement; pins: HTMLDivElement; left: number; lastPinCenter: number }>();
+    const container = containerRef.current;
+    const visibleLeft = (container?.getBoundingClientRect().left ?? 0) - (container?.scrollLeft ?? 0);
     const pages = new Map([...viewer.querySelectorAll<HTMLElement>(".page")].map((element) =>
       [Number(element.dataset.pageNumber), element] as const));
-    const draw = (anchors: PdfAnchor[], kind: "saved" | "selection") => {
-      for (const anchor of anchors) {
+    const draw = (anchors: PdfAnchor[], kind: "saved" | "selection", noteNumber?: number) => {
+      for (const [anchorIndex, anchor] of anchors.entries()) {
         const pageElement = pages.get(anchor.page);
         if (!pageElement) continue;
         let layer = layers.get(anchor.page);
         if (!layer) {
-          layer = document.createElement("div");
-          layer.className = "pdf-reader__highlight-layer";
-          layer.setAttribute("aria-hidden", "true");
+          const overlay = document.createElement("div");
+          overlay.className = "pdf-reader__highlight-layer";
+          overlay.setAttribute("aria-hidden", "true");
           // Note coordinates use the page's border box, including the PDF.js gutter.
           const border = getComputedStyle(pageElement);
-          layer.style.inset = [border.borderTopWidth, border.borderRightWidth, border.borderBottomWidth, border.borderLeftWidth]
+          overlay.style.inset = [border.borderTopWidth, border.borderRightWidth, border.borderBottomWidth, border.borderLeftWidth]
             .map((width) => `${-parseFloat(width)}px`).join(" ");
-          pageElement.append(layer);
+          const pins = document.createElement("div");
+          pins.className = "pdf-reader__pin-layer";
+          pins.setAttribute("aria-hidden", "true");
+          pins.style.inset = overlay.style.inset;
+          pageElement.append(overlay, pins);
+          const pageLeft = pageElement.getBoundingClientRect().left;
+          const left = Math.min(0, Math.max(-12, visibleLeft + 2 - pageLeft));
+          layer = { overlay, pins, left, lastPinCenter: 0 };
           layers.set(anchor.page, layer);
         }
-        for (const rect of mergePdfLineRects(anchor.rects)) {
+        const rects = mergePdfLineRects(anchor.rects);
+        const first = rects[0];
+        if (first && noteNumber != null && anchorIndex === 0) {
+          const pin = document.createElement("span");
+          pin.className = "pdf-reader__note-pin";
+          pin.textContent = String(noteNumber);
+          const center = (first.y + first.h / 2) * pageElement.offsetHeight;
+          layer.lastPinCenter = Math.max(center, layer.lastPinCenter + 20);
+          pin.style.top = `${layer.lastPinCenter}px`;
+          pin.style.left = `${layer.left}px`;
+          layer.pins.append(pin);
+        }
+        for (const rect of rects) {
           const mark = document.createElement("div");
           mark.className = `pdf-reader__highlight is-${kind}`;
           mark.style.left = `${rect.x * 100}%`;
           mark.style.top = `${rect.y * 100}%`;
           mark.style.width = `${rect.w * 100}%`;
           mark.style.height = `${rect.h * 100}%`;
-          layer.append(mark);
+          layer.overlay.append(mark);
         }
       }
     };
-    for (const note of notes) {
+    for (const note of orderedNotes) {
       if (note.needs_reattach || (!preferences.show_highlights && note.id !== hoveredNoteId)) continue;
-      draw(note.anchors, "saved");
+      draw(note.anchors, "saved", noteNumbers.get(note.id));
     }
     if (selectionMenu) draw(selectionMenu.draft.anchors, "selection");
     return clear;
-  }, [notes, preferences.show_highlights, hoveredNoteId, ready, layoutTick, selectionMenu]);
+  }, [orderedNotes, noteNumbers, preferences.show_highlights, hoveredNoteId, ready, layoutTick, selectionMenu]);
 
   function closeOutline() {
     setOutlineOpen(false);
@@ -555,7 +584,7 @@ export function PdfReaderPage() {
           <Link className="d-btn d-btn--sm" to={returnTo}>← Библиотека</Link>
           <div className="pdf-reader__identity">
             <strong className="pdf-reader__title" title={resource.name}>{resource.name}</strong>
-            <small className="d-mono">PDF · стр. {page} из {pageCount || "—"}</small>
+            <small className="d-mono" ref={setMetadataSlot}>PDF</small>
           </div>
           <span ref={setBookmarkSlot} className="pdf-reader__bookmark-slot" />
           <details className="library-menu">
@@ -564,7 +593,7 @@ export function PdfReaderPage() {
               {resource.file_url && <button type="button" onClick={() => void download()}>Скачать PDF</button>}
               {notes.length > 0 && <button type="button" onClick={() => void downloadNotes()}>Скачать заметки .md</button>}
               <FileBookControls page={page} pageCount={pageCount} ready={ready}
-                readerHeader={{ actions: bookmarkSlot, bookmarkIcon: <NavIcon name="bookmark" /> }}
+                readerHeader={{ actions: bookmarkSlot, bookmarkIcon: <NavIcon name="bookmark" />, metadata: metadataSlot }}
                 onRestore={value => { if (Number.isInteger(value) && value > 0 && value <= pageCount && readerRef.current?.viewer) readerRef.current.viewer.currentPageNumber = value; }} />
             </div>
           </details>
@@ -577,13 +606,16 @@ export function PdfReaderPage() {
           <div className="pdf-reader__stepper" role="group" aria-label="Страницы PDF">
             <button type="button" onClick={() => goToPage(page - 1)} disabled={!ready || page <= 1} aria-label="Предыдущая страница">‹</button>
             <div className="pdf-reader__stepper-value">
-              <input aria-label="Номер страницы" type="text" inputMode="numeric" size={String(pageCount || 1).length}
-                value={pageDraft ?? page} onFocus={(event) => event.currentTarget.select()} onBlur={commitPage}
-                onChange={(event) => setPageDraft(event.target.value)} disabled={!ready}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                  if (event.key === "Escape") setPageDraft(null);
-                }} />
+              <span className="pdf-reader__page-number">
+                <span aria-hidden="true">{(pageDraft ?? String(page)) || "0"}</span>
+                <input aria-label="Номер страницы" type="text" inputMode="numeric" size={1}
+                  value={pageDraft ?? page} onFocus={(event) => event.currentTarget.select()} onBlur={commitPage}
+                  onChange={(event) => setPageDraft(event.target.value)} disabled={!ready}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") setPageDraft(null);
+                  }} />
+              </span>
               <span aria-label={`Всего страниц: ${pageCount}`}>/ {pageCount || "—"}</span>
             </div>
             <button type="button" onClick={() => goToPage(page + 1)} disabled={!ready || page >= pageCount} aria-label="Следующая страница">›</button>
@@ -655,7 +687,7 @@ export function PdfReaderPage() {
             </div>
             {entitySelection ? <PdfEntityPanel key={`${id}-${entitySelection.quote}-${entitySelection.page}`} resource={resource}
               sources={sourceQuery.data ?? []} quote={entitySelection.quote} page={entitySelection.page} />
-              : <PdfNotesPanel notes={notes} preferences={preferences} onPreferenceChange={updatePreferences}
+              : <PdfNotesPanel notes={orderedNotes} noteNumbers={noteNumbers} preferences={preferences} onPreferenceChange={updatePreferences}
                 continuous={continuousNotes} onContinuousChange={setContinuousNotes}
                 onAddNote={() => openComposer()} ready={ready}
                 actions={{ onHover: setHoveredNoteId, onLocate: note => { locateNote(note); setMobilePanelOpen(false); }, onEdit: (note) => openComposer(note),
