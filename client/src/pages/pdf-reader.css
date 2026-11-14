@@ -127,27 +127,16 @@
 .pdf-reader__reattach-hint { position: absolute; top: .5rem; left: .5rem; z-index: 7; max-width: min(27rem, calc(100% - 1rem)); padding: .5rem; background: #fff3df; color: #333; border: 1px solid #a33920; }
 .pdf-reader__reattach-hint button { margin-left: .5rem; }
 
-.pdf-reader__outline-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: rgba(0, 0, 0, .36);
-  cursor: default;
-}
+.pdf-reader__viewport.has-outline > .pdf-reader__container { left: var(--pdf-outline-width); }
 .pdf-reader__outline {
   position: absolute;
   inset: 0 auto 0 0;
-  z-index: 5;
   display: flex;
   flex-direction: column;
-  width: min(23rem, 88%);
-  background: var(--paper, #e9e5dd);
-  color: var(--ink, #1c1c1c);
-  box-shadow: 8px 0 24px rgba(0, 0, 0, .28);
-  animation: pdf-outline-enter .18s ease-out;
+  width: var(--pdf-outline-width);
+  background: var(--sheet);
+  color: var(--ink);
+  border-right: var(--edge-width) solid var(--edge);
 }
 .pdf-reader__outline-header {
   display: flex;
@@ -182,11 +171,11 @@
   text-align: left;
   line-height: 1.25;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 .pdf-reader__outline-entry:hover, .pdf-reader__outline-entry:focus-visible,
 .pdf-reader__outline-toggle:hover, .pdf-reader__outline-toggle:focus-visible { background: var(--paper-2, #dad6cd); }
 .pdf-reader__outline-entry:disabled { opacity: .65; cursor: default; }
-@keyframes pdf-outline-enter { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 
 @media (max-width: 760px) {
   .pdf-reader { height: calc(100dvh - 7rem); }
@@ -216,7 +205,11 @@
 }
 .pdf-reader__identity { display: grid; flex: 1; min-width: 0; }
 .pdf-reader__controls { padding: var(--sp-2) var(--sp-5); }
-.pdf-reader__viewport { --pdf-notes-width: 300px; background: var(--paper-2); }
+.pdf-reader__viewport {
+  --pdf-outline-width: min(250px, 40%);
+  --pdf-notes-width: 300px;
+  background: var(--paper-2);
+}
 .pdf-reader__viewport.has-side > .pdf-reader__container { right: var(--pdf-notes-width); }
 .pdf-reader__side {
   position: absolute;

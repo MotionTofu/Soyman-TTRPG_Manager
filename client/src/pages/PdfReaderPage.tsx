@@ -65,7 +65,6 @@ export function PdfReaderPage() {
   const readerRef = useRef<Reader | null>(null);
   const outlineButtonRef = useRef<HTMLButtonElement>(null);
   const outlineCloseRef = useRef<HTMLButtonElement>(null);
-  const outlinePanelRef = useRef<HTMLElement>(null);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(100);
@@ -196,28 +195,24 @@ export function PdfReaderPage() {
   }, [fileUrl, isPdf]);
 
   useEffect(() => {
-    if (!outlineOpen) return;
-    outlineCloseRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeOutline();
-      } else if (event.key === "Tab") {
-        const buttons = outlinePanelRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
-        if (!buttons?.length) return;
-        const first = buttons[0];
-        const last = buttons[buttons.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    if (outlineOpen) outlineCloseRef.current?.focus();
   }, [outlineOpen]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const viewer = readerRef.current?.viewer;
+    if (!ready || !container || !viewer) return;
+
+    let width = container.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const nextWidth = container.clientWidth;
+      if (!nextWidth || width === nextWidth) return;
+      width = nextWidth;
+      if (viewer.currentScaleValue === "page-width") viewer.currentScaleValue = "page-width";
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [ready]);
 
   useEffect(() => {
     if (!selectionMenu && !reattachId) return;
@@ -277,9 +272,7 @@ export function PdfReaderPage() {
       return;
     }
     const destination = item.dest;
-    void readerRef.current?.linkService.goToDestination(destination).then(() => {
-      closeOutline();
-    }).catch(() => {
+    void readerRef.current?.linkService.goToDestination(destination).catch(() => {
       setOutlineError("Не удалось перейти к этому разделу");
     });
   }
@@ -477,6 +470,7 @@ export function PdfReaderPage() {
         </div>
         <div className="pdf-reader__controls">
           <button ref={outlineButtonRef} type="button" aria-expanded={outlineOpen} aria-controls="pdf-reader-outline"
+            className={outlineOpen ? "d-btn d-btn--primary" : "d-btn"}
             onClick={() => setOutlineOpen((value) => !value)} disabled={!ready}>☰ Главы</button>
           <button type="button" className="pdf-reader__panel-trigger" aria-expanded={panelOpen && mobilePanelOpen}
             onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>
@@ -498,7 +492,21 @@ export function PdfReaderPage() {
       {error && <p className="pdf-reader__error" role="alert">PDF не открылся: {error}</p>}
       {!ready && !error && <p className="pdf-reader__loading">Загружаю PDF…</p>}
       {preferences.notes_collapsed && notesError && <p className="pdf-reader__error" role="alert">{notesError}</p>}
-      <div className={`pdf-reader__viewport${panelOpen ? " has-side" : ""}`}>
+      <div className={`pdf-reader__viewport${panelOpen ? " has-side" : ""}${outlineOpen ? " has-outline" : ""}`}>
+        {outlineOpen && <nav id="pdf-reader-outline" className="pdf-reader__outline" aria-label="Главы PDF"
+          onKeyDown={event => { if (event.key === "Escape") closeOutline(); }}>
+          <header className="pdf-reader__outline-header">
+            <strong>Главы PDF</strong>
+            <button ref={outlineCloseRef} type="button" aria-label="Закрыть главы" onClick={closeOutline}>×</button>
+          </header>
+          <div className="pdf-reader__outline-body">
+            {outlineLoading && <p className="muted">Загружаю оглавление…</p>}
+            {outlineError && <p role="alert">{outlineError}</p>}
+            {!outlineLoading && !outlineError && outline.length === 0 &&
+              <p className="muted">В этом PDF нет встроенного оглавления с главами.</p>}
+            <OutlineList items={outline} expanded={expandedOutline} onToggle={toggleOutline} onSelect={selectOutlineItem} />
+          </div>
+        </nav>}
         <div ref={containerRef} className="pdf-reader__container" tabIndex={0} onMouseUp={onPdfMouseUp} onClick={(event) => {
           if (window.getSelection()?.toString().trim()) return;
           const element = event.target as HTMLElement;
@@ -564,23 +572,6 @@ export function PdfReaderPage() {
           <button type="button" onClick={() => void saveNote()} disabled={savingNote || !composer.body.trim()}>
             {savingNote ? "Сохраняю…" : "Сохранить заметку"}</button>
         </div>}
-        {outlineOpen && <>
-          <button type="button" className="pdf-reader__outline-backdrop" aria-label="Закрыть оглавление" onClick={closeOutline} />
-          <aside ref={outlinePanelRef} id="pdf-reader-outline" className="pdf-reader__outline" role="dialog" aria-modal="true" aria-label="Главы PDF">
-            <header className="pdf-reader__outline-header">
-              <strong>Главы PDF</strong>
-              <button ref={outlineCloseRef} type="button" aria-label="Закрыть главы" onClick={closeOutline}>×</button>
-            </header>
-            <div className="pdf-reader__outline-body">
-              {outlineLoading ? <p className="muted">Загружаю оглавление…</p> :
-                <>
-                  {outlineError && <p role="alert">{outlineError}</p>}
-                  {outline.length === 0 && !outlineError ? <p className="muted">В этом PDF нет встроенного оглавления с главами.</p> :
-                    <OutlineList items={outline} expanded={expandedOutline} onToggle={toggleOutline} onSelect={selectOutlineItem} />}
-                </>}
-            </div>
-          </aside>
-        </>}
       </div>
     </section>
   );
