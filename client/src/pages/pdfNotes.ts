@@ -29,6 +29,26 @@ export const DEFAULT_PDF_PREFERENCES: PdfReaderPreferences = {
   show_highlights: true,
 };
 
+/** PDF text runs can overlap on the same line, especially around font changes. */
+export function mergePdfLineRects(rects: PdfRect[]): PdfRect[] {
+  const merged: PdfRect[] = [];
+  for (const rect of [...rects].sort((a, b) => a.x - b.x)) {
+    const line = merged.find((item) => {
+      const verticalOverlap = Math.min(item.y + item.h, rect.y + rect.h) - Math.max(item.y, rect.y);
+      return verticalOverlap >= Math.max(item.h, rect.h) * 0.65 && rect.x <= item.x + item.w + 0.0015;
+    });
+    if (!line) {
+      merged.push({ ...rect });
+      continue;
+    }
+    const top = Math.min(line.y, rect.y);
+    line.h = Math.max(line.y + line.h, rect.y + rect.h) - top;
+    line.y = top;
+    line.w = Math.max(line.x + line.w, rect.x + rect.w) - line.x;
+  }
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
 /** Capture text-layer rectangles as page-relative fractions, independent of zoom. */
 export function capturePdfSelection(viewer: HTMLElement): PdfNoteDraft | null {
   const selection = window.getSelection();
@@ -41,36 +61,48 @@ export function capturePdfSelection(viewer: HTMLElement): PdfNoteDraft | null {
   if (!start || !end || !viewer.contains(start) || !viewer.contains(end)) return null;
   if (!start.closest(".textLayer") || !end.closest(".textLayer")) return null;
 
+  const pageBounds = new Map<HTMLElement, DOMRect>();
   const pages = new Map<number, PdfRect[]>();
-  const pageElements = [...viewer.querySelectorAll<HTMLElement>(".page")];
-  for (const rect of range.getClientRects()) {
-    if (rect.width < 1 || rect.height < 1) continue;
-    const page = pageElements.find((candidate) => {
-      const box = candidate.getBoundingClientRect();
-      return rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top;
-    });
-    if (!page) continue;
-    const box = page.getBoundingClientRect();
-    const left = Math.max(box.left, rect.left);
-    const top = Math.max(box.top, rect.top);
-    const right = Math.min(box.right, rect.right);
-    const bottom = Math.min(box.bottom, rect.bottom);
-    if (right <= left || bottom <= top) continue;
+  const collect = (node: Node) => {
+    const page = node.parentElement?.closest<HTMLElement>(".page");
+    if (!page || !node.parentElement?.closest(".textLayer")) return;
     const pageNumber = Number(page.dataset.pageNumber);
-    if (!Number.isInteger(pageNumber) || pageNumber < 1) continue;
-    const list = pages.get(pageNumber) ?? [];
-    list.push({
-      x: (left - box.left) / box.width,
-      y: (top - box.top) / box.height,
-      w: (right - left) / box.width,
-      h: (bottom - top) / box.height,
-    });
-    pages.set(pageNumber, list);
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) return;
+    const box = pageBounds.get(page) ?? page.getBoundingClientRect();
+    pageBounds.set(page, box);
+    const textRange = document.createRange();
+    textRange.selectNodeContents(node);
+    if (node === range.startContainer) textRange.setStart(node, range.startOffset);
+    if (node === range.endContainer) textRange.setEnd(node, range.endOffset);
+    const rects = pages.get(pageNumber) ?? [];
+    for (const rect of textRange.getClientRects()) {
+      const left = Math.max(box.left, rect.left);
+      const top = Math.max(box.top, rect.top);
+      const right = Math.min(box.right, rect.right);
+      const bottom = Math.min(box.bottom, rect.bottom);
+      if (right - left < 1 || bottom - top < 1) continue;
+      rects.push({
+        x: (left - box.left) / box.width,
+        y: (top - box.top) / box.height,
+        w: (right - left) / box.width,
+        h: (bottom - top) / box.height,
+      });
+    }
+    if (rects.length) pages.set(pageNumber, rects);
+  };
+  const root = range.commonAncestorContainer;
+  if (root.nodeType === Node.TEXT_NODE) collect(root);
+  else {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (range.intersectsNode(walker.currentNode)) collect(walker.currentNode);
+    }
   }
-  if (!pages.size || pages.size > 20 || [...pages.values()].some((rects) => rects.length > 100)) return null;
+  const anchors = [...pages].map(([page, rects]) => ({ page, rects: mergePdfLineRects(rects) }));
+  if (!anchors.length || anchors.length > 20 || anchors.some(({ rects }) => rects.length > 100)) return null;
   return {
     quote,
-    anchors: [...pages].map(([page, rects]) => ({ page, rects })),
+    anchors,
     context_before: (range.startContainer.textContent ?? "").slice(Math.max(0, range.startOffset - 100), range.startOffset),
     context_after: (range.endContainer.textContent ?? "").slice(range.endOffset, range.endOffset + 100),
   };

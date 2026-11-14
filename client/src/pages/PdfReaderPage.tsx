@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask } from "pdfjs-dist";
 import { EventBus, PDFViewer, PDFLinkService, PDFFindController } from "pdfjs-dist/web/pdf_viewer.mjs";
@@ -8,9 +8,11 @@ import { getAuthToken } from "../api/client";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import type { Resource } from "../types";
+import { addToBag } from "../bag";
+import { NavIcon } from "../components/NavIcons";
 import { PdfNotesPanel } from "./PdfNotesPanel";
 import { PdfEntityPanel, type PdfEntitySource } from "./PdfEntityPanel";
-import { capturePdfSelection, DEFAULT_PDF_PREFERENCES, type PdfNote, type PdfNoteDraft, type PdfReaderPreferences } from "./pdfNotes";
+import { capturePdfSelection, mergePdfLineRects, DEFAULT_PDF_PREFERENCES, type PdfAnchor, type PdfNote, type PdfNoteDraft, type PdfReaderPreferences } from "./pdfNotes";
 import "./pdf-reader.css";
 import "./book-library.css";
 import {FileBookControls} from "../components/mastering/FileBookControls";
@@ -24,7 +26,7 @@ type OutlineItem = {
 };
 
 type Reader = { viewer: PDFViewer; bus: EventBus; linkService: PDFLinkService; task: PDFDocumentLoadingTask };
-type SelectionMenu = { draft: PdfNoteDraft; left: number; top: number };
+type SelectionMenu = { draft: PdfNoteDraft; range: Range };
 type NoteComposer = { id: string | null; draft: PdfNoteDraft; body: string };
 
 function OutlineList({ items, prefix = "", expanded, onToggle, onSelect }: {
@@ -65,7 +67,11 @@ export function PdfReaderPage() {
   const readerRef = useRef<Reader | null>(null);
   const outlineButtonRef = useRef<HTMLButtonElement>(null);
   const outlineCloseRef = useRef<HTMLButtonElement>(null);
+  const selectionMenuRef = useRef<HTMLDivElement>(null);
+  const [bookmarkSlot, setBookmarkSlot] = useState<HTMLSpanElement | null>(null);
   const [page, setPage] = useState(1);
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
+  const [bagMessage, setBagMessage] = useState("");
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [query, setQuery] = useState("");
@@ -146,6 +152,8 @@ export function PdfReaderPage() {
     setOutlineError("");
     setOutlineOpen(false);
     setPage(1);
+    setPageDraft(null);
+    setBagMessage("");
     setPageCount(0);
     setSelectionMenu(null);
     setComposer(null);
@@ -165,6 +173,8 @@ export function PdfReaderPage() {
     bus.on("scalechanging", () => {
       if (!disposed) {
         setZoom(Math.round(viewer.currentScale * 100));
+        if (selectionMenuRef.current) window.getSelection()?.removeAllRanges();
+        setSelectionMenu(null);
         setLayoutTick((value) => value + 1);
       }
     });
@@ -217,30 +227,93 @@ export function PdfReaderPage() {
   useEffect(() => {
     if (!selectionMenu && !reattachId) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setSelectionMenu(null); setReattachId(null); }
+      if (event.key === "Escape") {
+        if (selectionMenu) window.getSelection()?.removeAllRanges();
+        setSelectionMenu(null);
+        setReattachId(null);
+      }
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
   }, [selectionMenu, reattachId]);
 
+  useLayoutEffect(() => {
+    const menu = selectionMenuRef.current;
+    const container = containerRef.current;
+    const viewport = menu?.offsetParent;
+    if (!menu || !container || !viewport || !selectionMenu) return;
+    const { range } = selectionMenu;
+    const positionMenu = () => {
+      const { left, top } = viewport.getBoundingClientRect();
+      const box = container.getBoundingClientRect();
+      const right = box.left + container.clientWidth;
+      const bottom = box.top + container.clientHeight;
+      const visible = [...range.getClientRects()].filter((rect) =>
+        rect.width > 1 && rect.height > 1 && rect.bottom > box.top && rect.top < bottom &&
+        rect.right > box.left && rect.left < right);
+      if (!visible.length) {
+        menu.hidden = true;
+        return;
+      }
+      menu.hidden = false;
+      const margin = 8;
+      menu.style.maxWidth = `${Math.max(0, container.clientWidth - margin * 2)}px`;
+      const minX = Math.min(...visible.map((rect) => rect.left));
+      const minY = Math.min(...visible.map((rect) => rect.top));
+      const maxY = Math.max(...visible.map((rect) => rect.bottom));
+      const below = maxY + margin;
+      const preferredY = below + menu.offsetHeight <= bottom ? below : minY - margin - menu.offsetHeight;
+      menu.style.left = `${Math.max(box.left + margin, Math.min(minX, right - margin - menu.offsetWidth)) - left}px`;
+      menu.style.top = `${Math.max(box.top + margin, Math.min(preferredY, bottom - margin - menu.offsetHeight)) - top}px`;
+    };
+    const onSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection?.rangeCount || selection.isCollapsed || selection.getRangeAt(0) !== range) setSelectionMenu(null);
+    };
+    const observer = new ResizeObserver(positionMenu);
+    observer.observe(container);
+    container.addEventListener("scroll", positionMenu);
+    document.addEventListener("selectionchange", onSelectionChange);
+    positionMenu();
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("scroll", positionMenu);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  }, [selectionMenu]);
+
+  useEffect(() => {
+    if (!bagMessage) return;
+    const timer = window.setTimeout(() => setBagMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [bagMessage]);
+
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !ready) return;
-    viewer.querySelectorAll(".pdf-reader__highlight-layer").forEach((layer) => layer.remove());
-    for (const note of notes) {
-      if (note.needs_reattach || (!preferences.show_highlights && note.id !== hoveredNoteId)) continue;
-      for (const anchor of note.anchors) {
-        const pageElement = viewer.querySelector<HTMLElement>(`.page[data-page-number="${anchor.page}"]`);
+    const clear = () => viewer.querySelectorAll(".pdf-reader__highlight-layer").forEach((layer) => layer.remove());
+    const layers = new Map<number, HTMLDivElement>();
+    const pages = new Map([...viewer.querySelectorAll<HTMLElement>(".page")].map((element) =>
+      [Number(element.dataset.pageNumber), element] as const));
+    const draw = (anchors: PdfAnchor[], kind: "saved" | "selection") => {
+      for (const anchor of anchors) {
+        const pageElement = pages.get(anchor.page);
         if (!pageElement) continue;
-        let layer = pageElement.querySelector<HTMLElement>(".pdf-reader__highlight-layer");
+        let layer = layers.get(anchor.page);
         if (!layer) {
           layer = document.createElement("div");
           layer.className = "pdf-reader__highlight-layer";
+          layer.setAttribute("aria-hidden", "true");
+          // Note coordinates use the page's border box, including the PDF.js gutter.
+          const border = getComputedStyle(pageElement);
+          layer.style.inset = [border.borderTopWidth, border.borderRightWidth, border.borderBottomWidth, border.borderLeftWidth]
+            .map((width) => `${-parseFloat(width)}px`).join(" ");
           pageElement.append(layer);
+          layers.set(anchor.page, layer);
         }
-        for (const rect of anchor.rects) {
+        for (const rect of mergePdfLineRects(anchor.rects)) {
           const mark = document.createElement("div");
-          mark.className = `pdf-reader__highlight${note.id === hoveredNoteId || note.id === activeNoteId ? " is-active" : ""}`;
+          mark.className = `pdf-reader__highlight is-${kind}`;
           mark.style.left = `${rect.x * 100}%`;
           mark.style.top = `${rect.y * 100}%`;
           mark.style.width = `${rect.w * 100}%`;
@@ -248,9 +321,14 @@ export function PdfReaderPage() {
           layer.append(mark);
         }
       }
+    };
+    for (const note of notes) {
+      if (note.needs_reattach || (!preferences.show_highlights && note.id !== hoveredNoteId)) continue;
+      draw(note.anchors, "saved");
     }
-    return () => viewer.querySelectorAll(".pdf-reader__highlight-layer").forEach((layer) => layer.remove());
-  }, [notes, preferences.show_highlights, hoveredNoteId, activeNoteId, ready, layoutTick]);
+    if (selectionMenu) draw(selectionMenu.draft.anchors, "selection");
+    return clear;
+  }, [notes, preferences.show_highlights, hoveredNoteId, ready, layoutTick, selectionMenu]);
 
   function closeOutline() {
     setOutlineOpen(false);
@@ -288,19 +366,35 @@ export function PdfReaderPage() {
       .catch(() => { setNotesError("Не удалось сохранить настройки заметок"); });
   }
 
-  function onPdfMouseUp() {
+  function showSelectionActions() {
     window.setTimeout(() => {
       const viewer = viewerRef.current;
-      const viewport = containerRef.current?.parentElement;
-      if (!viewer || !viewport) return;
-      const draft = capturePdfSelection(viewer);
-      if (!draft) return;
-      const selected = window.getSelection()?.getRangeAt(0).getBoundingClientRect();
-      const box = viewport.getBoundingClientRect();
-      const left = Math.max(12, Math.min(box.width - 230, (selected?.right ?? box.left) - box.left));
-      const top = Math.max(12, Math.min(box.height - 160, (selected?.bottom ?? box.top) - box.top + 8));
-      setSelectionMenu({ draft, left, top });
+      const selection = window.getSelection();
+      const draft = viewer && capturePdfSelection(viewer);
+      setSelectionMenu(draft && selection?.rangeCount ? { draft, range: selection.getRangeAt(0) } : null);
     }, 0);
+  }
+
+  function putQuoteInBag(draft: PdfNoteDraft) {
+    const sourcePage = draft.anchors[0]?.page;
+    if (!resource || !sourcePage) return;
+    try {
+      const result = addToBag({
+        type: "resource",
+        id: resource.id,
+        title: resource.name.replace(/[<>]/g, "").slice(0, 200),
+        pdfQuote: { page: sourcePage, text: draft.quote },
+      });
+      if (result === "ok" || result === "duplicate") {
+        setBagMessage(result === "ok" ? "Цитата в мешке" : "Цитата уже в мешке");
+        setSelectionMenu(null);
+        window.getSelection()?.removeAllRanges();
+      } else {
+        setBagMessage(result === "full" ? "Мешок полон" : "Не удалось добавить цитату");
+      }
+    } catch {
+      setBagMessage("Не удалось добавить цитату");
+    }
   }
 
   function openComposer(note?: PdfNote, draft?: PdfNoteDraft) {
@@ -419,6 +513,11 @@ export function PdfReaderPage() {
     if (viewer && pageCount) viewer.currentPageNumber = Math.max(1, Math.min(pageCount, value));
   }
 
+  function commitPage() {
+    if (pageDraft && /^\d+$/.test(pageDraft)) goToPage(Number(pageDraft));
+    setPageDraft(null);
+  }
+
   function search(value: string, again = false) {
     setQuery(value);
     readerRef.current?.bus.dispatch(value ? "find" : "findbarclose", value ? {
@@ -458,41 +557,58 @@ export function PdfReaderPage() {
             <strong className="pdf-reader__title" title={resource.name}>{resource.name}</strong>
             <small className="d-mono">PDF · стр. {page} из {pageCount || "—"}</small>
           </div>
+          <span ref={setBookmarkSlot} className="pdf-reader__bookmark-slot" />
           <details className="library-menu">
-            <summary className="d-btn d-btn--sm" aria-label="Действия с PDF">⋯</summary>
+            <summary className="d-btn pdf-reader__icon-button" aria-label="Действия с PDF">⋯</summary>
             <div className="library-menu__items">
               {resource.file_url && <button type="button" onClick={() => void download()}>Скачать PDF</button>}
               {notes.length > 0 && <button type="button" onClick={() => void downloadNotes()}>Скачать заметки .md</button>}
               <FileBookControls page={page} pageCount={pageCount} ready={ready}
+                readerHeader={{ actions: bookmarkSlot, bookmarkIcon: <NavIcon name="bookmark" size={17} /> }}
                 onRestore={value => { if (Number.isInteger(value) && value > 0 && value <= pageCount && readerRef.current?.viewer) readerRef.current.viewer.currentPageNumber = value; }} />
             </div>
           </details>
         </div>
         <div className="pdf-reader__controls">
           <button ref={outlineButtonRef} type="button" aria-expanded={outlineOpen} aria-controls="pdf-reader-outline"
-            className={outlineOpen ? "d-btn d-btn--primary" : "d-btn"}
-            onClick={() => setOutlineOpen((value) => !value)} disabled={!ready}>☰ Главы</button>
-          <button type="button" className="pdf-reader__panel-trigger" aria-expanded={panelOpen && mobilePanelOpen}
+            className="d-btn" onClick={() => setOutlineOpen((value) => !value)} disabled={!ready}>
+            <NavIcon name="menu" size={14} /> Главы
+          </button>
+          <div className="pdf-reader__stepper" role="group" aria-label="Страницы PDF">
+            <button type="button" onClick={() => goToPage(page - 1)} disabled={!ready || page <= 1} aria-label="Предыдущая страница">‹</button>
+            <div className="pdf-reader__stepper-value">
+              <input aria-label="Номер страницы" type="text" inputMode="numeric" size={String(pageCount || 1).length}
+                value={pageDraft ?? page} onFocus={(event) => event.currentTarget.select()} onBlur={commitPage}
+                onChange={(event) => setPageDraft(event.target.value)} disabled={!ready}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                  if (event.key === "Escape") setPageDraft(null);
+                }} />
+              <span aria-label={`Всего страниц: ${pageCount}`}>/ {pageCount || "—"}</span>
+            </div>
+            <button type="button" onClick={() => goToPage(page + 1)} disabled={!ready || page >= pageCount} aria-label="Следующая страница">›</button>
+          </div>
+          <div className="pdf-reader__stepper" role="group" aria-label="Масштаб PDF">
+            <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScale = Math.max(0.5, v.currentScale / 1.2); }} disabled={!ready} aria-label="Уменьшить">−</button>
+            <span className="pdf-reader__stepper-value">{zoom} %</span>
+            <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScale = Math.min(3, v.currentScale * 1.2); }} disabled={!ready} aria-label="Увеличить">+</button>
+          </div>
+          <button type="button" className="d-btn" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScaleValue = "page-width"; }} disabled={!ready}>По ширине</button>
+          <button type="button" className="d-btn pdf-reader__panel-trigger" aria-expanded={panelOpen && mobilePanelOpen}
             onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>
-          {!panelOpen && <button type="button" className="pdf-reader__panel-desktop"
+          {!panelOpen && <button type="button" className="d-btn pdf-reader__panel-desktop"
             onClick={showNotes} disabled={!ready}>Заметки · {notes.length}</button>}
-          <button type="button" onClick={() => goToPage(page - 1)} disabled={!ready || page <= 1} aria-label="Предыдущая страница">‹</button>
-          <input aria-label="Номер страницы" type="number" min={1} max={pageCount || 1} value={page}
-            onChange={(event) => goToPage(Number(event.target.value))} disabled={!ready} />
-          <span>из {pageCount || "—"}</span>
-          <button type="button" onClick={() => goToPage(page + 1)} disabled={!ready || page >= pageCount} aria-label="Следующая страница">›</button>
-          <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScale = Math.max(0.5, v.currentScale / 1.2); }} disabled={!ready} aria-label="Уменьшить">−</button>
-          <span>{zoom}%</span>
-          <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScale = Math.min(3, v.currentScale * 1.2); }} disabled={!ready} aria-label="Увеличить">+</button>
-          <button type="button" onClick={() => { const v = readerRef.current?.viewer; if (v) v.currentScaleValue = "page-width"; }} disabled={!ready}>По ширине</button>
-          <input aria-label="Поиск в PDF" type="search" placeholder="Поиск в PDF" value={query} onChange={(event) => search(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") search(query, true); }} disabled={!ready} />
+          <label className="pdf-reader__search">
+            <NavIcon name="search" size={16} />
+            <input aria-label="Поиск в PDF" type="search" placeholder="Поиск в PDF" value={query} onChange={(event) => search(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") search(query, true); }} disabled={!ready} />
+          </label>
         </div>
       </header>
       {error && <p className="pdf-reader__error" role="alert">PDF не открылся: {error}</p>}
       {!ready && !error && <p className="pdf-reader__loading">Загружаю PDF…</p>}
       {preferences.notes_collapsed && notesError && <p className="pdf-reader__error" role="alert">{notesError}</p>}
-      <div className={`pdf-reader__viewport${panelOpen ? " has-side" : ""}${outlineOpen ? " has-outline" : ""}`}>
+      <div className={`pdf-reader__viewport${panelOpen ? " has-side" : ""}${outlineOpen ? " has-outline" : ""}${selectionMenu ? " has-selection" : ""}`}>
         {outlineOpen && <nav id="pdf-reader-outline" className="pdf-reader__outline" aria-label="Главы PDF"
           onKeyDown={event => { if (event.key === "Escape") closeOutline(); }}>
           <header className="pdf-reader__outline-header">
@@ -507,7 +623,8 @@ export function PdfReaderPage() {
             <OutlineList items={outline} expanded={expandedOutline} onToggle={toggleOutline} onSelect={selectOutlineItem} />
           </div>
         </nav>}
-        <div ref={containerRef} className="pdf-reader__container" tabIndex={0} onMouseUp={onPdfMouseUp} onClick={(event) => {
+        <div ref={containerRef} className="pdf-reader__container" tabIndex={0} onPointerUp={showSelectionActions}
+          onKeyUp={(event) => { if (event.shiftKey) showSelectionActions(); }} onClick={(event) => {
           if (window.getSelection()?.toString().trim()) return;
           const element = event.target as HTMLElement;
           const pageElement = element.closest<HTMLElement>(".page");
@@ -519,7 +636,7 @@ export function PdfReaderPage() {
           const hit = notes.find((note) => !note.needs_reattach && note.anchors.some((anchor) =>
             anchor.page === pageNumber && anchor.rects.some((rect) =>
               x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)));
-          if (hit) { setActiveNoteId(hit.id); showNotes(); }
+          if (hit && preferences.show_highlights) { setActiveNoteId(hit.id); showNotes(); }
         }}>
           <div ref={viewerRef} className="pdfViewer" />
         </div>
@@ -528,13 +645,13 @@ export function PdfReaderPage() {
             onClick={() => setMobilePanelOpen(false)} />}
           <aside className={`pdf-reader__side${mobilePanelOpen ? " is-open" : ""}`} aria-label="Панель PDF">
             <div className="pdf-reader__side-tabs">
-              <div className="d-tabs" role="tablist" aria-label="Панель PDF">
-                <button type="button" role="tab" aria-selected={!entitySelection} className={!entitySelection ? "active" : ""}
-                  onClick={showNotes}>Заметки · {notes.length}</button>
-                <button type="button" role="tab" aria-selected={!!entitySelection} className={entitySelection ? "active" : ""}
+              <div className="pdf-reader__side-tablist" role="tablist" aria-label="Панель PDF">
+                <button type="button" role="tab" aria-selected={!entitySelection}
+                  onClick={showNotes}>Заметки <span className="d-mono">{notes.length}</span></button>
+                <button type="button" role="tab" aria-selected={!!entitySelection}
                   disabled={!ready} onClick={() => { if (!entitySelection) openEntity(); }}>Сущность из PDF</button>
               </div>
-              <button type="button" aria-label="Свернуть панель PDF" onClick={closeSide}>×</button>
+              <button type="button" className="pdf-reader__side-close" aria-label="Свернуть панель PDF" onClick={closeSide}>×</button>
             </div>
             {entitySelection ? <PdfEntityPanel key={`${id}-${entitySelection.quote}-${entitySelection.page}`} resource={resource}
               sources={sourceQuery.data ?? []} quote={entitySelection.quote} page={entitySelection.page} />
@@ -551,18 +668,18 @@ export function PdfReaderPage() {
           Выделите новую цитату для перепривязки заметки.
           <button type="button" onClick={() => setReattachId(null)}>Отмена</button>
         </div>}
-        {/* инлайн-стиль намеренно — меню встаёт у выделенного текста, координаты из выделения */}
-        {selectionMenu && <div className="pdf-reader__selection-menu" style={{ left: selectionMenu.left, top: selectionMenu.top }}>
-          <div><span title={selectionMenu.draft.quote}>«{selectionMenu.draft.quote}»</span>
-            <button type="button" aria-label="Закрыть меню выделения" onClick={() => { setSelectionMenu(null); window.getSelection()?.removeAllRanges(); }}>×</button>
-          </div>
+        {selectionMenu && <div ref={selectionMenuRef} className="pdf-reader__selection-menu" role="group" aria-label="Действия с цитатой"
+          onMouseDown={(event) => event.preventDefault()}>
           <button type="button" onClick={() => reattachId ? void reattachNote(selectionMenu.draft) : openComposer(undefined, selectionMenu.draft)}>
-            {reattachId ? "Привязать к заметке" : "+ Заметка к цитате"}
+            {reattachId ? "Привязать к заметке" : "+ Заметка"}
           </button>
-          {!reattachId && <button type="button" onClick={() => openEntity(selectionMenu.draft.quote, selectionMenu.draft.anchors[0]?.page ?? page)}>
-            + Сущность из цитаты
-          </button>}
+          {!reattachId && <>
+            <button type="button" className="pdf-reader__selection-entity"
+              onClick={() => openEntity(selectionMenu.draft.quote, selectionMenu.draft.anchors[0]?.page ?? page)}>В сущность</button>
+            <button type="button" onClick={() => putQuoteInBag(selectionMenu.draft)}>В мешок</button>
+          </>}
         </div>}
+        {bagMessage && <div className="pdf-reader__bag-status" role="status">{bagMessage}</div>}
         {composer && <div className="pdf-reader__composer" role="dialog" aria-label={composer.id ? "Править заметку" : "Новая заметка"}>
           <div className="pdf-reader__composer-head"><strong>{composer.id ? "Править заметку" : "Новая заметка"}</strong>
             <button type="button" aria-label="Закрыть редактор заметки" onClick={() => setComposer(null)}>×</button></div>

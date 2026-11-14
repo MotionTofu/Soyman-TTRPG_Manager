@@ -127,9 +127,11 @@ export function PdfNotesPanel({ notes, preferences, onPreferenceChange, continuo
           onClick={() => { onContinuousChange(false); onPreferenceChange({ note_mode: "margins" }); }}>У страниц</button>
         <button type="button" aria-pressed={continuous} onClick={() => onContinuousChange(true)}>Одним текстом</button>
       </div>
-      <button type="button" disabled={!ready} onClick={onAddNote}>+ Общая заметка</button>
-      <label><input type="checkbox" checked={preferences.show_highlights}
-        onChange={(event) => onPreferenceChange({ show_highlights: event.target.checked })} /> Подсветка на PDF</label>
+      <div className="pdf-reader__notes-actions">
+        <button type="button" disabled={!ready} onClick={onAddNote}>+ Общая заметка</button>
+        <label><input type="checkbox" checked={preferences.show_highlights}
+          onChange={(event) => onPreferenceChange({ show_highlights: event.target.checked })} /> Подсветка</label>
+      </div>
     </div>
     {!continuous && preferences.note_mode === "margins" && general.length > 0 &&
       <div className="pdf-reader__notes-general"><strong>Ко всей книге</strong>

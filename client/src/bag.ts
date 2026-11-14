@@ -16,6 +16,8 @@ export const DEFAULT_BAG_SIZE = 16;
 export const MIN_BAG_SIZE = 4;
 export const MAX_BAG_SIZE = 64;
 
+export type BagItem = SearchResult & { pdfQuote?: { page: number; text: string } };
+
 function isValidBagItem(item: unknown): boolean {
   if (!item || typeof item !== "object") return false;
   const r = item as Record<string, unknown>;
@@ -24,23 +26,29 @@ function isValidBagItem(item: unknown): boolean {
   const allowed = ["campaign","setting","player","character","location","being","community","artifact","resource","adventure","scene","session","compendium_entry","setting_event"];
   if (!allowed.includes(r.type as string)) return false;
   if (typeof r.title !== "string" || r.title.length > 200 || /[<>]/.test(r.title)) return false;
+  if (r.pdfQuote !== undefined) {
+    if (r.type !== "resource" || !r.pdfQuote || typeof r.pdfQuote !== "object") return false;
+    const { page, text } = r.pdfQuote as Record<string, unknown>;
+    return typeof page === "number" && Number.isSafeInteger(page) && page > 0
+      && typeof text === "string" && text.length > 0 && text.length <= 10_000;
+  }
   return true;
 }
 
-export function loadBagItems(): SearchResult[] {
+export function loadBagItems(): BagItem[] {
   try {
     const stored = localStorage.getItem(ITEMS_KEY) || "[]";
-    if (stored.includes("__proto__") || stored.includes("constructor")) throw new Error("polluted");
-    const raw = JSON.parse(stored);
+    const raw = JSON.parse(stored, (key, value: unknown) =>
+      key === "__proto__" || key === "constructor" ? undefined : value);
     if (!Array.isArray(raw)) return [];
-    return raw.filter(isValidBagItem) as SearchResult[];
+    return raw.filter(isValidBagItem) as BagItem[];
   } catch {
     try { localStorage.removeItem(ITEMS_KEY); } catch {}
     return [];
   }
 }
 
-function saveBagItems(items: SearchResult[]) {
+function saveBagItems(items: BagItem[]) {
   localStorage.setItem(ITEMS_KEY, JSON.stringify(items));
   window.dispatchEvent(new Event(BAG_EVENT));
 }
@@ -59,8 +67,10 @@ export function saveBagSize(size: number) {
   window.dispatchEvent(new Event(BAG_EVENT));
 }
 
-function itemKey(item: SearchResult): string {
-  return `${item.type}:${item.id}`;
+function itemKey(item: BagItem): string {
+  return item.pdfQuote
+    ? JSON.stringify([item.type, item.id, item.pdfQuote.page, item.pdfQuote.text])
+    : `${item.type}:${item.id}`;
 }
 
 export type BagAddResult = "ok" | "invalid" | "full" | "duplicate";
@@ -77,7 +87,7 @@ export function onBagToast(callback: (payload: { message: string; kind: "info" |
 }
 
 // Возвращает причину отказа, чтобы UI мог показать тост вместо тишины.
-export function addToBag(item: SearchResult): BagAddResult {
+export function addToBag(item: BagItem): BagAddResult {
   if (!isValidBagItem(item)) {
     emitBagToast("Нельзя добавить — неверные данные", "error");
     return "invalid";
@@ -102,13 +112,13 @@ export function removeFromBag(index: number) {
 
 // Убрать сразу несколько — после выгрузки мешка на страницу, где индексы
 // сдвигались бы после каждого удаления.
-export function removeItemsFromBag(items: SearchResult[]) {
+export function removeItemsFromBag(items: BagItem[]) {
   const keys = new Set(items.map(itemKey));
   saveBagItems(loadBagItems().filter((i) => !keys.has(itemKey(i))));
 }
 
 export function useBag() {
-  const [items, setItems] = useState<SearchResult[]>(loadBagItems);
+  const [items, setItems] = useState<BagItem[]>(loadBagItems);
   const [size, setSize] = useState<number>(loadBagSize);
 
   useEffect(() => {

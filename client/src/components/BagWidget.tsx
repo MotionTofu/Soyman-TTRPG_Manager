@@ -1,9 +1,9 @@
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
 import { Verstak } from "./Verstak/Verstak";
-import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
+import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag, type BagItem } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
 import { useResource, write } from "../data/hooks";
@@ -55,7 +55,12 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
     addToBag(item);
   }
 
-  function handleDragStart(e: DragEvent<HTMLDivElement>, item: SearchResult) {
+  function handleDragStart(e: DragEvent<HTMLDivElement>, item: BagItem) {
+    if (item.pdfQuote) {
+      e.dataTransfer.setData("text/plain", item.pdfQuote.text);
+      e.dataTransfer.effectAllowed = "copy";
+      return;
+    }
     e.dataTransfer.setData(SEARCH_DRAG_MIME, JSON.stringify(item));
     e.dataTransfer.effectAllowed = "link";
   }
@@ -71,8 +76,9 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
     }
   }
 
+  const hasCards = items.some((item) => !item.pdfQuote);
   const targetsFor = (item: SearchResult) => targets.filter((t) => t.accepts(item));
-  const unloadable = items.filter((i) => targetsFor(i).length > 0);
+  const unloadable = items.filter((i) => !i.pdfQuote && targetsFor(i).length > 0);
   const distinctTargets = new Set(unloadable.flatMap((i) => targetsFor(i).map((t) => t.id)));
 
   async function unloadAll() {
@@ -111,8 +117,8 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
           <button
             type="button"
             className="bag-unload"
-            disabled={items.length === 0}
-            title={items.length === 0 ? "Мешок пуст" : "Открыть все карточки из мешка на верстаке"}
+            disabled={!hasCards}
+            title={hasCards ? "Открыть все карточки из мешка на верстаке" : "В мешке нет карточек для верстака"}
             onClick={() => setVerstakOpen(true)}
           >
             На верстак
@@ -161,9 +167,11 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
               className="bag-cell bag-cell-filled"
               draggable
               onDragStart={(e) => handleDragStart(e, item)}
-              title={item.title}
+              title={item.pdfQuote ? `${item.title} · Стр. ${item.pdfQuote.page}\n${item.pdfQuote.text}` : item.title}
             >
-              <span className="bag-cell-label">{item.title}</span>
+              {item.pdfQuote
+                ? <Link className="bag-cell-label" draggable={false} to={`/resources/${item.id}/read?page=${item.pdfQuote.page}`}>{item.pdfQuote.text}</Link>
+                : <span className="bag-cell-label">{item.title}</span>}
               {mapPlacement && placementSource(item) && <button type="button" className="bag-cell-place" title="Разместить на карте" aria-label={`Разместить из мешка: ${item.title}`}
                 onClick={() => { mapPlacement.place(placementSource(item)!); onMapPlace?.(); }}>На карту</button>}
               <button
@@ -190,7 +198,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
       </div>}
       {unloading && (
         <UnloadModal
-          items={items}
+          items={items.filter((item) => !item.pdfQuote)}
           targetsFor={targetsFor}
           onCancel={() => setUnloading(false)}
           onConfirm={runUnload}
