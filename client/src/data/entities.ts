@@ -136,6 +136,7 @@ const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly
   // иначе каждый ход тянул бы календарь (группа «остальное», часть 1).
   { prefix: "/calendar", kinds: ["session"], skipCard: true },
   { prefix: "/finance", kinds: ["session"], skipCard: true },
+  { prefix: "/finance/summary", kinds: ["campaign"] },
   { prefix: /^\/(campaigns|players)(\?|$)/, kinds: ["session"], skipCard: true },
   // Список «Архива» собран из архивных сущностей всех видов. Отправка в архив
   // адресована самой сущности — без этого правила открытый в другом окне архив

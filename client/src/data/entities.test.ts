@@ -66,6 +66,8 @@ describe("что задевает правка", () => {
     expect(matchesAffect(dataKeys.resource("/campaigns/2/sessions"), card)).toBe(false);
     expect(matchesAffect(dataKeys.resource("/campaigns/20"), card)).toBe(false);
     expect(matchesAffect(dataKeys.resource("/canvas/index"), card)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/finance/summary"), card)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/finance/summary"), { kind: "campaign" })).toBe(true);
   });
 
   it("отметка сцены доходит до дерева и плана пульта, но не до остальных его панелей", () => {

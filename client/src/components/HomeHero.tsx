@@ -7,6 +7,17 @@ import { plural } from "../sceneKinds";
 import { SESSION_PASSPORT_FIELDS } from "./sessionPaperFields";
 import type { Campaign, CampaignDebt, SessionDetail, SessionSummary } from "../types";
 
+export function HomeHeroEmpty({ onSchedule }: { onSchedule: () => void }) {
+  return (
+    <section className="home-hero-empty d-focal" aria-labelledby="home-hero-empty-title">
+      <h1 id="home-hero-empty-title">Ближайших сессий нет</h1>
+      <button type="button" className="d-btn d-btn--primary" onClick={onSchedule}>
+        Запланировать сессию
+      </button>
+    </section>
+  );
+}
+
 /**
  * Герой главной — ближайшая игра (макет «Д», холст v30 «Roll-Home»;
  * docs/design-system.md §6.8): название и факты слева, обложка справа.

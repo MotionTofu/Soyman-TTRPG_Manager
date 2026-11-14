@@ -14,7 +14,7 @@ import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { CreateCampaignTile } from "../components/CreateCampaignTile";
 import { OnboardingHero } from "../components/OnboardingHero";
 import { HomeArticleCard } from "../components/HomeArticleCard";
-import { HomeHero } from "../components/HomeHero";
+import { HomeHero, HomeHeroEmpty } from "../components/HomeHero";
 import { loadHideFinance } from "../financePrivacy";
 import { formatNearestDate } from "../nearestDate";
 import { sessionLabel } from "../sessionLabel";
@@ -145,6 +145,8 @@ export function HomeCalendarPage() {
     if (current) return current;
     return planned.find(({ dt }) => dt.getTime() > now.getTime())?.s ?? null;
   })();
+  const showSessionEmptyState = !nearestSession && !calendarError && !campaignsError;
+  const showOnboarding = showSessionEmptyState && campaigns.length === 0;
 
   // Прошедшие, но не разобранные игры: статус всё ещё «запланирована», а время
   // начала уже позади. Такая сессия проваливалась в тишину — в героя она не
@@ -328,14 +330,14 @@ export function HomeCalendarPage() {
       )}
 
       {/* P1 D-02: дубль EmptyState «Начни с хранилища» убран — единый OnboardingHero покрывает §1.11 */}
-      {initialLoad && !nearestSession && campaigns.length === 0 && sessionStorage.getItem("justCreated") && (
+      {showOnboarding && sessionStorage.getItem("justCreated") && (
         <div className="card" style={{ background: "var(--paper)", border: "1px solid var(--line)", padding: "10px 12px", borderLeft: "3px solid var(--accent)" }}>
           <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>Добро пожаловать, Мастер!</span>
           <span className="muted" style={{ marginLeft: 8, fontSize: "var(--fs-meta)" }}>Начни с Системы — первый шаг ниже.</span>
         </div>
       )}
       {/* Герой — ближайшая игра во всю ширину над колонками (макет «Д»). */}
-      {nearestSession ? (
+      {nearestSession && (
         // Ведёт в карточку сессии, а не в пульт: с главной ныряют
         // ГОТОВИТЬ ближайшую игру; кнопка в пульт есть в навигационном
         // виджете из любой точки приложения (подробнее — HomeHero).
@@ -346,7 +348,11 @@ export function HomeCalendarPage() {
           started={heroStarted}
           onHeld={() => setFinanceSessionId(nearestSession.id)}
         />
-      ) : (
+      )}
+      {showSessionEmptyState && !showOnboarding && (
+        <HomeHeroEmpty onSchedule={() => openCreateModal(today)} />
+      )}
+      {showOnboarding && (
         <OnboardingHero
           systems={systems}
           settings={settings}
@@ -401,7 +407,7 @@ export function HomeCalendarPage() {
           <div className="d-block home-section home-section-campaigns">
             <div className="d-plate-row">
               <h2 className="d-plate">Кампании</h2>
-              {finance && <span className="d-note">{finance.campaigns} в работе</span>}
+              {finance && <span className="d-note">Активных у мастера: {finance.campaigns}</span>}
               <Link className="d-end home-more" to="/campaigns">Все кампании ›</Link>
             </div>
             <div className="home-tiles">
@@ -451,15 +457,15 @@ export function HomeCalendarPage() {
                 <div className="finance-summary-row">
                   <div className="stat-plate">
                     <span className="stat-plate-value">{finance.heldSessions}</span>
-                    <span className="stat-plate-label">Сессий проведено</span>
+                    <span className="stat-plate-label">Сессий провёл как мастер</span>
                   </div>
                   <div className="stat-plate">
                     <span className="stat-plate-value">{finance.playedSessions}</span>
-                    <span className="stat-plate-label">Сессий сыграно</span>
+                    <span className="stat-plate-label">Сессий сыграл как игрок</span>
                   </div>
                   <div className="stat-plate">
                     <span className="stat-plate-value">{finance.campaigns}</span>
-                    <span className="stat-plate-label">Кампании в работе</span>
+                    <span className="stat-plate-label">Активных кампаний мастера</span>
                   </div>
                 </div>
               </div>

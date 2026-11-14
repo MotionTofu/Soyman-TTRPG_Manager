@@ -113,7 +113,7 @@ export function CampaignsListPage() {
 
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack campaigns-list" style={{ position: "relative" }}>
       <SectionBackground />
       {promptDialog}
       <ListPage
@@ -257,7 +257,10 @@ function whenCell(c: Campaign) {
   if (c.status !== "paused" && c.status !== "completed") {
     return c.next_planned_date
       ? <span className="d-mono">{formatNearestDate(c.next_planned_date)} · №{(c.held_sessions_count ?? 0) + 1}</span>
-      : <span className="d-mono is-none">не запланирована</span>;
+      : <span className="d-mono is-none">
+          <span className="campaigns-list__no-date">не запланирована</span>
+          <span className="campaigns-list__date-dash" aria-hidden="true">—</span>
+        </span>;
   }
   return c.last_played_date ? <span className="d-mono">{monthOf(c.last_played_date)}</span> : <span className="d-mono is-none">—</span>;
 }

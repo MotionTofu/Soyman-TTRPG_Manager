@@ -41,7 +41,8 @@ export function totalEarnings(): {
   const counts = db
     .prepare(
       `SELECT COUNT(DISTINCT s.id) as heldSessions,
-              COUNT(DISTINCT c.id) as campaigns
+              (SELECT COUNT(*) FROM campaigns
+               WHERE archived_at IS NULL AND role = 'gm' AND status = 'active') as campaigns
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        WHERE s.status = 'held' AND s.archived_at IS NULL AND c.archived_at IS NULL AND c.role = 'gm'`

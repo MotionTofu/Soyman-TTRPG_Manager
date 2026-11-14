@@ -503,6 +503,17 @@
   gap: var(--sp-8);
   margin-bottom: var(--sp-7);
 }
+.home-hero-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-7);
+}
+.home-hero-empty h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .home-hero2__text {
   display: flex;
   flex-direction: column;

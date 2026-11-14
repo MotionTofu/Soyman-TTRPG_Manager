@@ -52,6 +52,7 @@
 .reg-row__cell { color: var(--ink-2); font-size: var(--fs-data); }
 .reg-row__cell.is-mono, .reg-row__cell .d-mono { font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; }
 .reg-row__cell .is-none { color: var(--muted); }
+.campaigns-list__date-dash { display: none; }
 .reg-add-row { width: 100%; min-height: 46px; border: 1px dashed var(--line); border-radius: 0; background: transparent; color: var(--muted); font-family: var(--font-ui); font-size: var(--fs-label); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
 .reg-add-row:hover { color: var(--ink); border-color: var(--edge); }
 
@@ -70,6 +71,28 @@
   .reg-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
   .reg-table__head, .reg-row { grid-template-columns: var(--reg-cols-phone); }
   .reg-wide { display: none; }
+  .campaigns-list :is(.reg-table__head, .reg-row) {
+    grid-template-columns: minmax(0, 1fr) 82px 40px;
+    gap: var(--sp-3);
+  }
+  .campaigns-list :is(.reg-table__head > span, .reg-row > .reg-row__name, .reg-row > .reg-row__cell) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .campaigns-list .reg-row__name {
+    padding-block: var(--sp-3);
+    line-height: 1.2;
+    overflow: visible;
+  }
+  .campaigns-list__no-date {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .campaigns-list__date-dash { display: inline; }
 }
 @media (max-width: 700px) {
   .reg-tile > .entity-dots, .reg-row .entity-dots { opacity: 1; width: 40px; height: 40px; }
