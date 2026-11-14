@@ -28,6 +28,10 @@
    global border-box rule otherwise makes the 9px page border shrink only the
    rendered canvas, shifting selection/search highlights off the glyphs. */
 .pdf-reader__container .pdfViewer .page { box-sizing: content-box; }
+/* PDF.js draws the glyphs on the canvas. Keep its selectable text layer
+   transparent even when the app's global selection rule sets a text color. */
+.pdf-reader .textLayer ::selection { color: transparent; }
+.pdf-reader .textLayer ::-moz-selection { color: transparent; }
 .pdf-reader__error, .pdf-reader__loading { padding: 1rem; }
 
 .pdf-reader__notes {
@@ -195,7 +199,12 @@
 
 .app-shell.app-shell-pdf { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .app-shell-pdf > :is(.app-nav, .mobile-topbar, .search-panel-slot, .audio-player-slot, .mini-player-bar, .mobile-bottom-nav, .mobile-drawer-backdrop) { display: none; }
-.app-shell-pdf > .app-content.has-player { padding: 0; }
+.app-shell.app-shell-pdf > .app-content {
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
 .pdf-reader { height: 100dvh; min-height: 0; background: var(--sheet); }
 .pdf-reader__toolbar { display: block; padding: 0; }
 .pdf-reader__header {
