@@ -53,7 +53,7 @@ function IntroCard({ title, titleEn, limits, sections, grim, closed }: GrimIntro
     <section className={`lg-intro${open ? "" : " is-closed"}`} aria-label={title}>
       <header>
         <h3>{title}</h3>
-        {titleEn && <span className="lb-orig">[{titleEn}]</span>}
+        {titleEn && <span className="lb-orig" lang="en">[{titleEn}]</span>}
         <button type="button" className="lb-back" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Свернуть ▴" : "Развернуть ▾"}</button>
       </header>
       {open && (
@@ -86,7 +86,7 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
     <article className="lb-art lg-art" aria-label={`Статья: ${e.name}`}>
       <div className="lb-crumbs"><Link className="lb-back" to={link(chapter.entry.id)}>← {chapter.entry.name}{a.sub && ` · ${a.sub}`}</Link></div>
       <div className="lb-art__head">
-        <h3>{e.name}<span className="lb-orig">[{e.name_original}]</span></h3>
+        <h3>{e.name}{e.name_original && <span className="lb-orig" lang="en">[{e.name_original}]</span>}</h3>
         <span className="d-end">
           <button type="button" className="d-btn d-btn--sm"
             onClick={() => addToBag({ type: "compendium_entry", id: e.id, title: e.name, kind: e.kind, system_id: e.system_id, section_id: e.section_id })}>
@@ -105,7 +105,7 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
       {play ? (
         <div className="lg-cols">
           <div>
-            <div className="lb-lbl lg-colhead">Как разыграть<small>Explanation · Power</small></div>
+            <h4 className="lg-colhead">Как разыграть<small lang="en">Explanation · Power</small></h4>
             <div className="lg-text"><Paras lines={paras(e.description)} grim={grim} /></div>
             {a.powerPlus.length > 0 && (
               <div className="lg-power lg-power--plus"><b aria-hidden>+</b><div><div className="lb-tags">{a.powerPlus.map((t) => <Tag key={t}>{t}</Tag>)}</div><div className="lb-lbl">Помогает</div></div></div>
@@ -115,12 +115,12 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
             )}
           </div>
           <div>
-            <div className="lb-lbl lg-colhead">Что выходит<small>Success · Extra Feats · Consequences</small></div>
+            <h4 className="lg-colhead">Что выходит<small lang="en">Success · Extra Feats · Consequences</small></h4>
             {a.success.map((s, i) => (
               <p key={i} className="lg-success">{s.effects.map((k) => <Effect key={k} k={k} tips={tips} />)} <LitmRich text={s.text} grim={grim} />{acts?.success(s.text, s.effects)}</p>
             ))}
-            {a.feats.length > 0 && <><div className="lb-lbl lg-sub">Дополнительные подвиги</div><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
-            {a.consequences.length > 0 && <><div className="lb-lbl lg-sub">Последствия</div><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} />{acts?.consequence(t)}</li>)}</ul></>}
+            {a.feats.length > 0 && <><h5 className="lg-sub">Дополнительные подвиги</h5><ul className="lg-dia lg-dia--full">{a.feats.map((t, i) => <li key={i}><LitmRich text={t} grim={grim} /></li>)}</ul></>}
+            {a.consequences.length > 0 && <><h5 className="lg-sub">Последствия</h5><ul className="lg-dia">{a.consequences.map((t, i) => <li key={i}><Cq text={t} grim={grim} />{acts?.consequence(t)}</li>)}</ul></>}
           </div>
         </div>
       ) : (
@@ -130,7 +130,7 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
       {a.lists.length > 0 && (
         <div className="lg-lists">
           {a.lists.map((l) => (
-            <section key={l.name}><h4>{l.name}{l.nameEn && <small>{l.nameEn}</small>}</h4><ul className="lg-dia">{l.items.map((t, i) => <li key={i}><Cq text={t} grim={grim} /></li>)}</ul></section>
+            <section key={l.name}><h4>{l.name}{l.nameEn && <small lang="en">{l.nameEn}</small>}</h4><ul className="lg-dia">{l.items.map((t, i) => <li key={i}><Cq text={t} grim={grim} /></li>)}</ul></section>
           ))}
         </div>
       )}
@@ -150,14 +150,16 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
 }
 
 /** Строки статей главы: имя и эффекты глаголами; отсылки — «→ см.» (Q6). */
-export function ArticleRows({ chapter, selectedId, link }: { chapter: GrimChapter; selectedId?: number; link: (id: number) => string }) {
+export function ArticleRows({ chapter, selectedId, link, showEffects = true }: {
+  chapter: GrimChapter; selectedId?: number; link: (id: number) => string; showEffects?: boolean;
+}) {
   let sub = "";
   return (
     <ul className="lg-rows">
       {chapter.articles.map((a) => {
         const head = a.sub && a.sub !== sub ? a.sub : null;
         sub = a.sub;
-        const effs = articleEffects(a).map((k) => EFFECT_NAMES[k] ?? k);
+        const effects = showEffects ? articleEffects(a).map((k) => EFFECT_NAMES[k] ?? k) : [];
         return (
           <Fragment key={a.entry.id}>
             {head && <li className="lg-rows__sub">{head}</li>}
@@ -165,7 +167,7 @@ export function ArticleRows({ chapter, selectedId, link }: { chapter: GrimChapte
               <Link to={link(a.entry.id)} className={`lg-row${a.see ? " is-see" : ""}${a.entry.id === selectedId ? " is-on" : ""}`}
                 aria-current={a.entry.id === selectedId ? "page" : undefined}>
                 <span>{a.entry.name}{a.see && <i> → см.</i>}</span>
-                {effs.length > 0 && <small>{effs.join(" · ")}</small>}
+                {effects.length > 0 && <small>{effects.join(" · ")}</small>}
               </Link>
             </li>
           </Fragment>
@@ -182,13 +184,13 @@ export function LitmGrimoireToc({ systemId, sectionId, selectedId }: { systemId:
   const link = (id: number) => grimoireHref(systemId, sectionId, id);
   const openId = chapters.find((c) => c.entry.id === selectedId || c.articles.some((a) => a.entry.id === selectedId))?.entry.id;
   return (
-    <div className="litm-book litm-book--toc lg-toc">
+    <div className="litm-book litm-book--toc lg-toc lg-grimoire-toc">
       {chapters.map((c) => (
         <div key={c.entry.id} className={c.entry.id === openId ? "is-open" : ""}>
           <Link to={link(c.entry.id)} className={`lg-toc__ch${c.entry.id === selectedId ? " is-on" : ""}`}>
             <span>{c.entry.name}</span><b>{c.articles.length} {c.entry.id === openId ? "▴" : "▾"}</b>
           </Link>
-          {c.entry.id === openId && <ArticleRows chapter={c} selectedId={selectedId} link={link} />}
+          {c.entry.id === openId && <ArticleRows chapter={c} selectedId={selectedId} link={link} showEffects={false} />}
         </div>
       ))}
     </div>
@@ -207,7 +209,6 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
 
   const [query, setQuery] = useState("");
   const hits = useMemo(() => searchGrimoire(articles, query), [articles, query]);
-  const indexSize = articles.reduce((n, a) => n + a.index.length, 0);
 
   const at = articles.findIndex((a) => a.entry.id === selectedId);
   const article = at >= 0 ? articles[at] : null;
@@ -215,10 +216,10 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
   const subText = article && chapter?.subs.find((s) => s.name === article.sub && s.text.length);
 
   return (
-    <div className="lg">
+    <div className="lg lg-grimoire">
       <div className="lb-head">
         <h2>Гримуар действий</h2>
-        <span className="d-mono">{articles.length} {plural(articles.length, "статья", "статьи", "статей")} · {chapters.length} {plural(chapters.length, "раздел", "раздела", "разделов")} · указатель {indexSize} {plural(indexSize, "строка", "строки", "строк")}</span>
+        <span className="lg-count">{articles.length} {plural(articles.length, "статья", "статьи", "статей")} · {chapters.length} {plural(chapters.length, "раздел", "раздела", "разделов")}</span>
       </div>
       <div className="lb-bar">
         <label className="d-field">
@@ -246,7 +247,7 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
         </>
       ) : chapter ? (
         <section className="lg-chapter">
-          <h3>{chapter.entry.name}<span className="lb-orig">[{chapter.entry.name_original}]</span></h3>
+          <h3>{chapter.entry.name}{chapter.entry.name_original && <span className="lb-orig" lang="en">[{chapter.entry.name_original}]</span>}</h3>
           {chapter.entry.description && <div className="lb-lead"><Paras lines={paras(chapter.entry.description)} grim={grim} /></div>}
           {chapter.intro && <IntroCard {...chapter.intro} grim={grim} />}
           {chapter.subs.filter((s) => s.text.length).map((s) => <IntroCard key={s.name} title={s.name} titleEn={s.nameEn} limits={[]} sections={[{ head: "", text: s.text }]} grim={grim} />)}
@@ -256,7 +257,12 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
         <div className="lg-contents">
           {chapters.map((c) => (
             <section key={c.entry.id}>
-              <h3><Link to={link(c.entry.id)}>{c.entry.name}</Link>{c.page !== null && <small className="d-mono">с. {c.page}</small>}</h3>
+              <h3>
+                <Link to={link(c.entry.id)} className="lg-contents-link">
+                  <span>{c.entry.name}</span>
+                  {c.page !== null && <small className="d-mono">с. {c.page}</small>}
+                </Link>
+              </h3>
               <ArticleRows chapter={c} link={link} />
             </section>
           ))}

@@ -11,6 +11,8 @@
 .sys-toc__items > button { display: flex; align-items: baseline; gap: var(--sp-3); width: 100%; min-height: 36px; padding: var(--sp-3) var(--sp-4); border: 0; border-left: 6px solid transparent; border-radius: 0; background: transparent; color: var(--ink); text-align: left; }
 .sys-toc__items > button span { min-width: 0; overflow-wrap: anywhere; }
 .sys-toc__items > button b { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 400; color: var(--muted); }
+.sys-toc__items--litm > button { font-size: var(--fs-body); line-height: 1.4; }
+.sys-toc__items--litm > button b { flex-shrink: 0; font-size: var(--fs-meta); }
 .sys-toc__items > button.active { position: relative; z-index: 1; background: var(--sheet); border-left-color: var(--acc); box-shadow: 2px 0 var(--sheet); font-weight: 700; }
 .sys-toc__items > button:hover { background: var(--tab); }
 .sys-toc__label { padding: var(--sp-5) 0 var(--sp-3) var(--sp-2); font-size: var(--fs-micro); }

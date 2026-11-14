@@ -33,7 +33,7 @@ export function LitmSection({ systemCode, systemId, section, focusEntryId, child
     return p;
   }, { replace: true });
   return (
-    <section className="litm-book">
+    <section className="litm-book litm-book--section">
       {catalog === "challenges" && <LitmChallengesView systemId={systemId} sectionId={section.id} entries={entries} selectedId={focusEntryId} onSelect={select} />}
       {catalog === "themes" && <LitmThemesView systemId={systemId} entries={entries} selectedId={focusEntryId} onSelect={select} />}
       {catalog === "tropes" && <LitmTropesView systemId={systemId} entries={entries} selectedId={focusEntryId} onSelect={select} />}

@@ -41,7 +41,7 @@ export function BookText({ sections, page, grim, title = "Подробно", sub
       </header>
       {open && sections.map((s, i) => (
         <div key={i} className="lr-detail__sec">
-          {(s.head || s.page) && <h5>{s.head}{s.headEn && <span className="lb-orig">[{s.headEn}]</span>}{s.page && <small className="d-mono">с. {s.page}</small>}</h5>}
+          {(s.head || s.page) && <h5>{s.head}{s.headEn && <span className="lb-orig" lang="en">[{s.headEn}]</span>}{s.page && <small className="d-mono">с. {s.page}</small>}</h5>}
           <div className="lr-detail__cols">
             <div className="lg-text"><Paras lines={lines(s.text)} grim={grim} /></div>
             {en && <div className="lr-en" lang="en"><En text={s.textEn} /></div>}
@@ -65,7 +65,7 @@ function Catalog({ group }: { group: RuleGroup }) {
   const n = group.catalog.reduce((k, c) => k + c.items.length, 0);
   return (
     <section className="lr-catalog">
-      <div className="lb-lbl">Примеры статусов<small>{n} из книги · {group.catalog.length} {plural(group.catalog.length, "группа", "группы", "групп")}</small></div>
+      <h4 className="lr-heading">Примеры статусов<small>{n} из книги · {group.catalog.length} {plural(group.catalog.length, "группа", "группы", "групп")}</small></h4>
       <div className="lr-catalog__grid">
         {group.catalog.map((c) => (
           <div key={c.entry.id}><h5>{c.entry.name}</h5><div className="lb-tags">{c.items.map((s) => <Status key={s.id} name={s.name.replace(/-/g, " ")} />)}</div></div>
@@ -84,7 +84,7 @@ function Article({ a, group, prev, next, link, grim }: {
   const main: ReactNode = <>
     {e.description && <div className="lr-short"><Paras lines={paras(e.description)} grim={grim} /></div>}
     {a.steps.length > 0 && <>
-      <div className="lb-lbl">Как работает<small>по шагам</small></div>
+      <h4 className="lr-heading">Как работает</h4>
       <ol className="lr-steps">{a.steps.map((s, i) => <li key={i}><span><LitmRich text={s} grim={grim} /></span></li>)}</ol>
     </>}
   </>;
@@ -92,7 +92,7 @@ function Article({ a, group, prev, next, link, grim }: {
     <article className="lb-art lr-art" aria-label={`Статья: ${e.name}`}>
       <div className="lb-crumbs"><Link className="lb-back" to={link(group.entry.id)}>← {group.entry.name}</Link></div>
       <div className="lb-art__head">
-        <h3>{e.name}{e.name_original && <span className="lb-orig">[{e.name_original}]</span>}</h3>
+        <h3>{e.name}{e.name_original && <span className="lb-orig" lang="en">[{e.name_original}]</span>}</h3>
         <span className="d-end">
           <button type="button" className="d-btn d-btn--sm"
             onClick={() => addToBag({ type: "compendium_entry", id: e.id, title: e.name, kind: e.kind, system_id: e.system_id, section_id: e.section_id })}>
@@ -112,7 +112,7 @@ function Article({ a, group, prev, next, link, grim }: {
             <Sidebars items={a.sidebars} grim={grim} />
             {a.related.length > 0 && (
               <nav className="lr-related" aria-label="Связано">
-                <div className="lb-lbl">Связано</div>
+                <h4 className="lr-heading">Связано</h4>
                 {a.related.map((r) => {
                   const href = grim.rule(r.name, r.page);
                   const body = <>{r.name}{r.page && <small>{r.page}</small>}</>;
@@ -157,7 +157,7 @@ function GroupPage({ group, link, grim }: { group: RuleGroup; link: (id: number)
   const rest = group.articles.filter((a) => !isCard(a) && !isTerm(a));
   return (
     <section className="lg-chapter lr-group">
-      <h3>{g.name}{g.name_original && <span className="lb-orig">[{g.name_original}]</span>}</h3>
+      <h3>{g.name}{g.name_original && <span className="lb-orig" lang="en">[{g.name_original}]</span>}</h3>
       {g.description && <div className="lb-lead"><Paras lines={paras(g.description)} grim={grim} /></div>}
       {rest.length > 0 && <Rows articles={rest} link={link} />}
       {cards.length > 0 && (
@@ -217,7 +217,7 @@ export function LitmRulesToc({ systemId, sectionId, selectedId }: { systemId: nu
   const { groups, link } = useRules(systemId, sectionId, entries);
   const openId = groupOf(groups, selectedId)?.entry.id;
   return (
-    <div className="litm-book litm-book--toc lg-toc">
+    <div className="litm-book litm-book--toc lg-toc lr-toc">
       {groups.map((g) => (
         <div key={g.entry.id} className={g.entry.id === openId ? "is-open" : ""}>
           <Link to={link(g.entry.id)} className={`lg-toc__ch${g.entry.id === selectedId ? " is-on" : ""}`}>
@@ -246,7 +246,7 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
     <div className="lg lr">
       <div className="lb-head">
         <h2>Справочник</h2>
-        <span className="d-mono">{articles.length} {plural(articles.length, "статья", "статьи", "статей")} · {groups.length} {plural(groups.length, "группа", "группы", "групп")}</span>
+        <span className="lg-count">{articles.length} {plural(articles.length, "статья", "статьи", "статей")} · {groups.length} {plural(groups.length, "группа", "группы", "групп")}</span>
       </div>
       <div className="lb-bar">
         <label className="d-field">
@@ -273,7 +273,7 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
             const many = g.articles.length > 15;
             return (
               <section key={g.entry.id}>
-                <h3><Link to={link(g.entry.id)}>{g.entry.name}</Link></h3>
+                <h3><Link to={link(g.entry.id)} className="lg-contents-link">{g.entry.name}</Link></h3>
                 {many
                   ? <Link className="lg-row" to={link(g.entry.id)}>{g.articles.length} {plural(g.articles.length, "запись", "записи", "записей")} →</Link>
                   : <Rows articles={g.articles} link={link} />}

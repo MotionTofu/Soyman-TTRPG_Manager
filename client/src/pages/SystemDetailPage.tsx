@@ -219,7 +219,7 @@ export function SystemDetailPage() {
       : catalog === "ways" ? <LitmWaysToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} />
       : catalog === "journeys" ? <LitmJourneysToc systemId={systemId} sectionId={sec.id} selectedId={focusEntryId} /> : null;
   };
-  const tocNav = (withGrim: boolean) => <nav className="sys-toc__items" aria-label="Разделы системы">
+  const tocNav = (withGrim: boolean) => <nav className={`sys-toc__items${system.code === "litm" ? " sys-toc__items--litm" : ""}`} aria-label="Разделы системы">
     <button type="button" className={activeTab === "overview" ? "active" : ""} aria-current={activeTab === "overview" ? "page" : undefined} onClick={() => selectTab("overview")}>Обзор</button>
     <div className="sys-toc__label d-mono">Разделы · {sections.length}</div>
     {sections.map((sec) => <Fragment key={sec.id}><button type="button" className={activeTab === String(sec.id) ? "active" : ""} aria-current={activeTab === String(sec.id) ? "page" : undefined} onClick={() => selectTab(String(sec.id))}><span>{sec.name}</span>{" "}<b>{sectionCounts[sec.id] ?? "…"}</b></button>{withGrim && grimToc(sec)}</Fragment>)}
