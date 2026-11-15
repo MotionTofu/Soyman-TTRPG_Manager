@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { NavIcon } from "../../NavIcons";
-import { Article, ArticleRows } from "../LitmGrimoireView";
+import { Article, ChapterPage } from "../LitmGrimoireView";
 import { RulePage } from "../LitmRulesView";
 import { grimoireHref } from "../useGrimoire";
 import { splitConsequence } from "../litmBookText";
@@ -17,30 +17,55 @@ interface GrimoireActions {
   onPick: (e: MouseEvent, items: { label: string; onClick: () => void }[]) => void;
 }
 
+interface BookVisit {
+  target?: LitmArticleTarget;
+  scrollTop?: number;
+  focus?: HTMLElement;
+}
+
 /** Чтение статей на пульте. В режиме «Вызовы» Гримуар также применяет эффекты. */
-export function LitmCompendiumDrawer({ systemId, initialArticle, actions, onClose }: {
+export function LitmCompendiumDrawer({ systemId, initialArticle, initialQuery = "", actions, onClose }: {
   systemId: number;
   initialArticle?: LitmArticleTarget;
+  initialQuery?: string;
   actions?: GrimoireActions;
   onClose: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState<LitmArticleTarget | null>(initialArticle ?? null);
+  const [query, setQuery] = useState(initialQuery);
+  const [visits, setVisits] = useState<BookVisit[]>(() => initialArticle ? [{}, { target: initialArticle }] : [{}]);
+  const active = visits[visits.length - 1];
+  const picked = active.target;
   const { rules, grimoire, rulesId, grimoireId, hits, loading, error, reload } = useLitmCompendium(systemId, query);
   const { chapters, articles, grim, tips, link } = grimoire;
   const body = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const page = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     return () => { if (opener?.isConnected) opener.focus({ preventScroll: true }); };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const panel = body.current;
+    if (!panel || loading) return;
+    if (active.scrollTop !== undefined) {
+      panel.scrollTop = active.scrollTop;
+      if (active.focus?.isConnected) {
+        active.focus.focus({ preventScroll: true });
+        return;
+      }
+    } else if (picked?.anchor) {
+      const heading = page.current?.querySelector<HTMLElement>(`[data-rule-section="${CSS.escape(picked.anchor)}"]`);
+      if (heading) {
+        heading.focus({ preventScroll: true });
+        heading.scrollIntoView({ block: "start" });
+        return;
+      }
+    }
+    if (active.scrollTop === undefined) panel.scrollTop = 0;
     (picked ? page.current : search.current)?.focus({ preventScroll: true });
-    if (body.current) body.current.scrollTop = 0;
-  }, [picked]);
+  }, [active, loading, picked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -49,6 +74,12 @@ export function LitmCompendiumDrawer({ systemId, initialArticle, actions, onClos
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  function open(target: LitmArticleTarget, focus?: HTMLElement) {
+    if (picked?.sectionId === target.sectionId && picked.entryId === target.entryId && picked.anchor === target.anchor) return;
+    const scrollTop = body.current?.scrollTop ?? 0;
+    setVisits([...visits.slice(0, -1), { ...active, scrollTop, focus }, { target }]);
+  }
 
   // Крошки, соседние статьи и ссылки книги открываются в этой же шторке.
   function stayInside(e: MouseEvent) {
@@ -61,13 +92,31 @@ export function LitmCompendiumDrawer({ systemId, initialArticle, actions, onClos
     const entryId = Number(url.searchParams.get("entry"));
     if (!entryId || (sectionId !== rulesId && sectionId !== grimoireId)) return;
     e.preventDefault();
-    setPicked({ sectionId, entryId });
+    open({ sectionId, entryId, anchor: url.hash.slice(1) || undefined }, a);
   }
 
-  const at = picked?.sectionId === grimoireId ? articles.findIndex((a) => a.entry.id === picked?.entryId) : -1;
-  const article = articles[at];
-  const chapter = picked?.sectionId === grimoireId ? chapters.find((c) => c.entry.id === (article?.chapterId ?? picked?.entryId)) : undefined;
+  const previous = visits[visits.length - 2]?.target;
+  const previousEntry = previous?.sectionId === rulesId
+    ? rules.articles.find((a) => a.entry.id === previous?.entryId)?.entry
+      ?? rules.groups.find((g) => g.entry.id === previous?.entryId)?.entry
+    : articles.find((a) => a.entry.id === previous?.entryId)?.entry
+      ?? chapters.find((c) => c.entry.id === previous?.entryId)?.entry;
+  const backLabel = previous ? previousEntry?.name ?? "К предыдущей статье" : query.trim() ? "К результатам" : "К поиску";
   const acts = actions ? grimoireActions(actions) : undefined;
+
+  function renderArticle(target: LitmArticleTarget) {
+    if (target.sectionId === rulesId) {
+      return <RulePage book={rules} selectedId={target.entryId} anchor={target.anchor} grim={{ ...rules.grim, article: grim.article }} />;
+    }
+    const at = articles.findIndex((a) => a.entry.id === target.entryId);
+    const article = articles[at];
+    const chapter = target.sectionId === grimoireId && chapters.find((c) => c.entry.id === (article?.chapterId ?? target.entryId));
+    if (article && chapter) {
+      return <Article a={article} chapter={chapter} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} tips={tips} acts={acts} />;
+    }
+    if (chapter) return <ChapterPage chapter={chapter} link={link} grim={grim} />;
+    return !loading && !error && <p className="lb-empty">Статья не найдена.</p>;
+  }
 
   return createPortal(
     <>
@@ -77,13 +126,18 @@ export function LitmCompendiumDrawer({ systemId, initialArticle, actions, onClos
           <h2>Компендиум</h2>
           <span className="lp-end">
             {picked && (
-              <a className="d-btn d-btn--sm d-btn--ghost" href={grimoireHref(systemId, picked.sectionId, picked.entryId)} target="_blank" rel="noreferrer">
+              <a className="d-btn d-btn--sm d-btn--ghost" href={grimoireHref(systemId, picked.sectionId, picked.entryId, picked.anchor)} target="_blank" rel="noreferrer">
                 В книге ↗
               </a>
             )}
             <button type="button" className="d-btn d-btn--sm" aria-label="Закрыть Компендиум" onClick={onClose}>✕</button>
           </span>
         </header>
+        {picked && (
+          <div className="lp-compendium__back">
+            <button type="button" className="d-btn d-btn--sm" onClick={() => setVisits(visits.slice(0, -1))}>← {backLabel}</button>
+          </div>
+        )}
         <div className="lp-grim__body" ref={body}>
           <label className="d-field">
             <NavIcon name="search" />
@@ -95,52 +149,50 @@ export function LitmCompendiumDrawer({ systemId, initialArticle, actions, onClos
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                if (picked) setPicked(null);
+                if (picked) setVisits([{}]);
               }}
             />
           </label>
           {loading && <p className="lb-empty" role="status">Загружаем Компендиум…</p>}
           {error && <p className="lb-empty" role="alert">Не удалось загрузить Компендиум. <button type="button" className="d-btn d-btn--sm" onClick={reload}>Повторить</button></p>}
-          {picked ? (
-            <>
-              <button type="button" className="d-btn d-btn--sm" onClick={() => setPicked(null)}>{query.trim() ? "← К результатам" : "← К поиску"}</button>
-              <div ref={page} tabIndex={-1}>
-                {picked.sectionId === rulesId ? (
-                  <RulePage key={picked.entryId} book={rules} selectedId={picked.entryId} grim={{ ...rules.grim, article: grim.article }} />
-                ) : article && chapter ? (
-                  <Article key={article.entry.id} a={article} chapter={chapter} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} tips={tips} acts={acts} />
-                ) : chapter ? (
-                  <section className="lg-chapter"><h3>{chapter.entry.name}</h3><ArticleRows chapter={chapter} link={link} /></section>
-                ) : !loading && !error && <p className="lb-empty">Статья не найдена.</p>}
+          {/* Сохраняем развёрнутые блоки статьи и прокрутку списка результатов при возврате. */}
+          <div hidden={!!picked}>
+            {query.trim() ? (
+              <div className="lp-ghits">
+                {hits.map(({ entry, source, phrase }) => (
+                  <button key={entry.id} type="button" className="lp-ghit" onClick={(e) => open({ sectionId: entry.section_id, entryId: entry.id }, e.currentTarget)}>
+                    <b>{entry.name}</b><em>{source}</em>
+                    {phrase && <span>{phrase}</span>}
+                  </button>
+                ))}
+                {!hits.length && !loading && !error && <p className="lb-empty">Ничего не найдено.</p>}
               </div>
-            </>
-          ) : query.trim() ? (
-            <div className="lp-ghits">
-              {hits.map(({ entry, source, phrase }) => (
-                <button key={entry.id} type="button" className="lp-ghit" onClick={() => setPicked({ sectionId: entry.section_id, entryId: entry.id })}>
-                  <b>{entry.name}</b><em>{source}</em>
-                  {phrase && <span>{phrase}</span>}
-                </button>
-              ))}
-              {!hits.length && !loading && !error && <p className="lb-empty">Ничего не найдено.</p>}
-            </div>
-          ) : (
-            <>
-              {rules.groups.length > 0 && <section className="lp-grim__ch">
-                <h3>Справочник</h3>
-                <ul className="lg-rows">{rules.groups.map((group) => (
-                  <li key={group.entry.id}><a className="lg-row" href={rules.link(group.entry.id)}>{group.entry.name}</a></li>
-                ))}</ul>
-              </section>}
-              {chapters.length > 0 && <section className="lp-grim__ch">
-                <h3>Гримуар действий</h3>
-                <ul className="lg-rows">{chapters.map((c) => (
-                  <li key={c.entry.id}><a className="lg-row" href={link(c.entry.id)}>{c.entry.name}</a></li>
-                ))}</ul>
-              </section>}
-              {!rules.groups.length && !chapters.length && !loading && !error && <p className="lb-empty">В Компендиуме пока нет статей Справочника и Гримуара.</p>}
-            </>
-          )}
+            ) : (
+              <>
+                {rules.groups.length > 0 && <section className="lp-grim__ch">
+                  <h3>Справочник</h3>
+                  <ul className="lg-rows">{rules.groups.map((group) => (
+                    <li key={group.entry.id}><a className="lg-row" href={rules.link(group.entry.id)}>{group.entry.name}</a></li>
+                  ))}</ul>
+                </section>}
+                {chapters.length > 0 && <section className="lp-grim__ch">
+                  <h3>Гримуар действий</h3>
+                  <ul className="lg-rows">{chapters.map((c) => (
+                    <li key={c.entry.id}><a className="lg-row" href={link(c.entry.id)}>{c.entry.name}</a></li>
+                  ))}</ul>
+                </section>}
+                {!rules.groups.length && !chapters.length && !loading && !error && <p className="lb-empty">В Компендиуме пока нет статей Справочника и Гримуара.</p>}
+              </>
+            )}
+          </div>
+          {visits.slice(1).map(({ target }, i) => {
+            const current = i === visits.length - 2;
+            return (
+              <div key={i} hidden={!current} ref={current ? page : undefined} tabIndex={-1}>
+                {target && renderArticle(target)}
+              </div>
+            );
+          })}
         </div>
       </aside>
     </>,

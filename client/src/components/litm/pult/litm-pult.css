@@ -747,6 +747,9 @@
 .lp-compendium.litm-book {
   padding: 0;
 }
+.lp-compendium__back {
+  padding: var(--sp-3) var(--sp-6) 0;
+}
 .lp-compendium .lp-ghit em {
   max-width: 12ch;
   text-align: right;

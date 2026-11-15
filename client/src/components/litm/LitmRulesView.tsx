@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { addToBag } from "../../bag";
 import { compendiumPaths } from "../../data/compendiumEntries";
 import { useResource } from "../../data/hooks";
@@ -9,7 +9,7 @@ import { LitmRich, Status, type GrimLinks } from "./LitmBook";
 import { Paras } from "./LitmGrimoireView";
 import { paras, plural } from "./litmBookText";
 import { useRules } from "./useRules";
-import { isCard, isTerm, searchRules, sectionText, type RuleArticle, type RuleGroup, type RuleSection, type RuleSidebar } from "./litmRules";
+import { isCard, isTerm, ruleSectionAnchor, searchRules, sectionText, type RuleArticle, type RuleGroup, type RuleSection, type RuleSidebar } from "./litmRules";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 const lines = (text: string) => text.split("\n").map((s) => s.trim()).filter(Boolean);
@@ -24,11 +24,12 @@ function En({ text }: { text: string }) {
 
 /** Текст книги по разделам, английский рядом по кнопке: «Подробно» Справочника (решение 5г Q1),
  *  правила пути магии. Длинный — свёрнут, если не сказано иначе. */
-export function BookText({ sections, page, grim, title = "Подробно", sub = "полный перевод книги", open: opened }: {
-  sections: RuleSection[]; page?: string; grim: GrimLinks; title?: string; sub?: string; open?: boolean;
+export function BookText({ sections, page, grim, title = "Подробно", sub = "полный перевод книги", open: opened, anchor }: {
+  sections: RuleSection[]; page?: string; grim: GrimLinks; title?: string; sub?: string; open?: boolean; anchor?: string;
 }) {
   const size = sections.reduce((n, s) => n + s.text.length, 0);
-  const [open, setOpen] = useState(opened ?? size < 1500);
+  const linkedSection = !!anchor && sections.some((s) => ruleSectionAnchor(s) === anchor);
+  const [open, setOpen] = useState(linkedSection || (opened ?? size < 1500));
   const [en, setEn] = useState(false);
   if (!sections.length) return null;
   const hasEn = sections.some((s) => s.textEn);
@@ -39,15 +40,23 @@ export function BookText({ sections, page, grim, title = "Подробно", sub
         {open && hasEn && <button type="button" className="d-btn d-btn--sm" aria-pressed={en} onClick={() => setEn(!en)}>{en ? "Только русский" : "Английский рядом"}</button>}
         <button type="button" className="lb-back" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Свернуть ▴" : "Развернуть ▾"}</button>
       </header>
-      {open && sections.map((s, i) => (
-        <div key={i} className="lr-detail__sec">
-          {(s.head || s.page) && <h5>{s.head}{s.headEn && <span className="lb-orig" lang="en">[{s.headEn}]</span>}{s.page && <small className="d-mono">с. {s.page}</small>}</h5>}
-          <div className="lr-detail__cols">
-            <div className="lg-text"><Paras lines={lines(s.text)} grim={grim} /></div>
-            {en && <div className="lr-en" lang="en"><En text={s.textEn} /></div>}
+      {open && sections.map((s, i) => {
+        const id = ruleSectionAnchor(s);
+        return (
+          <div key={i} className="lr-detail__sec">
+            {(s.head || s.page) && (
+              <h5 data-rule-section={id} tabIndex={id ? -1 : undefined}>
+                {s.head}{s.headEn && <span className="lb-orig" lang="en">[{s.headEn}]</span>}
+                {s.page && <small className="d-mono">с. {s.page}</small>}
+              </h5>
+            )}
+            <div className="lr-detail__cols">
+              <div className="lg-text"><Paras lines={lines(s.text)} grim={grim} /></div>
+              {en && <div className="lr-en" lang="en"><En text={s.textEn} /></div>}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }
@@ -75,9 +84,9 @@ function Catalog({ group }: { group: RuleGroup }) {
   );
 }
 
-function Article({ a, group, prev, next, link, grim }: {
+function Article({ a, group, prev, next, link, grim, anchor }: {
   a: RuleArticle; group: RuleGroup; prev: RuleArticle | null; next: RuleArticle | null;
-  link: (id: number) => string; grim: GrimLinks;
+  link: (id: number) => string; grim: GrimLinks; anchor?: string;
 }) {
   const e = a.entry;
   const side = a.sidebars.length > 0 || a.related.length > 0;
@@ -125,7 +134,7 @@ function Article({ a, group, prev, next, link, grim }: {
         </div>
       ) : <div className="lr-solo">{main}</div>}
       <Catalog group={group} />
-      <BookText key={e.id} sections={a.sections} page={a.page} grim={grim} />
+      <BookText key={`${e.id}:${anchor ?? ""}`} sections={a.sections} page={a.page} grim={grim} anchor={anchor} />
       <nav className="lg-pager" aria-label="Соседние статьи">
         {prev ? <Link to={link(prev.entry.id)}><small>← Раньше</small>{prev.entry.name}</Link> : <span />}
         {next ? <Link to={link(next.entry.id)} className="lg-pager__next"><small>Дальше →</small>{next.entry.name}</Link> : <span />}
@@ -197,17 +206,18 @@ function groupOf(groups: RuleGroup[], id: number | undefined): RuleGroup | null 
     || g.catalog.some((c) => c.entry.id === id || c.items.some((s) => s.id === id))) ?? null;
 }
 
-export function RulePage({ book, selectedId, grim = book.grim }: {
+export function RulePage({ book, selectedId, grim = book.grim, anchor }: {
   book: ReturnType<typeof useRules>;
   selectedId: number;
   grim?: GrimLinks;
+  anchor?: string;
 }) {
   const { groups, articles, link } = book;
   const group = groupOf(groups, selectedId);
   if (!group) return null;
   const at = articles.findIndex((a) => a.entry.id === selectedId);
   return at < 0 ? <GroupPage group={group} link={link} grim={grim} /> : (
-    <Article a={articles[at]} group={group} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} />
+    <Article a={articles[at]} group={group} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} anchor={anchor} />
   );
 }
 
@@ -242,8 +252,21 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
   const [query, setQuery] = useState("");
   const hits = useMemo(() => searchRules(articles, query), [articles, query]);
   const group = groupOf(groups, selectedId);
+  const { hash, key } = useLocation();
+  const anchor = hash.slice(1) || undefined;
+  const page = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!anchor || !group || !page.current) return;
+    const heading = page.current.querySelector<HTMLElement>(`[data-rule-section="${CSS.escape(anchor)}"]`);
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    const frame = requestAnimationFrame(() => heading.scrollIntoView({ block: "start" }));
+    return () => cancelAnimationFrame(frame);
+  }, [anchor, group, key, query, selectedId]);
+
   return (
-    <div className="lg lr">
+    <div className="lg lr" ref={page}>
       <div className="lb-head">
         <h2>Справочник</h2>
         <span className="lg-count">{articles.length} {plural(articles.length, "статья", "статьи", "статей")} · {groups.length} {plural(groups.length, "группа", "группы", "групп")}</span>
@@ -266,7 +289,7 @@ export function LitmRulesView({ systemId, sectionId, entries, selectedId }: {
           {!hits.length && <p className="lb-empty">Ничего не найдено.</p>}
         </div>
       ) : group && selectedId !== undefined ? (
-        <RulePage book={book} selectedId={selectedId} />
+        <RulePage book={book} selectedId={selectedId} anchor={anchor} />
       ) : (
         <div className="lg-contents">
           {groups.map((g) => {

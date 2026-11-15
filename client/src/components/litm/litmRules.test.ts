@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CompendiumEntry } from "../../types";
 import { norm } from "./litmBookText";
-import { isCard, isTerm, ruleEntry, rulesOf, searchRules, snippet } from "./litmRules";
+import { isCard, isTerm, resolveCoreRuleRef, ruleEntry, rulesOf, searchRules, snippet } from "./litmRules";
 
 const entry = (id: number, kind: string, name: string, parent: number | null, position: number, data: Record<string, unknown> = {}, description = "") =>
   ({ id, kind, name, name_original: name, parent_id: parent, position, data, description }) as unknown as CompendiumEntry;
@@ -38,6 +38,27 @@ describe("Справочник LitM", () => {
     expect(searchRules(all, "агрес").map((h) => h.article.entry.id)).toEqual([10]);
     expect(searchRules(all, "дорожка")[0]).toMatchObject({ phrase: "(с. 75) Дорожка на теме", rank: 2 });
     expect(snippet("• Статус *ранен-3* мешает", norm("ранен"))).toBe("Статус ранен-3 мешает");
+  });
+
+  it("ведёт к точному подразделу тома I и оставляет неизвестную отсылку текстом", () => {
+    const rule = {
+      ...entry(42, "mechanic_item", "Как ещё работают статусы", 1, 1, {
+        page: "A170",
+        sections: [
+          { ...sec("Противоположные статусы", "x"), headEn: "Polar Statuses" },
+          { ...sec("Побуждающие статусы", "y"), headEn: "Compelling Statuses" },
+        ],
+      }),
+      name_original: "Advanced Use Of Statuses",
+    };
+    const duplicate = { ...rule, id: 12, data: { page: "B170" } };
+    const entries = [duplicate, rule];
+    expect(resolveCoreRuleRef(entries, "Полярные статусы", "A170")).toEqual({ entry: rule, anchor: "rule-polar-statuses" });
+    expect(resolveCoreRuleRef(entries, "Побуждающие статусы", "A170")).toEqual({ entry: rule, anchor: "rule-compelling-statuses" });
+    expect(resolveCoreRuleRef(entries, "Полярные статусы", "A169")).toBeNull();
+    expect(resolveCoreRuleRef([duplicate], "Полярные статусы", "A170")).toBeNull();
+    const camp = { ...entry(9, "mechanic_item", "Привал и передышка", 1, 2, { page: "A179–A181" }), name_original: "Camping & Sojourns" };
+    expect(resolveCoreRuleRef([camp], "Привалы и передышки", "A179")).toEqual({ entry: camp, anchor: undefined });
   });
 
   it("ищет переименованное Последствие по старой метке и различает правило и словарь по странице", () => {

@@ -33,6 +33,7 @@ export function Rating({ value }: { value: number }) {
 
 const TOKEN = /\*\*([^*]+)\*\*|(?<!\*)\*([^*\n]+)\*(?!\*)/g;
 const GRIM_REF = /«([^»]+)»\s*\(с\.\s*(\d+)\)/g;
+const CORE_PAGE = /^,\s*кн\.\s*I,\s*с\.\s*(\d+)\b/i;
 
 /** Ссылки Гримуара: статья по «Названию» (с. N), правило корника по **Имени**. */
 export interface GrimLinks {
@@ -70,7 +71,8 @@ function RichRun({ text, grim }: { text: string; grim?: GrimLinks }) {
     if (at > last) out.push(text.slice(last, at));
     if (m[1] !== undefined) {
       const consequence = namedConsequence(m[1]);
-      const rule = grim && !consequence ? grim.rule(m[1]) : null;
+      const corePage = CORE_PAGE.exec(text.slice(at + m[0].length))?.[1];
+      const rule = grim && !consequence ? grim.rule(m[1], corePage ? `A${corePage}` : undefined) : null;
       out.push(consequence
         ? <span key={at} className="lb-cq">{consequence.name}{m[1].endsWith(":") ? ":" : ""}</span>
         : rule ? <Link key={at} className="lb-ref lb-link" to={rule}>{m[1]}</Link>

@@ -11,6 +11,7 @@ import { useGrimoireBook } from "../useGrimoire";
 export interface LitmArticleTarget {
   sectionId: number;
   entryId: number;
+  anchor?: string;
 }
 
 const NO_ENTRIES: CompendiumEntry[] = [];

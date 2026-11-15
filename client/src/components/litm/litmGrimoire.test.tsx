@@ -54,11 +54,11 @@ describe("Гримуар действий LitM", () => {
   });
 
   it("links articles and corebook rules in text", () => {
-    const grim: GrimLinks = { article: (n, p) => (resolveRef(articles, n, p) ? "/a" : null), rule: (n) => (n === "Полярные статусы" ? "/r" : null) };
+    const grim: GrimLinks = { article: (n, p) => (resolveRef(articles, n, p) ? "/a" : null), rule: (n, p) => (n === "Полярные статусы" && p === "A170" ? "/r#rule-polar-statuses" : null) };
     const html = renderToStaticMarkup(<MemoryRouter><LitmRich grim={grim} text="см. «Атаки издалека» (с. 18) и «Нет такой» (с. 99); (**Полярные статусы**, кн. I, с. 170), *отвлечён* (**Заблокировано**)" /></MemoryRouter>);
     expect(html).toContain('<a class="lb-link" href="/a" data-discover="true">Атаки издалека, с. 18</a>');
     expect(html).toContain("«Нет такой» (с. 99)");
-    expect(html).toContain('<a class="lb-ref lb-link" href="/r" data-discover="true">Полярные статусы</a>');
+    expect(html).toContain('<a class="lb-ref lb-link" href="/r#rule-polar-statuses" data-discover="true">Полярные статусы</a>');
     expect(html).toContain('<span class="lb-st">отвлечён</span>');
     expect(html).toContain('<span class="lb-cq">Возможность закрыта</span>');
     expect(litmCatalogOf("litm", { id: 1, system_id: 1, position: 0, name: "Гримуар действий", kind: "mechanics", created_at: "" })).toBe("grimoire");

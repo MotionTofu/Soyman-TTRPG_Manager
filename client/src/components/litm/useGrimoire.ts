@@ -4,11 +4,12 @@ import { useResource } from "../../data/hooks";
 import type { CompendiumEntry, SystemSection } from "../../types";
 import type { GrimLinks } from "./LitmBook";
 import { grimoireOf, resolveBookRef } from "./litmGrimoire";
-import { ruleEntry } from "./litmRules";
+import { resolveCoreRuleRef, ruleEntry } from "./litmRules";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 const NO_SECTIONS: SystemSection[] = [];
-export const grimoireHref = (systemId: number, sectionId: number, id: number) => `/systems/${systemId}?section=${sectionId}&entry=${id}`;
+export const grimoireHref = (systemId: number, sectionId: number, id: number, anchor?: string) =>
+  `/systems/${systemId}?section=${sectionId}&entry=${id}${anchor ? `#${anchor}` : ""}`;
 
 /** Главы, статьи, ссылки книги и подсказки эффектов — для раздела и шторки пульта. */
 export function useGrimoire(systemId: number, sectionId: number, entries: CompendiumEntry[]) {
@@ -24,9 +25,14 @@ export function useGrimoireBook(systemId: number, sectionId: number, entries: Co
   const grim = useMemo<GrimLinks>(() => {
     return {
       article: (name, page) => { const id = resolveBookRef(chapters, name, page); return id === null ? null : grimoireHref(systemId, sectionId, id); },
-      rule: (name) => {
+      rule: (name, page) => {
+        if (rulesSectionId === undefined) return null;
+        if (page) {
+          const target = resolveCoreRuleRef(ruleEntries, name, page);
+          return target ? grimoireHref(systemId, rulesSectionId, target.entry.id, target.anchor) : null;
+        }
         const entry = ruleEntry(ruleEntries, name);
-        return entry && rulesSectionId !== undefined ? grimoireHref(systemId, rulesSectionId, entry.id) : null;
+        return entry ? grimoireHref(systemId, rulesSectionId, entry.id) : null;
       },
     };
   }, [chapters, ruleEntries, rulesSectionId, systemId, sectionId]);

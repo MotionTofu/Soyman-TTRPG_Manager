@@ -418,7 +418,7 @@ function CompendiumContent({ campaign, sessionId }: PanelProps) {
         </div>
       )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
-      {article && <LitmCompendiumDrawer systemId={campaign.system_id} initialArticle={article} onClose={() => setArticle(null)} />}
+      {article && <LitmCompendiumDrawer systemId={campaign.system_id} initialArticle={article} initialQuery={query} onClose={() => setArticle(null)} />}
     </div>
   );
 }

@@ -487,6 +487,7 @@
 .lr-detail.is-closed > header { margin-bottom: 0; }
 .lr-detail__sec { margin-bottom: var(--sp-5); }
 .lr-detail__sec h5 { font-size: var(--fs-body); }
+.lr-detail__sec [data-rule-section] { scroll-margin-top: var(--sp-3); }
 .lr-detail.is-en .lr-detail__cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-7); }
 .lr-detail:not(.is-en) .lr-detail__cols { max-width: 78ch; }
 .lr-en { font-family: var(--lb-serif); font-size: var(--fs-meta); line-height: 1.5; color: var(--lb-ink2); border-left: 1px solid var(--lb-line); padding-left: var(--sp-5); }

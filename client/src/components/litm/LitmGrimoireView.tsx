@@ -149,6 +149,18 @@ export function Article({ a, chapter, prev, next, link, grim, tips, acts }: {
   );
 }
 
+export function ChapterPage({ chapter, grim, link }: { chapter: GrimChapter; grim: GrimLinks; link: (id: number) => string }) {
+  return (
+    <section className="lg-chapter">
+      <h3>{chapter.entry.name}{chapter.entry.name_original && <span className="lb-orig" lang="en">[{chapter.entry.name_original}]</span>}</h3>
+      {chapter.entry.description && <div className="lb-lead"><Paras lines={paras(chapter.entry.description)} grim={grim} /></div>}
+      {chapter.intro && <IntroCard {...chapter.intro} grim={grim} />}
+      {chapter.subs.filter((s) => s.text.length).map((s) => <IntroCard key={s.name} title={s.name} titleEn={s.nameEn} limits={[]} sections={[{ head: "", text: s.text }]} grim={grim} />)}
+      <ArticleRows chapter={chapter} link={link} />
+    </section>
+  );
+}
+
 /** Строки статей главы: имя и эффекты глаголами; отсылки — «→ см.» (Q6). */
 export function ArticleRows({ chapter, selectedId, link, showEffects = true }: {
   chapter: GrimChapter; selectedId?: number; link: (id: number) => string; showEffects?: boolean;
@@ -246,13 +258,7 @@ export function LitmGrimoireView({ systemId, sectionId, entries, selectedId }: {
           <Article a={article} chapter={chapter} prev={articles[at - 1] ?? null} next={articles[at + 1] ?? null} link={link} grim={grim} tips={tips} />
         </>
       ) : chapter ? (
-        <section className="lg-chapter">
-          <h3>{chapter.entry.name}{chapter.entry.name_original && <span className="lb-orig" lang="en">[{chapter.entry.name_original}]</span>}</h3>
-          {chapter.entry.description && <div className="lb-lead"><Paras lines={paras(chapter.entry.description)} grim={grim} /></div>}
-          {chapter.intro && <IntroCard {...chapter.intro} grim={grim} />}
-          {chapter.subs.filter((s) => s.text.length).map((s) => <IntroCard key={s.name} title={s.name} titleEn={s.nameEn} limits={[]} sections={[{ head: "", text: s.text }]} grim={grim} />)}
-          <ArticleRows chapter={chapter} link={link} />
-        </section>
+        <ChapterPage chapter={chapter} grim={grim} link={link} />
       ) : (
         <div className="lg-contents">
           {chapters.map((c) => (

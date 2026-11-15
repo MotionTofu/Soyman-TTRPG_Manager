@@ -15,6 +15,34 @@ export function ruleEntry(entries: readonly CompendiumEntry[], name: string, pag
     ?? named[0];
 }
 
+// Имена отсылок в Гримуаре и заголовки в томе I различаются в переводе.
+const coreRuleRefs = [
+  { name: "Полярные статусы", page: "A170", article: "Advanced Use Of Statuses", section: "Polar Statuses" },
+  { name: "Побуждающие статусы", page: "A170", article: "Advanced Use Of Statuses", section: "Compelling Statuses" },
+  { name: "Эффекты тегов и статусов", page: "A155", article: "Spending Power On Effects", section: "Tag And Status Effects" },
+  { name: "Узнать", page: "A155", article: "Spending Power On Effects", section: "Discover" },
+  { name: "Дополнительный подвиг", page: "A157", article: "Spending Power On Effects", section: "Extra Feats" },
+  { name: "Добыть больше Силы", page: "A158", article: "Drawing More Power" },
+  { name: "Привалы и передышки", page: "A179", article: "Camping & Sojourns" },
+];
+
+export function ruleSectionAnchor(section: Pick<RuleSection, "headEn">): string | undefined {
+  const slug = section.headEn.toLowerCase().match(/[a-z0-9]+/g)?.join("-");
+  return slug && `rule-${slug}`;
+}
+
+export function resolveCoreRuleRef(entries: readonly CompendiumEntry[], name: string, page: string) {
+  const ref = coreRuleRefs.find((r) => r.page === page && norm(r.name) === norm(name));
+  if (!ref) return null;
+  const entry = entries.find((e) => norm(e.name_original ?? "") === norm(ref.article)
+    && str(e.data?.page).startsWith("A"));
+  if (!entry) return null;
+  if (!ref.section) return { entry, anchor: undefined };
+  const section = arr<RuleSection>(entry.data?.sections).find((s) => s.headEn === ref.section);
+  const anchor = section && ruleSectionAnchor(section);
+  return anchor ? { entry, anchor } : null;
+}
+
 export interface RuleArticle {
   entry: CompendiumEntry;
   groupId: number;
