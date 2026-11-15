@@ -43,14 +43,18 @@ function builderConfigs(): BuilderConfig[] {
 }
 
 /** Рабочие зависимости сервера, которые не приходят из npm-реестра. */
-function localDeps(): { name: string; dir: string }[] {
+function localDeps(): { name: string; source: string }[] {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "server", "package.json"), "utf-8"));
   return Object.entries(pkg.dependencies ?? {})
     .filter(([, spec]) => typeof spec === "string" && (spec as string).startsWith("file:"))
     .map(([name, spec]) => ({
       name,
-      dir: path.resolve(path.join(repoRoot, "server"), (spec as string).slice("file:".length)),
+      source: path.resolve(path.join(repoRoot, "server"), (spec as string).slice("file:".length)),
     }));
+}
+
+function localDirectories() {
+  return localDeps().filter(dep => !dep.source.endsWith(".tgz")).map(({ name, source }) => ({ name, dir: source }));
 }
 
 describe("установщик получает всё, от чего зависит сервер", () => {
@@ -61,7 +65,7 @@ describe("установщик получает всё, от чего завис
   });
 
   it("у каждой локальной зависимости сервера собран dist", () => {
-    for (const dep of localDeps()) {
+    for (const dep of localDirectories()) {
       const pkg = JSON.parse(fs.readFileSync(path.join(dep.dir, "package.json"), "utf-8"));
       const main = pkg.main as string | undefined;
       expect(main, `${dep.name} без main`).toBeTruthy();
@@ -75,13 +79,13 @@ describe("установщик получает всё, от чего завис
   });
 
   it("каждая локальная зависимость явно копируется в установщик", () => {
-    const deps = localDeps();
+    const deps = localDirectories();
     if (!deps.length) return;
     for (const { name, dir } of deps) {
       const rel = path.relative(repoRoot, dir).replace(/\\/g, "/");
       for (const cfg of builderConfigs()) {
         // Полагаться на копирование `server/node_modules` нельзя: npm ставит
-        // `file:`-зависимость СИМВОЛИЧЕСКОЙ ССЫЛКОЙ на абсолютный путь этой
+        // `file:`-зависимость на каталог СИМВОЛИЧЕСКОЙ ССЫЛКОЙ на путь этой
         // машины, и в установщике она была бы мёртвой. Поэтому требуем явную
         // запись в extraResources, ведущую в node_modules сервера под именем
         // пакета.
@@ -97,7 +101,7 @@ describe("установщик получает всё, от чего завис
   });
 
   it("копируется именно то, чем пакет представляется", () => {
-    for (const { name, dir } of localDeps()) {
+    for (const { name, dir } of localDirectories()) {
       const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
       // `main` — это то, что резолвит node внутри установленного приложения.
       // Если копируем `dist`, а main смотрит в другое место, приложение
@@ -110,6 +114,20 @@ describe("установщик получает всё, от чего завис
           copies.some((f) => f === `${rel}/${mainDir}`),
           `${cfg.name}: ${name} — main смотрит в ${mainDir}/, а копируется ${copies.join(", ") || "ничего"}`
         ).toBe(true);
+      }
+    }
+  });
+
+  it("архивные зависимости распакованы и копируются с server/node_modules", () => {
+    for (const { name, source } of localDeps().filter(dep => dep.source.endsWith(".tgz"))) {
+      expect(fs.existsSync(source), name).toBe(true);
+      const installed = path.join(repoRoot, "server", "node_modules", name);
+      expect(fs.lstatSync(installed).isDirectory(), name).toBe(true);
+      const pkg = JSON.parse(fs.readFileSync(path.join(installed, "package.json"), "utf-8"));
+      expect(fs.existsSync(path.join(installed, pkg.main)), name).toBe(true);
+      for (const config of builderConfigs()) {
+        expect(config.extra.some(entry => entry.from === "server/node_modules" && entry.to === "app/server/node_modules"),
+          config.name).toBe(true);
       }
     }
   });

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { SCENE_SEARCH_LABELS } from "@shared/searchText";
 import { settingAdventuresPath } from "../layout/useSettingCrumbs";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { MentionText } from "../components/mentions/MentionText";
@@ -22,6 +23,7 @@ import { useTabState } from "../hooks/useTabState";
 import "../session.css";
 import "../components/profiles/scene-adventure.css";
 import { useConfirm } from "../hooks/useConfirm";
+import { findSearchRange, searchJump, showSearchRange } from "../searchHighlight";
 
 // Лист — всё, что нужно за столом; фон, карты и звук готовятся отдельно.
 // «Связи» — откуда сюда приходят (гриллинг 2026-10-02, Q13, доска 35).
@@ -43,6 +45,7 @@ export function SceneDetailPage() {
   const { id } = useParams();
   const sceneId = Number(id);
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const campaignId = params.get("campaign") ? Number(params.get("campaign")) : null;
 
@@ -73,6 +76,20 @@ export function SceneDetailPage() {
   const graph = useResource<ArcClues>(scene?.arc_id ? arcCluesPath(scene.arc_id, campaignId) : null).data;
   const tree = useResource<CampaignAdventureTree[]>(campaignId ? campaignPaths.tree(campaignId) : null).data;
   const [statusMenu, setStatusMenu] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const field = new URLSearchParams(location.search).get("field");
+    const jump = searchJump(location.search);
+    if (!scene || tab !== "Лист" || !field || !Object.hasOwn(SCENE_SEARCH_LABELS, field) || !jump) return;
+    let cleanup: (() => void) | undefined;
+    const frame = requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(`[data-scene-search="${field}"]`);
+      const range = target && findSearchRange(target, jump, true);
+      if (range) cleanup = showSearchRange(range);
+      else target?.scrollIntoView({ block: "center" });
+    });
+    return () => { cancelAnimationFrame(frame); cleanup?.(); };
+  }, [location.search, location.key, scene, tab]);
 
   if (sceneState.error && !scene) {
     return <LoadErrorCard message={<>Не удалось загрузить сцену: {sceneState.error}</>} onRetry={sceneState.reload} />;
@@ -219,7 +236,7 @@ export function SceneDetailPage() {
             {scene.is_override && <Link className="gch" to={originalSceneHref(scene)}>правка кампании ›</Link>}
             {scene.campaign_only && <span className="gch">только в кампании</span>}
           </>}>
-          <ProfileText {...fieldProps} title="В двух словах" value={scene.summary} onSave={(v) => save({ summary: v })} focal
+          <ProfileText {...fieldProps} title="В двух словах" value={scene.summary} searchField="summary" onSave={(v) => save({ summary: v })} focal
             fields={[
               { key: "name", label: "Имя сцены", value: scene.name, required: true },
               { key: "node_type", label: "Тип узла", value: scene.node_type ?? "", options: [{ value: "", label: "—" }, ...NODE_TYPES.map((t) => ({ value: t.key, label: t.label }))] },
@@ -227,7 +244,7 @@ export function SceneDetailPage() {
             ]} onSaveFields={(v) => save({ name: v.name.trim(), node_type: v.node_type || null, node_role: v.node_role })} />
         </ProfileHero>
         <div className="profile-visibility scene-profile-visibility"><NavIcon name="eye" /><span className="profile-visibility__label">Игрокам</span><span className="scene-profile-visibility__note">{scene.hidden_from_players ? "сцена не видна в журнале игроков" : "сцена видна в журнале игроков"}</span><button className="profile-text-link" onClick={() => saveQuietly({ hidden_from_players: !scene.hidden_from_players })}>{scene.hidden_from_players ? "скрыто" : "открыто"} ›</button></div>
-        <div className="scene-profile-read"><ProfileText {...fieldProps} title="Зачитать игрокам" value={scene.read_aloud} onSave={(v) => save({ read_aloud: v })} emptyLabel="Текст для чтения вслух при входе в сцену." /></div>
+        <div className="scene-profile-read"><ProfileText {...fieldProps} title="Зачитать игрокам" value={scene.read_aloud} searchField="read_aloud" onSave={(v) => save({ read_aloud: v })} emptyLabel="Текст для чтения вслух при входе в сцену." /></div>
         <SceneTable scene={scene} onSave={save} />
         <ProfileBlock title="Состав"><div className="scene-profile-cast">
           <section><h3>Сюжетные персонажи</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_plot_characters" participation acceptTypes={PLOT_TYPES} placeholder="Перетащите существо или персонажа" /></section>
@@ -236,7 +253,7 @@ export function SceneDetailPage() {
           <section><h3>Потенциальный лут</h3><SectionDropZone entityType="scene" entityId={scene.id} profile section="scene_loot" acceptTypes={LOOT_TYPES} placeholder="Перетащите находку" /></section>
         </div></ProfileBlock>
         <div className="scene-profile-entry"><ProfileBlock title="Вход и выход">
-          <div className="profile-columns"><ProfileText {...fieldProps} title="Условие входа" value={scene.entry_condition} onSave={(v) => save({ entry_condition: v })} /><ProfileText {...fieldProps} title="Возможные исходы" value={scene.outcomes} onSave={(v) => save({ outcomes: v })} /></div>
+          <div className="profile-columns"><ProfileText {...fieldProps} title="Условие входа" value={scene.entry_condition} searchField="entry_condition" onSave={(v) => save({ entry_condition: v })} /><ProfileText {...fieldProps} title="Возможные исходы" value={scene.outcomes} searchField="outcomes" onSave={(v) => save({ outcomes: v })} /></div>
           <SceneClueSummary scene={scene} clues={graph} onLinks={() => selectTab("Связи")} />
                 <details className="scene-profile-transitions" open>
                   <summary className="campaign-overview-header">Переходы · {scene.transitions.length}</summary>

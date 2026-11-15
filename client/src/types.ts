@@ -1,6 +1,7 @@
 import type { DndCheck, DndCost, DndEffect } from "./components/dnd/effects";
 import type { PresentationData, ShowDisplay } from "@shared/presentation";
 import type { LitmStatus } from "@shared/litm/status";
+import type { BookFormat, SearchFragment } from "@shared/searchText";
 export type { PresentationData, PresentationLayer, ShowDisplay } from "@shared/presentation";
 
 export interface System {
@@ -1697,6 +1698,11 @@ export interface SearchResult {
   // точка. Строка ведёт на родителя, страница подсвечивает строку точки.
   spot_id?: number;
   spot_name?: string;
+  book_format?: BookFormat;
+  campaign_id?: number;
+  version?: string;
+  fragments?: SearchFragment[];
+  match_count?: number;
 }
 
 export interface ArchiveItem {

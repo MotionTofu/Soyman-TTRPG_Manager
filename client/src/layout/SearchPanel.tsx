@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { APP_SEARCH_EVENT, entityMark } from "../pageMenu";
 import { Link, useLocation } from "react-router-dom";
 import { useResource } from "../data/hooks";
@@ -8,9 +8,8 @@ import type { LiveSession, SearchResult } from "../types";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { ACCEPT_TYPES as DOCK_ACCEPT_TYPES } from "./PreviewDock";
 import { addPreviewDockCard } from "../previewDockStore";
-import { ENTITY_TYPES as TYPES, ENTITY_TYPE_SINGULAR, DETAIL_ROUTES } from "../entityTypes";
+import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import { usePinnedPages, buildPageLabel, MAX_PINS } from "../pinnedPages";
-import { ParticleField } from "../components/ParticleField";
 import { NavIcon } from "../components/NavIcons";
 import { BagWidget } from "../components/BagWidget";
 import { useMapWorkspace } from "../maps/workspace/workspaceContext";
@@ -23,20 +22,11 @@ import { SideModules, type SideModule, type SideModuleId } from "./SideModules";
 import { SideRail } from "./SideRail";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { loadSideLayout, saveSideLayout, SIDE_NARROW_EVENT, type SideLayout } from "./sideLayout";
-
-// Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
-// live inside a System's tab and need system_id+section_id to open at.
-// Локация, найденная через точку (план «Зоны», этап 7), ведёт на родителя
-// с раскрытием строки точки: таб «Вложенность» + ?spot=.
-function resultLink(r: SearchResult): string | null {
-  if (r.type === "compendium_entry") {
-    return r.system_id != null ? `/systems/${r.system_id}?section=${r.section_id}&entry=${r.id}` : null;
-  }
-  if (r.type === "location" && r.spot_id != null) {
-    return `/locations/${r.id}?tab=${encodeURIComponent("Вложенность")}&spot=${r.spot_id}`;
-  }
-  return DETAIL_ROUTES[r.type] ? `${DETAIL_ROUTES[r.type]}/${r.id}` : null;
-}
+import { SearchFilters } from "./SearchFilters";
+import { SearchResultFragments } from "./SearchResultFragments";
+import { DEFAULT_SEARCH_FILTERS, panelSearchPaths, scopeLabel, searchFilterCount, searchResultLink } from "./searchPanelModel";
+import { useSearchScopes } from "./useSearchScopes";
+import "./search-panel.css";
 
 interface Props {
   workspace?: boolean;
@@ -60,15 +50,11 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const inputRef = useRef<HTMLInputElement>(null);
+  const filterButton = useRef<HTMLButtonElement>(null);
+  const filtersId = useId();
   const [query, setQuery] = useState("");
-  const [activeTypes, setActiveTypes] = useState<Set<string>>(
-    () => new Set(TYPES.map((t) => t.key))
-  );
+  const [filters, setFilters] = useState(DEFAULT_SEARCH_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Narrows compendium_entry results to the "D&D 5.5" system — handy when
-  // dragging a feat/spell into a DnD statblock and other systems' entries of
-  // the same name would otherwise clutter the results.
-  const [dndOnly, setDndOnly] = useState(false);
   // Открытая карточка. Ради неё всё и затевалось: подглядеть правило, не уходя
   // со страницы, — за столом это чаще всего «что делает Опутанный».
   const [card, setCard] = useState<{ type: string; id: number } | null>(null);
@@ -78,6 +64,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   const [layout, setLayout] = useState<SideLayout>(loadSideLayout);
   // Идущая сессия — одна на приложение; пока она есть, в панели её лента.
   const live = useResource<LiveSession | null>(isPlayer || horizontal ? null : sessionPaths.live()).data ?? null;
+  const scopes = useSearchScopes(!isPlayer && filtersOpen, live);
   // Узкий вид — везде, кроме Пульта: там панели свои и не меняются (Q12′).
   // На телефоне панель — шторка, там узкий вид не нужен.
   const desktop = useMediaQuery("(min-width: 861px)");
@@ -110,9 +97,6 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
       </button>
     );
   }
-
-  const systems = useResource<{ id: number; name: string }[]>(isPlayer ? null : "/systems").data;
-  const dndSystemId = systems?.find((s) => s.name === "D&D 5.5")?.id ?? null;
 
   useEffect(() => {
     function reveal() {
@@ -169,25 +153,18 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
     pin(path, buildPageLabel(location.pathname, location.search));
   }
 
-  let searchPath: string | null = null;
-  if (query.trim()) {
-    if (isPlayer) {
-      searchPath = `/player/search?q=${encodeURIComponent(query)}`;
-    } else {
-      searchPath = `/search?q=${encodeURIComponent(query)}&types=${Array.from(activeTypes).join(",")}`;
-      if (dndOnly && dndSystemId != null) searchPath += `&system_id=${dndSystemId}`;
-    }
-  }
-  const { results, searching: isSearching, error: searchError } = useSearch(searchPath);
-
-  function toggleType(key: string) {
-    setActiveTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
+  const paths = panelSearchPaths(query, filters);
+  const entitySearch = useSearch(isPlayer
+    ? (query.trim() ? `/player/search?q=${encodeURIComponent(query)}` : null)
+    : paths.entities);
+  const bookSearch = useSearch(isPlayer ? null : paths.books, 200, 120_000);
+  const isSearching = entitySearch.searching || bookSearch.searching;
+  const searchError = entitySearch.error;
+  const resultMap = new Map<string, SearchResult>();
+  for (const result of entitySearch.searching ? [] : entitySearch.results) resultMap.set(`${result.type}:${result.id}`, result);
+  for (const result of bookSearch.searching ? [] : bookSearch.results) resultMap.set(`${result.type}:${result.id}`, result);
+  const results = [...resultMap.values()];
+  const activeCount = searchFilterCount(filters);
 
   function handleDragStart(e: DragEvent<HTMLDivElement>, result: SearchResult) {
     e.dataTransfer.setData(SEARCH_DRAG_MIME, JSON.stringify(result));
@@ -195,16 +172,22 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   }
 
   const searchBody = (
-    <>
+    <div className="side-search" onKeyDown={event => {
+      if (!filtersOpen || event.key !== "Escape") return;
+      event.stopPropagation();
+      setFiltersOpen(false);
+      filterButton.current?.focus();
+    }}>
       <div className="search-heading">
-        <ParticleField count={2} />
-        {titleOf("search", "Поиск")}
+        <div className="side-search-heading-title"><NavIcon name="search" />{titleOf("search", "Поиск")}</div>
+        <kbd aria-label="Горячая клавиша: косая черта">/</kbd>
       </div>
       <div className="row search-input-row">
         <div className="search-input-wrap">
           <input
+            className="d-input"
             ref={inputRef}
-            placeholder="Например: Гоблин (/)"
+            placeholder="Имя, правило или фраза"
             aria-label="Поиск"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -214,6 +197,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
               type="button"
               className="search-input-clear"
               title="Очистить"
+              aria-label="Очистить запрос"
               onClick={() => setQuery("")}
             >
               <NavIcon name="close" />
@@ -223,49 +207,21 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
         {!isPlayer && (
           <button
             type="button"
-            className={filtersOpen ? "active-sort" : ""}
+            ref={filterButton}
+            className="d-btn d-btn--sm side-search-toggle"
             onClick={() => setFiltersOpen((v) => !v)}
             aria-expanded={filtersOpen}
-            aria-controls="search-filters"
+            aria-controls={filtersId}
           >
-            Фильтры {activeTypes.size !== TYPES.length ? `· ${activeTypes.size}/${TYPES.length}` : ""}
+            Фильтры{activeCount > 0 && <span className="side-search-filter-count">{activeCount}</span>}
           </button>
         )}
       </div>
       {!isPlayer && filtersOpen && (
-        <div id="search-filters">
-          <div className="row">
-            <button onClick={() => setActiveTypes(new Set(TYPES.map((t) => t.key)))}>
-              Выбрать всё
-            </button>
-            <button onClick={() => setActiveTypes(new Set())}>Сбросить фильтры</button>
-          </div>
-          <div className="filters">
-            {TYPES.map((t) => (
-              <label key={t.key}>
-                <input
-                  type="checkbox"
-                  checked={activeTypes.has(t.key)}
-                  onChange={() => toggleType(t.key)}
-                />
-                {t.label}
-              </label>
-            ))}
-            {dndSystemId != null && (
-              <label>
-                <input
-                  type="checkbox"
-                  checked={dndOnly}
-                  onChange={() => setDndOnly((v) => !v)}
-                />
-                DnD 5,5
-              </label>
-            )}
-          </div>
-        </div>
+        <SearchFilters id={filtersId} value={filters} scopes={scopes} onChange={setFilters} />
       )}
-      <div className="stack">
-        {isSearching && (
+      <div className="side-search-results">
+        {entitySearch.searching && (
           <div className="stack search-skeleton" aria-busy="true" aria-label="Загрузка">
             <div className="card search-skeleton-row" />
             <div className="card search-skeleton-row" />
@@ -277,11 +233,26 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
             Ошибка поиска: {searchError}
           </span>
         )}
-        {!isSearching && !searchError && query.trim() && results.length === 0 && (
-          <span className="muted">Ничего не найдено</span>
+        {bookSearch.searching && <span className="side-search-status" role="status">Ищу по тексту книг…</span>}
+        {bookSearch.error && !bookSearch.searching && <span className="side-search-status" role="alert">
+          Поиск по тексту книг: {bookSearch.error}
+        </span>}
+        {results.length > 0 && <div className="side-search-status" aria-live="polite">
+          <span>Результаты · {results.length}</span>
+          {!isPlayer && <span title={filters.scope?.name}>{scopeLabel(filters.scope)}</span>}
+        </div>}
+        {!isSearching && !searchError && !bookSearch.error && query.trim() && results.length === 0 && (
+          <div className="side-search-empty" role="status">
+            <span>{filters.scope ? `«${filters.scope.name}» · Ничего не найдено` : "Ничего не найдено"}</span>
+            {filters.scope && <button type="button" className="d-btn d-btn--sm side-search-broaden"
+              onClick={() => setFilters(previous => ({ ...previous, scope: null }))}>Искать везде →</button>}
+          </div>
         )}
         {results.map((r) => {
-          const link = resultLink(r);
+          const link = searchResultLink(r, r.fragments?.[0]);
+          const bestiary = r.type === "compendium_entry" && r.kind === "monster";
+          const chip = r.book_format === "pdf" ? "PDF" : r.book_format === "md" ? ".md"
+            : bestiary ? "Бестиарий" : filters.group === "creatures" && r.type === "being" ? "Сеттинг" : ENTITY_TYPE_SINGULAR[r.type] ?? r.type;
           // The pult's PreviewDock only accepts drag-and-drop, which doesn't
           // fire from a touch gesture — this button is the tap equivalent,
           // shown only where the dock is actually the drop target (the live
@@ -295,20 +266,16 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
               draggable
               onDragStart={(e) => handleDragStart(e, r)}
             >
-              {/* Не переносится: столбик действий должен оставаться у правого
-                  края. Когда шапка переносилась, в узкой панели пара иконок
-                  сваливалась под фишку типа и висела посреди строки ничьей.
-                  Уступает длинный контекст — он и так подпись. */}
-              <div className="search-result-head">
-                <div className="search-result-head__left">
-                  <div className={`entity-type-chip ${r.type}`}>{ENTITY_TYPE_SINGULAR[r.type] ?? r.type}</div>
-                  {r.context && <span className="muted search-result-context">{r.context}</span>}
-                </div>
-                {/* Столбиком, а не рядом: ширина в этой колонке — то, чего не
-                    хватает, и три мелкие кнопки одна под другой съедают её
-                    меньше, чем три в ряд. */}
+              <div className="side-search-meta">
+                <span className="d-chip side-search-type" data-format={r.book_format}>{chip}</span>
+                {r.context && <span className="search-result-context" title={r.context}>{r.context}</span>}
+                {r.version && <span className="d-chip side-search-type side-search-version">{r.version}</span>}
+              </div>
+              <div className="side-search-item-main">
+                {link ? <Link className="side-search-title" to={link} onClick={onNavigate}>{r.title}</Link>
+                  : <span className="side-search-title">{r.title}</span>}
                 <div className="search-result-actions">
-                  {mapPlacement && placementSource(r) && <button type="button" title="Разместить на карте" aria-label={`Разместить на карте: ${r.title}`}
+                  {mapPlacement && placementSource(r) && <button type="button" className="search-result-card" title="Разместить на карте" aria-label={`Разместить на карте: ${r.title}`}
                     onClick={() => { mapPlacement.place(placementSource(r)!); onNavigate?.(); }}><NavIcon name="plus" /></button>}
                   {canDock && (
                     <button
@@ -320,11 +287,6 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
                       <NavIcon name="plus" />
                     </button>
                   )}
-                  {link && (
-                    <Link to={link} title="Перейти" className="search-result-goto" onClick={onNavigate}>
-                      <NavIcon name="arrowRight" />
-                    </Link>
-                  )}
                   {/* Карточку открывает только эта кнопка, а не щелчок по
                       строке: строка — источник перетаскивания, а короткое
                       перетаскивание браузер отдаёт как щелчок, и окно
@@ -332,23 +294,28 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
                   {CARD_TYPES.includes(r.type) && (
                     <button
                       type="button"
-                      className="search-result-card"
+                      className="search-result-card side-search-preview"
                       title="Показать карточку"
                       onClick={() => { const source = placementSource(r); if (mapPlacement && source) { mapPlacement.preview(source); onNavigate?.(); } else setCard({ type: r.type, id: r.id }); }}
                     >
                       <NavIcon name="card" />
                     </button>
                   )}
+                  {link && (
+                    <Link to={link} title="Перейти" className="search-result-goto" onClick={onNavigate}>
+                      <NavIcon name="arrowRight" />
+                    </Link>
+                  )}
                 </div>
               </div>
-              <div>{r.title}</div>
-              {r.subtitle && <div className="muted">{r.subtitle}</div>}
+              {r.fragments?.length ? <SearchResultFragments result={r} onNavigate={onNavigate} />
+                : r.subtitle && !(r.type === "compendium_entry" && r.context) && <div className="side-search-subtitle">{r.subtitle}</div>}
             </div>
           );
         })}
       </div>
       {card && <EntityPreviewModal type={card.type} id={card.id} onClose={() => setCard(null)} />}
-    </>
+    </div>
   );
 
   const pinsBody = (

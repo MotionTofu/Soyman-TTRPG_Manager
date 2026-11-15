@@ -10,6 +10,7 @@ import "./pdf-markdown.css";
 import type { LibraryBook, LibraryCatalog } from "../components/mastering/libraryTypes";
 import { FileBookControls } from "../components/mastering/FileBookControls";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { findSearchRange, searchJump, showSearchRange } from "../searchHighlight";
 
 const SHEET_MODES: SheetMode[] = ["source", "hybrid", "reading"];
 const PHONE_MODES: SheetMode[] = ["reading"];
@@ -39,6 +40,9 @@ export function MarkdownResourcePage() {
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [chosenMode, setChosenMode] = useState<SheetMode | null>(null);
+  const [modeAfterJump, setModeAfterJump] = useState<string | null>(null);
+  const readingText = useRef<HTMLDivElement>(null);
+  const jumpActive = modeAfterJump !== location.key && !!searchJump(location.search);
   const [insertOpen, setInsertOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   // На сенсорном экране правой кнопки нет — то же меню открывает «Aa» (Q27).
@@ -60,6 +64,25 @@ export function MarkdownResourcePage() {
   const draftRef = useRef("");
   const savingRef = useRef(false);
   const afterWrite = useAfterWrite();
+
+  useEffect(() => {
+    const root = readingText.current;
+    const jump = searchJump(location.search);
+    if (!root || !jump || !jumpActive) return;
+    let scrolled = false;
+    let cleanup: (() => void) | undefined;
+    const highlight = () => {
+      const range = findSearchRange(root, jump, true);
+      if (!range) return;
+      cleanup?.();
+      cleanup = showSearchRange(range, { scroll: !scrolled });
+      scrolled = true;
+    };
+    const frame = requestAnimationFrame(highlight);
+    const observer = new MutationObserver(highlight);
+    observer.observe(root, { subtree: true, childList: true, characterData: true });
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); cleanup?.(); };
+  }, [draft, id, jumpActive, location.key, location.search, resourceQuery.loading, documentQuery.loading]);
 
   useEffect(() => {
     if (!documentQuery.data || dirty) return;
@@ -205,7 +228,7 @@ export function MarkdownResourcePage() {
   }
 
   if (resourceQuery.loading || documentQuery.loading) return <p>Открываю Markdown…</p>;
-  if (resourceQuery.error || documentQuery.error || resourceQuery.data?.type !== "markdown" || !documentQuery.data)
+  if (resourceQuery.error || documentQuery.error || !resourceQuery.data || !documentQuery.data)
     return <p role="alert">Markdown-ресурс не найден. <Link to="/mastering">К Библиотеке</Link></p>;
 
   function reportRatio(ratio: number) {
@@ -217,7 +240,7 @@ export function MarkdownResourcePage() {
   }
 
   const content = documentQuery.data.content;
-  const mode: SheetMode = isPhone ? "reading" : chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "hybrid");
+  const mode: SheetMode = isPhone || jumpActive ? "reading" : chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "hybrid");
   const editing = mode !== "reading";
   const saveTitle = saveState === "saving" ? "Сохраняю…" : saveState === "saved" ? "Сохранено"
     : saveState === "unsaved" ? "Сохранить (Ctrl+S) — черновик сохраняется сам" : saveError || "Сохранить";
@@ -268,10 +291,11 @@ export function MarkdownResourcePage() {
 
   return <section className="pdf-markdown markdown-resource markdown-library">
     <SheetView libraryTitle={resourceQuery.data.name}
-      readingRatio={typeof initialRatio === "number" ? initialRatio : undefined}
+      readingRatio={typeof initialRatio === "number" ? initialRatio : undefined} startAtMatch={jumpActive}
       onReadingRatio={reportRatio} docKey={`resource-md-${id}`} contentKey={draft} modes={isPhone ? PHONE_MODES : SHEET_MODES} mode={mode} onMode={next => {
         // Уход в «Чтение» сохраняет набранное (Q10).
         if (next === "reading" && dirty) void save();
+        setModeAfterJump(location.key);
         setChosenMode(next);
       }}
       back={{ to: returnTo, label: "Библиотека", onClick: event => {
@@ -283,7 +307,7 @@ export function MarkdownResourcePage() {
       {editing
         ? <SheetEditor hybrid={mode === "hybrid"} value={draft} onChange={changeDraft} insertRequest={insertRequest} menuRequest={menuRequest}
             onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
-        : <MentionText text={draft} />}
+        : <div ref={readingText}><MentionText text={draft} /></div>}
     </SheetView>
   </section>;
 }

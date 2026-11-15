@@ -44,7 +44,7 @@ export function useSettled<T>(value: T, delayMs: number, initial: T = value): T 
  * Годится и для подсказок по мере набора, отдающих не результаты поиска
  * (подписи отношений, сцены пульта), — тип строки задаёт `T`.
  */
-export function useSearch<T = SearchResult>(path: string | null, delayMs = 200): SearchState<T> {
+export function useSearch<T = SearchResult>(path: string | null, delayMs = 200, timeoutMs?: number): SearchState<T> {
   const settled = useSettled<string | null>(path, delayMs, null);
   const active = path != null && settled === path;
   // Поле стёрли — прежние результаты больше не показываются, даже пока новый
@@ -54,7 +54,7 @@ export function useSearch<T = SearchResult>(path: string | null, delayMs = 200):
   else if (active) cleared.current = false;
   const query = useQuery({
     queryKey: dataKeys.resource(settled ?? ""),
-    queryFn: ({ signal }) => api.get<T[]>(settled as string, { signal }),
+    queryFn: ({ signal }) => api.get<T[]>(settled as string, { signal, timeoutMs }),
     enabled: active,
     staleTime: 0,
     gcTime: 60_000,

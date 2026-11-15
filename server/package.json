@@ -12,6 +12,7 @@
     "build:shared": "npm --prefix ../shared run build"
   },
   "dependencies": {
+    "@soyman/shared": "file:../shared",
     "adm-zip": "^0.6.0",
     "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",
@@ -23,12 +24,13 @@
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
     "load-esm": "^1.0.3",
+    "marked": "file:../client/vendor/marked-18.0.9.tgz",
     "multer": "^2.2.0",
     "music-metadata": "^10.9.1",
+    "pdfjs-dist": "file:../client/vendor/pdfjs-dist-4.10.38.tgz",
     "sharp": "^0.35.3",
     "socket.io": "^4.8.3",
-    "zod": "^4.4.3",
-    "@soyman/shared": "file:../shared"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

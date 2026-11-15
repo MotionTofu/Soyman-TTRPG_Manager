@@ -60,7 +60,7 @@ export function ProfileBlock({ title, count, actions, children, focal = false }:
 }
 
 /** Только профили Мастера: общий EditableTextCard и вид игрока остаются прежними. */
-export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, defaultSettingId, children, fields, onSaveFields, focal = false }: ComponentProps<typeof EditableTextCard> & { focal?: boolean }) {
+export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, defaultSettingId, children, fields, onSaveFields, focal = false, searchField }: ComponentProps<typeof EditableTextCard> & { focal?: boolean; searchField?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [values, setValues] = useState(() => toFieldValues(fields ?? []));
@@ -80,7 +80,7 @@ export function ProfileText({ title, value, onSave, emptyLabel, help, rows = 5, 
       <MentionTextarea value={draft} onChange={setDraft} rows={rows} defaultSettingId={defaultSettingId} />
       {error && <span role="alert">{error}</span>}
       <div className="row"><button type="button" className="d-btn" onClick={save} disabled={saving}>Сохранить</button><button type="button" className="d-btn d-btn--ghost" onClick={() => setEditing(false)} disabled={saving}>Отмена</button></div>
-    </div> : value ? <div className="profile-prose"><MentionText text={value} /></div> : <div className="profile-invitation"><NavIcon name="edit" /><span>{emptyLabel ?? `Добавьте ${title.toLocaleLowerCase()}.`}</span><button type="button" className="d-btn d-btn--sm" onClick={start}>+ {title}</button></div>}
+    </div> : value ? <div className="profile-prose" data-scene-search={searchField}><MentionText text={value} /></div> : <div className="profile-invitation"><NavIcon name="edit" /><span>{emptyLabel ?? `Добавьте ${title.toLocaleLowerCase()}.`}</span><button type="button" className="d-btn d-btn--sm" onClick={start}>+ {title}</button></div>}
     {children}
   </ProfileBlock>;
 }

@@ -7,6 +7,7 @@ import AdmZip from "adm-zip";
 import sharp from "sharp";
 import { db } from "../db/db";
 import { VAULT_ROOT, assertVaultPath, ensureSubfolder, isVaultPath, openInFileExplorer, sanitizeName, toFileUrl, vaultAbs, vaultRel } from "../services/filesystem";
+import { isMarkdownFile, MAX_MARKDOWN_BYTES, validMarkdown } from "../services/markdownFiles";
 import { storeDeduped, storeDedupedFile } from "../services/vaultDedup";
 import type { AuthedRequest } from "../services/auth";
 import { ensurePdfNoteDocumentsForUser, isPdfNoteDocument, syncPdfNoteMarkdown } from "../services/pdfNoteMarkdown";
@@ -81,14 +82,6 @@ function albumIdOrNull(value: unknown): number | null {
   const id = Number(value);
   if (!Number.isInteger(id) || id <= 0) return null;
   return db.prepare("SELECT 1 FROM albums WHERE id = ?").get(id) ? id : null;
-}
-
-const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
-
-function validMarkdown(buffer: Buffer): string | null {
-  if (buffer.length > MAX_MARKDOWN_BYTES) return null;
-  try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer).replace(/^\uFEFF/, ""); }
-  catch { return null; }
 }
 
 function withFileUrl<T extends { file_path?: string | null; type?: string | null }>(row: T) {
@@ -425,7 +418,7 @@ resourcesRouter.get("/:id", (req: AuthedRequest, res) => {
 resourcesRouter.get("/:id/markdown-content", (req, res) => {
   const row = db.prepare("SELECT type, file_path FROM resources WHERE id = ? AND archived_at IS NULL")
     .get(req.params.id) as { type: string; file_path: string | null } | undefined;
-  if (!row || row.type !== "markdown" || !row.file_path) return res.status(404).json({ error: "Markdown-ресурс не найден" });
+  if (!row?.file_path || !isMarkdownFile(row)) return res.status(404).json({ error: "Markdown-ресурс не найден" });
   try {
     const buffer = fs.readFileSync(assertVaultPath(row.file_path));
     const content = validMarkdown(buffer);
@@ -437,7 +430,7 @@ resourcesRouter.get("/:id/markdown-content", (req, res) => {
 resourcesRouter.get("/:id/markdown-bundle", (req: AuthedRequest, res) => {
   const row = db.prepare("SELECT name, type, file_path FROM resources WHERE id = ? AND archived_at IS NULL")
     .get(req.params.id) as { name: string; type: string; file_path: string | null } | undefined;
-  if (!row || row.type !== "markdown" || !row.file_path) return res.status(404).json({ error: "Markdown-ресурс не найден" });
+  if (!row?.file_path || !isMarkdownFile(row)) return res.status(404).json({ error: "Markdown-ресурс не найден" });
   try {
     const source = validMarkdown(fs.readFileSync(assertVaultPath(row.file_path)));
     if (source == null) return res.status(422).json({ error: "Нужен UTF-8 Markdown до 2 МБ" });
@@ -505,7 +498,7 @@ resourcesRouter.get("/:id/markdown-bundle", (req: AuthedRequest, res) => {
 resourcesRouter.put("/:id/markdown-content", async (req, res) => {
   const row = db.prepare("SELECT type, file_path FROM resources WHERE id = ? AND archived_at IS NULL")
     .get(req.params.id) as { type: string; file_path: string | null } | undefined;
-  if (!row || row.type !== "markdown" || !row.file_path) return res.status(404).json({ error: "Markdown-ресурс не найден" });
+  if (!row?.file_path || !isMarkdownFile(row)) return res.status(404).json({ error: "Markdown-ресурс не найден" });
   const { content, expected_sha256: expectedHash } = (req.body ?? {}) as { content?: unknown; expected_sha256?: unknown };
   if (typeof content !== "string" || Buffer.byteLength(content, "utf8") > MAX_MARKDOWN_BYTES)
     return res.status(400).json({ error: "Markdown должен быть текстом до 2 МБ" });

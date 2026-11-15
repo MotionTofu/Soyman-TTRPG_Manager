@@ -100,12 +100,13 @@ interface Props {
   notice?: ReactNode;
   /** Положение из серверного каталога для первого открытия в этом браузере. */
   readingRatio?: number;
+  startAtMatch?: boolean;
   onReadingRatio?: (ratio: number) => void;
   libraryTitle?: string;
   children: ReactNode;
 }
 
-export function SheetView({ docKey, back, actions, modes, mode, onMode, contentKey, notice, children, readingRatio, onReadingRatio, libraryTitle }: Props) {
+export function SheetView({ docKey, back, actions, modes, mode, onMode, contentKey, notice, children, readingRatio, startAtMatch, onReadingRatio, libraryTitle }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
   const [stageWidth, setStageWidth] = useState(0);
@@ -187,6 +188,10 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
   useLayoutEffect(() => {
     const stage = stageRef.current;
     if (!stage || restoredRef.current === scrollKey) return;
+    if (startAtMatch) {
+      restoredRef.current = scrollKey;
+      return;
+    }
     const saved = Number(readPref(scrollKey));
     if (!(saved > 0)) {
       const distance = stage.scrollHeight - stage.clientHeight;
@@ -198,7 +203,7 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
     if (stage.scrollHeight - stage.clientHeight < saved) return;
     stage.scrollTop = saved;
     restoredRef.current = scrollKey;
-  }, [scrollKey, sheetHeight, contentKey, readingRatio]);
+  }, [scrollKey, sheetHeight, contentKey, readingRatio, startAtMatch]);
   const readingRatioListener = useRef(onReadingRatio);
   readingRatioListener.current = onReadingRatio;
   useEffect(() => {

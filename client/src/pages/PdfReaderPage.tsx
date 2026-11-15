@@ -16,6 +16,7 @@ import { capturePdfSelection, mergePdfLineRects, DEFAULT_PDF_PREFERENCES, type P
 import "./pdf-reader.css";
 import "./book-library.css";
 import {FileBookControls} from "../components/mastering/FileBookControls";
+import { findSearchRange, searchJump, showSearchRange } from "../searchHighlight";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -76,6 +77,7 @@ export function PdfReaderPage() {
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [query, setQuery] = useState("");
+  const [ignoredJump, setIgnoredJump] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
@@ -123,6 +125,38 @@ export function PdfReaderPage() {
     const viewer = readerRef.current?.viewer;
     if (viewer && Number.isInteger(requested) && requested > 0 && requested <= pageCount) viewer.currentPageNumber = requested;
   }, [ready, pageCount, location.search]);
+  useEffect(() => {
+    const reader = readerRef.current;
+    const container = containerRef.current;
+    const jump = searchJump(location.search);
+    const requested = Number(new URLSearchParams(location.search).get("page"));
+    if (!ready || !reader || !container || !jump || ignoredJump === location.key ||
+        !Number.isSafeInteger(requested) || requested < 1 || requested > pageCount) return;
+    reader.bus.dispatch("findbarclose", { source: null });
+    setQuery(jump.query);
+    reader.viewer.scrollPageIntoView({ pageNumber: requested });
+    let cleanup: (() => void) | undefined;
+    let scrolled = false;
+    function highlight() {
+      const pageElement: HTMLElement | undefined = reader?.viewer.getPageView(requested - 1)?.div;
+      const layer = pageElement?.querySelector<HTMLElement>(".textLayer");
+      const range = layer && findSearchRange(layer, jump!, false);
+      if (!range) return;
+      cleanup?.();
+      cleanup = showSearchRange(range, { container: container!, scroll: !scrolled });
+      scrolled = true;
+    }
+    const onTextLayer = ({ pageNumber }: { pageNumber: number }) => {
+      if (pageNumber === requested) highlight();
+    };
+    reader.bus.on("textlayerrendered", onTextLayer);
+    const frame = requestAnimationFrame(highlight);
+    return () => {
+      cancelAnimationFrame(frame);
+      reader.bus.off("textlayerrendered", onTextLayer);
+      cleanup?.();
+    };
+  }, [ready, pageCount, location.search, location.key, ignoredJump]);
   useEffect(() => {
     if (!preferencesQuery.data) return;
     const requestKey = `${id}:${location.search}`;
@@ -548,6 +582,7 @@ export function PdfReaderPage() {
   }
 
   function search(value: string, again = false) {
+    setIgnoredJump(location.key);
     setQuery(value);
     readerRef.current?.bus.dispatch(value ? "find" : "findbarclose", value ? {
       source: null, type: again ? "again" : "", query: value,
