@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { BagRulesControl } from "../components/BagRulesControl";
 import { SceneSwitcher } from "../components/SceneSwitcher";
 import { PresentationPanel } from "../components/presentation/PresentationPanel";
 import { SessionTimeStrip } from "../components/SessionTimeStrip";
@@ -211,6 +212,7 @@ export function SessionLivePage() {
           />
         )}
       </div>
+      <BagRulesControl />
 
       {/* Боевой режим (Q1) занимает основную область пульта: сцены, показ и
           сетку панелей. Полоса времени и управление сессией остаются. */}

@@ -16,6 +16,7 @@ describe("checked entity placement", () => {
     expect(placementSource({ type: "compendium_entry", id: 9, kind: "monster" })).toEqual({ type: "compendium_entry", id: 9 });
     expect(placementSource({ type: "compendium_entry", id: 9 })).toEqual({ type: "compendium_entry", id: 9 });
     expect(placementSource({ type: "compendium_entry", id: 9, kind: "spell" })).toBeNull();
+    expect(placementSource({ type: "compendium_entry", id: 9, rule: { storageId: "default" } })).toBeNull();
   });
   it.each([null, {}, { type: "character", id: 1 }, { type: "being", id: "1" }, { type: "being", id: -1 }, { type: "being", id: 1.5 }, { type: "location", id: Infinity }])("rejects unsupported payload %j", (value) => expect(placementSource(value)).toBeNull());
   it("ignores untrusted identity and presentation fields, rejects malformed and oversized JSON", () => {

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 interface Props {
   onClose: () => void;
+  onEscape?: () => void;
   children: ReactNode;
   // Off by default (existing behavior) — set false for modals where an
   // accidental click outside would discard unsaved input (e.g. the @-mention
@@ -36,7 +37,7 @@ const modalStack: (() => void)[] = [];
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className, returnFocusTo }: Props) {
+export function Modal({ onClose, onEscape, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className, returnFocusTo }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -46,10 +47,10 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
   // without losing the real "click outside to close" behavior.
   const mouseDownOnBackdrop = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
+  const escapeRef = useRef(onEscape ?? onClose);
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+    escapeRef.current = onEscape ?? onClose;
+  }, [onClose, onEscape]);
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -67,7 +68,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
         // Отвечает только верхняя модалка стека: нижняя молчит.
         if (modalStack[modalStack.length - 1] !== closeTop) return;
         e.stopPropagation();
-        onCloseRef.current();
+        escapeRef.current();
         return;
       }
       if (e.key !== "Tab" || !modalRef.current) return;
@@ -89,7 +90,7 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
         }
       }
     };
-    const closeTop = () => onCloseRef.current();
+    const closeTop = () => escapeRef.current();
     modalStack.push(closeTop);
     document.addEventListener("keydown", onKeyDown);
     return () => {

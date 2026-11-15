@@ -10,6 +10,7 @@ export const tokenSourceKey = (ref: TokenSourceRef) => `${ref.kind}:${ref.uid.to
 export function placementSource(value: unknown): PlacementSource | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Record<string, unknown>;
+  if (source.type === "compendium_entry" && source.rule) return null;
   return (source.type === "being" || source.type === "location" || source.type === "compendium_entry" && (source.kind === undefined || source.kind === "monster")) && typeof source.id === "number" && Number.isSafeInteger(source.id) && source.id > 0
     ? { type: source.type, id: source.id } : null;
 }

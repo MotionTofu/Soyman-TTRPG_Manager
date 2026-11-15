@@ -1,0 +1,87 @@
+.modal.rule-article-modal,
+.modal.bag-rules-modal {
+  max-width: 100%;
+  max-height: 85dvh;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal.rule-article-modal { width: 560px; }
+.rule-article-modal > h2,
+.rule-article-modal > .modal-footer {
+  flex: none;
+}
+.rule-article-modal > h2 { overflow-wrap: anywhere; }
+.rule-article-modal > .reading-text,
+.bag-rules-list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.rule-article-modal > .modal-x,
+.bag-rules-modal > .modal-x {
+  top: var(--sp-6);
+  right: var(--sp-4);
+  width: 44px;
+  height: 44px;
+}
+.modal .rule-article-actions { padding-top: var(--sp-5); }
+.rule-article-actions > :is(button, a):first-of-type { margin-inline-end: auto; }
+.rule-article-actions > a:only-of-type { margin-inline-start: auto; margin-inline-end: 0; }
+.rule-article-actions .d-btn[aria-disabled="true"] { color: var(--muted); cursor: default; }
+.rule-article-message { flex: 0 0 100%; margin: 0; }
+.bag-rules-access .d-btn { justify-content: space-between; }
+.bag-rules-count {
+  font-variant-numeric: tabular-nums;
+  padding-inline: var(--sp-1);
+}
+.bag-rules-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bag-rules-list > li + li { border-top: 1px solid var(--line); }
+.bag-rule-row {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: transparent;
+  text-align: start;
+  border: 0;
+}
+.bag-rule-row:hover { background: var(--tab); }
+.bag-rule-row strong {
+  display: block;
+  font: 500 var(--fs-h3)/1.2 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+.bag-rule-row small {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+.rule-article-nav {
+  order: -1;
+  margin: calc(-1 * var(--sp-5)) 0 var(--sp-3);
+  padding-inline-end: var(--sp-10);
+}
+.rule-article-nav .d-btn { min-height: 44px; padding-inline: 0; }
+
+@media (max-width: 760px) {
+  .bag-rules-access .d-btn { width: 100%; min-height: 44px; }
+  .modal-backdrop:has(> .bag-rules-modal) {
+    align-items: flex-end;
+    padding: var(--sp-4);
+  }
+  .modal.bag-rules-modal { width: 100%; }
+}
+@media (max-width: 480px) {
+  .rule-article-actions .d-btn { width: 100%; min-height: 44px; }
+}

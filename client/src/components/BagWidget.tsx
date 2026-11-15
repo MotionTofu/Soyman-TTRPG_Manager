@@ -1,9 +1,9 @@
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
 import { Verstak } from "./Verstak/Verstak";
-import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag, type BagItem } from "../bag";
+import { onBagToast, useBag, addToBag, bagItemKey, removeFromBag, removeItemsFromBag, type BagItem } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
 import { useResource, write } from "../data/hooks";
@@ -14,6 +14,7 @@ import { placementSource } from "../maps/workspace/tokenPlacement";
 import { useCurrentUser } from "../api/currentUser";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { WebInbox, useWebInbox } from "./WebInbox";
+import { RuleArticleModal } from "./RuleArticleModal";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 
@@ -27,6 +28,8 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
   const [unloading, setUnloading] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "info" | "error" } | null>(null);
   const [verstakOpen, setVerstakOpen] = useState(false);
+  const [article, setArticle] = useState<BagItem | null>(null);
+  const articleTrigger = useRef<HTMLButtonElement | null>(null);
   // Входящие (захват с сайтов) — вкладка Мешка у Мастера; на карте их нет.
   const isPlayer = useCurrentUser().user?.role === "player";
   const showInbox = !isPlayer && !mapPlacement;
@@ -78,7 +81,8 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
 
   const hasCards = items.some((item) => !item.pdfQuote);
   const targetsFor = (item: SearchResult) => targets.filter((t) => t.accepts(item));
-  const unloadable = items.filter((i) => !i.pdfQuote && targetsFor(i).length > 0);
+  const staging = items.filter((item) => !item.pdfQuote && !item.rule?.pinned);
+  const unloadable = staging.filter((item) => targetsFor(item).length > 0);
   const distinctTargets = new Set(unloadable.flatMap((i) => targetsFor(i).map((t) => t.id)));
 
   async function unloadAll() {
@@ -86,8 +90,8 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
     await runUnload(plan);
   }
 
-  async function runUnload(plan: { item: SearchResult; target: UnloadTarget }[]) {
-    const done: SearchResult[] = [];
+  async function runUnload(plan: { item: BagItem; target: UnloadTarget }[]) {
+    const done: BagItem[] = [];
     for (const { item, target } of plan) {
       try {
         await target.drop(item);
@@ -100,7 +104,8 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
     setUnloading(false);
   }
 
-  const cells = Array.from({ length: size }, (_, i) => items[i] ?? null);
+  const ordered = [...items].sort((a, b) => Number(!!b.rule?.pinned) - Number(!!a.rule?.pinned));
+  const cells = Array.from({ length: size }, (_, i) => ordered[i] ?? null);
 
   const unloadTitle =
     items.length === 0
@@ -163,21 +168,27 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
         {cells.map((item, i) =>
           item ? (
             <div
-              key={i}
-              className="bag-cell bag-cell-filled"
+              key={bagItemKey(item)}
+              className={`bag-cell bag-cell-filled${item.rule?.pinned ? " bag-cell-pinned" : ""}`}
               draggable
               onDragStart={(e) => handleDragStart(e, item)}
               title={item.pdfQuote ? `${item.title} · Стр. ${item.pdfQuote.page}\n${item.pdfQuote.text}` : item.title}
             >
               {item.pdfQuote
                 ? <Link className="bag-cell-label" draggable={false} to={`/resources/${item.id}/read?page=${item.pdfQuote.page}`}>{item.pdfQuote.text}</Link>
-                : <span className="bag-cell-label">{item.title}</span>}
+                : item.type === "compendium_entry" && (item.rule || item.kind === "mechanic_item")
+                  ? <button type="button" className="bag-article-button" draggable={false}
+                      aria-label={item.rule?.pinned ? `${item.title}, закреплено` : undefined}
+                      onClick={(e) => { articleTrigger.current = e.currentTarget; setArticle(item); }}>
+                      <span className="bag-cell-label">{item.title}</span>
+                    </button>
+                  : <span className="bag-cell-label">{item.title}</span>}
               {mapPlacement && placementSource(item) && <button type="button" className="bag-cell-place" title="Разместить на карте" aria-label={`Разместить из мешка: ${item.title}`}
                 onClick={() => { mapPlacement.place(placementSource(item)!); onMapPlace?.(); }}>На карту</button>}
               <button
                 type="button"
                 className="bag-cell-remove"
-                onClick={() => removeFromBag(i)}
+                onClick={() => removeFromBag(item)}
                 title="Убрать из мешка"
               >
                 ✕
@@ -185,7 +196,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
             </div>
           ) : (
             <button
-              key={i}
+              key={`empty-${i}`}
               type="button"
               className="bag-cell bag-cell-empty"
               onClick={handleAddCurrent}
@@ -198,7 +209,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
       </div>}
       {unloading && (
         <UnloadModal
-          items={items.filter((item) => !item.pdfQuote)}
+          items={staging}
           targetsFor={targetsFor}
           onCancel={() => setUnloading(false)}
           onConfirm={runUnload}
@@ -211,6 +222,7 @@ export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace
           onRemove={removeFromBag}
         />
       )}
+      {article && <RuleArticleModal source={{ item: article }} returnFocusTo={articleTrigger} onClose={() => setArticle(null)} />}
     </div>
   );
 }
@@ -221,10 +233,10 @@ function UnloadModal({
   onCancel,
   onConfirm,
 }: {
-  items: SearchResult[];
+  items: BagItem[];
   targetsFor: (item: SearchResult) => UnloadTarget[];
   onCancel: () => void;
-  onConfirm: (plan: { item: SearchResult; target: UnloadTarget }[]) => void;
+  onConfirm: (plan: { item: BagItem; target: UnloadTarget }[]) => void;
 }) {
   const [choice, setChoice] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -233,7 +245,7 @@ function UnloadModal({
   );
 
   function confirm() {
-    const plan: { item: SearchResult; target: UnloadTarget }[] = [];
+    const plan: { item: BagItem; target: UnloadTarget }[] = [];
     for (const item of items) {
       const targetId = choice[`${item.type}:${item.id}`];
       const target = targetsFor(item).find((t) => t.id === targetId);
@@ -291,9 +303,9 @@ function BagVerstakModal({
   onClose,
   onRemove,
 }: {
-  items: SearchResult[];
+  items: BagItem[];
   onClose: () => void;
-  onRemove: (index: number) => void;
+  onRemove: (item: BagItem) => void;
 }) {
   const ids = items.filter((i) => i.type === "compendium_entry").map((i) => i.id);
   // Записи мешка — пачкой под ключом слоя: правка записи в компендиуме
@@ -333,8 +345,8 @@ function BagVerstakModal({
       onClose={onClose}
       onRemove={(id) => {
         setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
-        const idx = items.findIndex((it) => it.type === "compendium_entry" && it.id === id);
-        if (idx >= 0) onRemove(idx);
+        const item = items.find((entry) => entry.type === "compendium_entry" && entry.id === id);
+        if (item) onRemove(item);
       }}
     />
   );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
+import { notifyDataChanged } from "../dataSync";
 import { useConfirm } from "../hooks/useConfirm";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { ModulesTab } from "../components/ModulesTab";
@@ -305,6 +306,7 @@ export function StoragesSettingsPage() {
     setError("");
     try {
       await write.post(`/storages/${id}/activate`);
+      notifyDataChanged();
       window.location.reload();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;

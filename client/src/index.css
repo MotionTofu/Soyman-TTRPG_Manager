@@ -4229,7 +4229,7 @@ body.live-hide-search.live-hide-dock .app-content {
 }
 .bag-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-2);
   border-radius: var(--card-radius);
 }
@@ -4286,6 +4286,37 @@ body.live-hide-search.live-hide-dock .app-content {
   -webkit-box-orient: vertical;
   word-break: break-word;
 }
+.bag-article-button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: var(--sp-1);
+  border: 0;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+}
+.bag-article-button .bag-cell-label {
+  width: 100%;
+  font: 600 var(--fs-data)/1.1 var(--font-ui);
+  word-break: normal;
+}
+.bag-article-button:hover .bag-cell-label { text-decoration: underline; }
+.bag-article-button:focus-visible { outline-offset: -2px; }
+.bag-cell-pinned { background: var(--tab); }
+.bag-cell-pinned::before {
+  content: "";
+  position: absolute;
+  top: var(--sp-2);
+  inset-inline-start: var(--sp-2);
+  width: var(--sp-2);
+  height: var(--sp-2);
+  border-radius: 50%;
+  background: var(--ink);
+  pointer-events: none;
+}
 .bag-cell-remove {
   /* Глубина — обводкой, а не тенью (§1.2): теней в системе нет. */
   border: var(--card-border-width) solid var(--line);
@@ -4301,7 +4332,7 @@ body.live-hide-search.live-hide-dock .app-content {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.bag-cell-filled:hover .bag-cell-remove {
+.bag-cell-filled:is(:hover, :focus-within) .bag-cell-remove {
   opacity: 1;
 }
 @media (pointer: coarse) {

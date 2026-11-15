@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { useBagStorageId } from "../bag";
 import { readOnce } from "../data/imperative";
-import { EntityPreviewModal } from "./EntityPreviewModal";
 import { LoadErrorCard } from "./Loadable";
+import { RuleArticleModal } from "./RuleArticleModal";
 import { MentionText } from "./mentions/MentionText";
 
 interface RandomArticle {
@@ -18,11 +19,13 @@ interface RandomArticle {
 const LAST_SHOWN_KEY = "homeArticleLastId";
 
 export function HomeArticleCard() {
-  const [article, setArticle] = useState<RandomArticle | null | undefined>(undefined);
+  const storageId = useBagStorageId();
+  const [article, setArticle] = useState<(RandomArticle & { storageId: string | undefined }) | null>();
   const [open, setOpen] = useState(false);
   const [clipped, setClipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const articleRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -34,7 +37,7 @@ export function HomeArticleCard() {
     readOnce<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`)
       .then((next) => {
         if (controller.signal.aborted) return;
-        setArticle(next);
+        setArticle(next && { ...next, storageId });
         if (next) try { sessionStorage.setItem(LAST_SHOWN_KEY, String(next.id)); } catch {}
       })
       .catch((e) => {
@@ -43,7 +46,7 @@ export function HomeArticleCard() {
         setArticle(null);
       });
     return () => controller.abort();
-  }, [reloadKey]);
+  }, [reloadKey, storageId]);
 
   // «Читать целиком» показывается только когда текст действительно не влез.
   // Пересчитываем и на ресайз (ResizeObserver) — иначе после поворота телефона флаг врёт.
@@ -85,6 +88,7 @@ export function HomeArticleCard() {
   return (
     <div className="home-section">
       <div
+        ref={articleRef}
         // Затухание обрезанного тела рисуется на самом блоке, а не на колонке
         // прозы: только так оно доходит до низа вырезки и до её краёв.
         className={`home-article${clipped ? " home-article-clipped" : ""}`}
@@ -92,12 +96,11 @@ export function HomeArticleCard() {
         tabIndex={0}
         aria-label={`Открыть статью: ${article.name}, ${issue}`}
         onClick={(e) => {
-          // Ссылка-меншен внутри тела ведёт к своей сущности — её щелчок не
-          // должен ещё и открывать статью, поверх которой он стоит.
-          if ((e.target as HTMLElement).closest("a")) return;
+          if ((e.target as Element).closest("a, button")) return;
           setOpen(true);
         }}
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setOpen(true);
@@ -136,7 +139,11 @@ export function HomeArticleCard() {
         </div>
       </div>
       {open && (
-        <EntityPreviewModal type="compendium_entry" id={article.id} onClose={() => setOpen(false)} />
+        <RuleArticleModal
+          source={{ article, storageId: article.storageId }}
+          returnFocusTo={articleRef}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );
