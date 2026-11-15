@@ -32,7 +32,7 @@
 
 .side-search .search-heading,
 .side-search-heading-title { display: flex; align-items: center; gap: 7px; }
-.side-search .search-heading { justify-content: space-between; margin-bottom: 10px; }
+.side-search .search-heading { margin-bottom: 10px; }
 .side-search-heading-title > svg { width: 16px; height: 16px; }
 .side-search .search-heading :is(strong, .side-module-title) {
   padding: 0;
@@ -42,15 +42,6 @@
   letter-spacing: normal;
   text-transform: none;
 }
-
-.side-search .search-heading kbd {
-  padding-inline: var(--sp-3);
-  border: 1px solid var(--search-line);
-  border-radius: 3px;
-  color: var(--muted);
-  font: 12px/20px system-ui, sans-serif;
-}
-.side-modules:has(> .side-modules__narrow) .side-search .search-heading kbd { margin-inline-end: var(--sp-8); }
 
 .side-search .search-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); }
 .side-search .search-input-wrap { min-width: 0; }

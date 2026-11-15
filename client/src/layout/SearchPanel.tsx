@@ -180,7 +180,6 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
     }}>
       <div className="search-heading">
         <div className="side-search-heading-title"><NavIcon name="search" />{titleOf("search", "Поиск")}</div>
-        <kbd aria-label="Горячая клавиша: косая черта">/</kbd>
       </div>
       <div className="row search-input-row">
         <div className="search-input-wrap">
