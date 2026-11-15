@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuthToken } from "../../api/client";
 import { useAction, useResource, write } from "../../data/hooks";
@@ -6,12 +6,11 @@ import { labelled, showSaveError } from "../../data/notices";
 import { settingPagePaths } from "../../data/settingPage";
 import { useConfirm } from "../../hooks/useConfirm";
 import { IMAGE_ACCEPT } from "../../imageUpload";
-import { RESOURCE_CATEGORIES, guessResourceCategory } from "../../resourceCategories";
-import { isSafeImageUrl } from "../../utils/safeUrl";
-import { useAuthenticatedFileUrl } from "../../utils/fileUrl";
 import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
 import { EmptyState } from "../EmptyState";
 import { ImageLightbox } from "../ImageLightbox";
+import { GalleryStack, GalleryPhoto } from "../GalleryPhotos";
+import { DRAG_ALBUM, galleryImageCategory, useGalleryImage } from "../../media/galleryImages";
 import type { Album, Resource, Setting } from "../../types";
 
 // «Галерея» сеттинга (разбор профиля сеттинга, Q12/Q28; альбомы — Q20–Q22,
@@ -32,21 +31,8 @@ const STACK_TILT = [
 ];
 /** «Без альбома» — не альбом, а остаток: картинки без альбома этого сеттинга. */
 const LOOSE = "loose";
-const DRAG_IMAGE = "application/x-soyman-gallery-image";
-const DRAG_ALBUM = "application/x-soyman-gallery-album";
 
 type Open = number | typeof LOOSE;
-
-function kindOf(r: Resource): string {
-  if (r.category && RESOURCE_CATEGORIES.some((c) => c.key === r.category)) return r.category;
-  return guessResourceCategory(r.file_url || r.link_url || r.name);
-}
-
-function useImageSrc(url: string | null | undefined): string | null {
-  const safe = url && isSafeImageUrl(url) ? url : null;
-  const auth = useAuthenticatedFileUrl(safe);
-  return safe?.startsWith("/files/") ? auth : safe;
-}
 
 const imagesWord = (n: number) => {
   const d = n % 10;
@@ -62,7 +48,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
   const albumsPath = `/albums?setting_id=${setting.id}`;
   const all = useResource<Resource[]>(settingPagePaths.resources(setting.id)).data ?? NO_RESOURCES;
   const albums = useResource<Album[]>(albumsPath).data ?? NO_ALBUMS;
-  const images = useMemo(() => all.filter((r) => ["image", "map"].includes(kindOf(r))), [all]);
+  const images = useMemo(() => all.filter((r) => ["image", "map"].includes(galleryImageCategory(r))), [all]);
   const [picked, setPicked] = useState<Open | null>(null);
   const [query, setQuery] = useState("");
   const [slotsOpen, setSlotsOpen] = useState(false);
@@ -272,7 +258,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
         <button type="button" className={`population__chip${slotsOpen ? " is-on" : ""}`} aria-expanded={slotsOpen} onClick={() => setSlotsOpen((v) => !v)}>
           Слоты «Фон» и «Обложка»
         </button>
-        <Link to="/gallery">Открыть в Галерее ›</Link>
+        <Link to={`/media?tab=gallery&where=setting:${setting.id}${typeof open === "number" ? `&album=${open}` : ""}`}>Открыть в Медиатеке ›</Link>
         <input ref={upload} type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => {
           void uploadFile(e.target.files?.[0]);
           e.target.value = "";
@@ -292,7 +278,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
 
       <section className="setting-gallery__albums" aria-label="Альбомы">
         {albums.map((a, i) => (
-          <Stack
+          <GalleryStack
             key={a.id}
             name={a.name}
             items={byAlbum.get(a.id) ?? []}
@@ -313,7 +299,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
         ))}
         {/* «Без альбома» — последней и только непустой (Q26). */}
         {loose.length > 0 && albums.length > 0 && (
-          <Stack
+          <GalleryStack
             name="Без альбома"
             items={loose}
             tilt={STACK_TILT[albums.length % STACK_TILT.length]}
@@ -389,7 +375,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
             <ul className="setting-gallery__wall">
               {shown.map((r, i) => (
                 <li key={r.id} style={{ ["--tilt" as string]: `${TILT[i % TILT.length]}deg` }}>
-                  <Tile resource={r} taped={i % 3 !== 1} onOpen={() => setView(i)} onMenu={(x, y) => imageMenu(x, y, r)} />
+                  <GalleryPhoto resource={r} taped={i % 3 !== 1} onOpen={() => setView(i)} onMenu={(x, y) => imageMenu(x, y, r)} />
                 </li>
               ))}
             </ul>
@@ -416,81 +402,8 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
   );
 }
 
-function Stack({
-  name,
-  items,
-  tilt,
-  current,
-  onOpen,
-  onMenu,
-  onDragStart,
-  onDropImage,
-  onDropAlbum,
-}: {
-  name: string;
-  items: Resource[];
-  tilt: number[];
-  current: boolean;
-  onOpen: () => void;
-  onMenu?: (x: number, y: number) => void;
-  onDragStart?: (e: DragEvent) => void;
-  onDropImage: (id: number) => void;
-  onDropAlbum?: (id: number) => void;
-}) {
-  const [over, setOver] = useState(false);
-  // Стопка — три последние картинки (Q26); пустой альбом — рамка с названием.
-  const top = [...items].sort((a, b) => b.id - a.id).slice(0, 3).reverse();
-  const accepts = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_IMAGE) || (!!onDropAlbum && e.dataTransfer.types.includes(DRAG_ALBUM));
-  return (
-    <button
-      type="button"
-      className={`setting-gallery__stack${current ? " is-current" : ""}${over ? " is-over" : ""}${items.length ? "" : " is-empty"}`}
-      aria-current={current}
-      draggable={!!onDragStart}
-      onDragStart={onDragStart}
-      onClick={onOpen}
-      onContextMenu={(e) => {
-        if (!onMenu) return;
-        e.preventDefault();
-        onMenu(e.clientX, e.clientY);
-      }}
-      onDragOver={(e) => {
-        if (!accepts(e)) return;
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        setOver(false);
-        const image = Number(e.dataTransfer.getData(DRAG_IMAGE));
-        const album = Number(e.dataTransfer.getData(DRAG_ALBUM));
-        if (image) onDropImage(image);
-        else if (album && onDropAlbum) onDropAlbum(album);
-      }}
-    >
-      {top.map((r, i) => (
-        <StackLayer key={r.id} resource={r} index={i} tilt={tilt[i]} />
-      ))}
-      {items.length > 0 && <span className="setting-gallery__stack-tape" aria-hidden="true" />}
-      <span className="setting-gallery__stack-name">
-        {name}
-        <span>· {items.length}</span>
-      </span>
-    </button>
-  );
-}
-
-function StackLayer({ resource, index, tilt }: { resource: Resource; index: number; tilt: number }) {
-  const src = useImageSrc(resource.file_url ?? resource.link_url);
-  return (
-    <span className="setting-gallery__stack-layer" aria-hidden="true" style={{ ["--i" as string]: index, ["--tilt" as string]: `${tilt}deg` }}>
-      {src && <img src={src} alt="" loading="lazy" draggable={false} />}
-    </span>
-  );
-}
-
 function Slot({ label, url, hint, wide, onClear }: { label: string; url: string | null; hint: string; wide?: boolean; onClear: () => void }) {
-  const src = useImageSrc(url);
+  const src = useGalleryImage(url);
   return (
     <div className={`setting-gallery__slot${wide ? " is-wide" : ""}`}>
       <span className="paper-label">{label}</span>
@@ -503,39 +416,5 @@ function Slot({ label, url, hint, wide, onClear }: { label: string; url: string 
         </button>
       )}
     </div>
-  );
-}
-
-function Tile({ resource, taped, onOpen, onMenu }: { resource: Resource; taped: boolean; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
-  const src = useImageSrc(resource.file_url ?? resource.link_url);
-  return (
-    <figure
-      className="setting-gallery__tile"
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData(DRAG_IMAGE, String(resource.id))}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onMenu(e.clientX, e.clientY);
-      }}
-    >
-      {taped && <span className="setting-gallery__tape" aria-hidden="true" />}
-      <button type="button" className="setting-gallery__photo" onClick={onOpen} aria-label={`Открыть: ${resource.name}`}>
-        {src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{resource.name}</span>}
-      </button>
-      <figcaption>
-        {resource.name}
-        <button
-          type="button"
-          className="setting-gallery__more"
-          aria-label={`Действия: ${resource.name}`}
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            onMenu(r.right, r.bottom);
-          }}
-        >
-          ⋯
-        </button>
-      </figcaption>
-    </figure>
   );
 }

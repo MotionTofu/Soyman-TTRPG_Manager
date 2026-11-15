@@ -5047,7 +5047,7 @@ export function CanvasPage() {
         if (frame) items.push({ label: frame.collapsed ? "Развернуть" : "Свернуть", onClick: () => toggleFrame(Number(id), !frame.collapsed) });
       }
       if (type === "sound_set") {
-        items.push({ label: "Открыть в Аудиотеке", onClick: () => navigate(`/audio-library?set=${id}`) });
+        items.push({ label: "Открыть в Медиатеке", onClick: () => navigate(`/media?tab=sound&set=${id}`) });
         items.push({
           label: "Переименовать",
           onClick: async () => {

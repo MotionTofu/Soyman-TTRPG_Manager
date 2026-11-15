@@ -139,7 +139,6 @@ export function BookLibraryPage(){
     <button type="button" onClick={event=>{event.currentTarget.closest("details")?.removeAttribute("open");newBook();}}>Книга без файла…</button>
     <button type="button" onClick={event=>{event.currentTarget.closest("details")?.removeAttribute("open");setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length});}}>Подраздел…</button>
     <Link to="/archive">Показать архив</Link>
-    <Link to="/mastering/cutscenes">Катсцены</Link>
    </div>
   </details><input ref={upload} type="file" accept=".pdf,.md,.zip" hidden onChange={event=>{void importFile(event.target.files?.[0]);event.target.value="";}}/></div>
  {department!=="room"&&department!=="none"&&<button className="library-department-settings" onClick={()=>{const item=departments.find(item=>item.id===Number(department));if(item)setOrganization({kind:"department",id:item.id,name:item.name,position:item.position,department:null});}}>Настройки подраздела</button>}

@@ -1,203 +1,84 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { readEntity, readResource } from "../data/imperative";
 import { useAudioPlayer } from "../audioPlayer";
+import { Modal } from "../components/Modal";
 import { NavIcon } from "../components/NavIcons";
+import { useEntity, useResource } from "../data/hooks";
+import { useGalleryImage } from "../media/galleryImages";
+import { useSoundEngineOptional } from "../sound/engine";
 import type { PlaylistDetail, Resource, Setting } from "../types";
+import "./media-library.css";
 
 function formatTime(seconds: number): string {
-  if (!isFinite(seconds) || seconds < 0) seconds = 0;
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+  const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// Full-screen "now playing" view, opened by tapping MiniPlayerBar — same
-// spirit as a phone's system music player. The cover art isn't the track's
-// own (resources don't carry artwork) — per the user's request it's one of
-// the setting images tied to whatever's playing. Resolved two ways: primarily
-// via the current track's own resource (every resource already carries its
-// own setting_id/setting_name — works whether the track came from a playlist
-// or was played ad-hoc from the Треки library, where there's no playlist at
-// all); falls back to the active playlist's own setting (directly, or via
-// session -> campaign -> setting) only if the resource itself has none.
-export function NowPlayingPage() {
-  const navigate = useNavigate();
+export function NowPlayingSheet({ onClose }: { onClose: () => void }) {
   const {
-    current,
-    tracks,
-    index,
-    count,
-    isPlaying,
-    currentTime,
-    duration,
-    repeatMode,
-    shuffleMode,
-    activePlaylistId,
-    toggle,
-    next,
-    prev,
-    seek,
-    playTrackAt,
-    setRepeatMode,
-    setShuffleMode,
+    current, tracks, index, count, isPlaying, currentTime, duration, repeatMode, shuffleMode,
+    activePlaylistId, toggle, next, prev, seek, playTrackAt, setRepeatMode, setShuffleMode,
   } = useAudioPlayer();
-
-  // Играющая строка сама подкручивается в видимую часть — на телефоне список
-  // длиннее экрана всегда.
-  // Кадром позже, а не сразу: на монтировании страницы список ещё не получил
-  // окончательную высоту, и прокрутка уезжала в никуда. Строка ставится по
-  // центру, а не «ближайшим краем»: у нижнего края её накрывает плавающая
-  // навигация.
-  const activeTrackRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      activeTrackRef.current?.scrollIntoView({ block: "center" });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [index]);
-
-  const [subtitle, setSubtitle] = useState("");
-  const [coverUrl, setCoverUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCoverUrl(null);
-    setSubtitle("");
-    if (!current) return;
-    let cancelled = false;
-
-    async function resolveSetting(): Promise<Setting | null> {
-      // Primary: the playing resource's own home setting.
-      try {
-        const resource = await readEntity<Resource>("resource", current!.id);
-        if (resource.setting_id) return await readEntity<Setting>("setting", resource.setting_id);
-      } catch {
-        // fall through to the playlist-based lookup below
-      }
-      // Запасного пути по плейлисту больше нет: плейлист остался только
-      // боевой темой и ничьему сеттингу не принадлежит. Если у самого трека
-      // сеттинга нет — обложки не будет, и это честнее выдуманной.
-      return null;
-    }
-
-    async function resolve() {
-      if (activePlaylistId) {
-        readResource<PlaylistDetail>(`/playlists/${activePlaylistId}`)
-          .then((p) => !cancelled && setSubtitle(p.name))
-          .catch(() => {});
-      }
-      const setting = await resolveSetting();
-      if (!cancelled && setting) {
-        setCoverUrl(setting.background_image_url || setting.thumbnail_image_url);
-      }
-    }
-    resolve().catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [current, activePlaylistId]);
-
-  if (!current) {
-    navigate("/", { replace: true });
-    return null;
-  }
+  const activeSet = useSoundEngineOptional()?.state.data?.set;
+  const playlist = useResource<PlaylistDetail>(activePlaylistId ? `/playlists/${activePlaylistId}` : null).data;
+  const resource = useEntity<Resource>("resource", current?.id ?? null).data;
+  const setting = useEntity<Setting>("setting", resource?.setting_id ?? null).data;
+  const cover = useGalleryImage(setting?.background_image_url || setting?.thumbnail_image_url);
+  const repeat = repeatMode === "track" ? "Один трек" : repeatMode === "playlist" ? "По кругу" : "Выключен";
+  const subtitle = [activeSet?.name ?? playlist?.name, count > 1 ? `${index + 1} из ${count}` : ""].filter(Boolean).join(" · ");
 
   return (
-    <div className="now-playing-page">
-      <div className="now-playing-topbar">
-        <button type="button" onClick={() => navigate(-1)} title="Закрыть">
-          ⌄
-        </button>
-        <span className="muted">Сейчас играет</span>
-        <span />
-      </div>
+    <Modal onClose={onClose} ariaLabel="Сейчас играет" className="media-playing">
+      <h2>Сейчас играет</h2>
+      {!current ? <p className="media-playing__empty">Очередь пуста.</p> : (
+        <div className="media-playing__body">
+          <div className="media-playing__cover">
+            {cover && <img src={cover} alt="" />}
+            <div>
+              <strong>{current.name}</strong>
+              {subtitle && <span>{subtitle}</span>}
+            </div>
+          </div>
 
-      <div className="now-playing-cover">
-        {coverUrl ? (
-          <img src={coverUrl} alt="" />
-        ) : (
-          <NavIcon name="player" className="now-playing-cover-placeholder" />
-        )}
-      </div>
+          <div className="now-playing-seek">
+            <input type="range" aria-label="Позиция трека" min={0} max={duration || 0} step={0.1}
+              value={Math.min(currentTime, duration || 0)} onChange={event => seek(Number(event.target.value))} />
+            <div className="media-playing__times">
+              <span className="muted">{formatTime(currentTime)}</span>
+              <span className="muted">{formatTime(duration)}</span>
+            </div>
+          </div>
 
-      <div className="now-playing-info">
-        <strong>{current.name}</strong>
-        {subtitle && <div className="muted">{subtitle}</div>}
-      </div>
-
-      <div className="now-playing-seek">
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          value={Math.min(currentTime, duration || 0)}
-          onChange={(e) => seek(Number(e.target.value))}
-        />
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <span className="muted">{formatTime(currentTime)}</span>
-          <span className="muted">{formatTime(duration)}</span>
-        </div>
-      </div>
-
-      <div className="now-playing-controls">
-        <button
-          type="button"
-          className={shuffleMode ? "active" : ""}
-          onClick={() => setShuffleMode(!shuffleMode)}
-          title="Случайный порядок"
-        >
-          <NavIcon name="shuffle" />
-        </button>
-        <button type="button" onClick={prev} disabled={!shuffleMode && index <= 0} title="Предыдущий трек">
-          <NavIcon name="prev" />
-        </button>
-        <button type="button" className="now-playing-play" onClick={toggle} title={isPlaying ? "Пауза" : "Играть"}>
-          <NavIcon name={isPlaying ? "pause" : "play"} />
-        </button>
-        <button
-          type="button"
-          onClick={next}
-          disabled={!shuffleMode && index >= count - 1 && repeatMode !== "playlist"}
-          title="Следующий трек"
-        >
-          <NavIcon name="next" />
-        </button>
-        <button
-          type="button"
-          className={repeatMode !== "off" ? "active" : ""}
-          onClick={() => setRepeatMode(repeatMode === "off" ? "playlist" : repeatMode === "playlist" ? "track" : "off")}
-          title={
-            repeatMode === "off" ? "Повтор выключен" : repeatMode === "playlist" ? "По кругу" : "Один трек"
-          }
-        >
-          <NavIcon name={repeatMode === "track" ? "repeatTrack" : "repeatPlaylist"} />
-        </button>
-      </div>
-
-      {/* Очередь целиком: щелчок по строке переключает на неё. Страница из-за
-          этого стала прокручиваемой — обложку не режем, она здесь и есть
-          главное, а список живёт ниже транспорта. */}
-      {tracks.length > 1 ? (
-        <div className="now-playing-queue">
-          <div className="muted now-playing-queue-head">Очередь · {tracks.length}</div>
-          {tracks.map((t, i) => (
-            <button
-              key={i}
-              type="button"
-              className={i === index ? "now-playing-queue-row active" : "now-playing-queue-row"}
-              ref={i === index ? activeTrackRef : undefined}
-              onClick={() => {
-                if (i === index) return; // по играющему не бьём
-                playTrackAt(i);
-              }}
-            >
-              <span className="now-playing-queue-num">{i + 1}</span>
-              <span className="now-playing-queue-name">{t.name}</span>
+          <div className="now-playing-controls">
+            <button type="button" aria-pressed={shuffleMode} className={shuffleMode ? "active" : ""}
+              onClick={() => setShuffleMode(!shuffleMode)} title="Случайный порядок"><NavIcon name="shuffle" /></button>
+            <button type="button" onClick={prev} disabled={!shuffleMode && index <= 0} title="Предыдущий трек"><NavIcon name="prev" /></button>
+            <button type="button" className="now-playing-play" onClick={toggle} title={isPlaying ? "Пауза" : "Играть"}>
+              <NavIcon name={isPlaying ? "pause" : "play"} />
             </button>
-          ))}
+            <button type="button" onClick={next} disabled={!shuffleMode && index >= count - 1 && repeatMode !== "playlist"} title="Следующий трек">
+              <NavIcon name="next" />
+            </button>
+            <button type="button" className={repeatMode !== "off" ? "active" : ""} aria-label={`Повтор: ${repeat.toLowerCase()}`}
+              onClick={() => setRepeatMode(repeatMode === "off" ? "playlist" : repeatMode === "playlist" ? "track" : "off")} title={repeat}>
+              <NavIcon name={repeatMode === "track" ? "repeatTrack" : "repeatPlaylist"} />
+            </button>
+          </div>
+
+          <p className="media-playing__repeat">Повтор · {repeat.toLowerCase()}</p>
+          {tracks.length > 1 && (
+            <details className="now-playing-queue">
+              <summary className="muted now-playing-queue-head">Очередь · {tracks.length}</summary>
+              {tracks.map((track, position) => (
+                <button key={position} type="button" aria-current={position === index}
+                  className={position === index ? "now-playing-queue-row active" : "now-playing-queue-row"}
+                  onClick={() => { if (position !== index) playTrackAt(position); }}>
+                  <span className="now-playing-queue-num">{position + 1}</span>
+                  <span className="now-playing-queue-name">{track.name}</span>
+                </button>
+              ))}
+            </details>
+          )}
         </div>
-      ) : null}
-    </div>
+      )}
+    </Modal>
   );
 }

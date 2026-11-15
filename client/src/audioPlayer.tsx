@@ -8,7 +8,6 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
-import { Link } from "react-router-dom";
 import { getAuthToken } from "./api/client";
 import { useResource } from "./data/hooks";
 import { NavIcon } from "./components/NavIcons";
@@ -919,17 +918,17 @@ export function AudioPlayerBar({
 // Mobile-only "now playing" capsule — floats above .mobile-bottom-nav (see
 // index.css) and only exists while a track is actually playing, replacing
 // the old always-present mobile drawer entirely per the user's request.
-// Tapping it (anywhere but the transport buttons) opens NowPlayingPage for
+// Tapping it (anywhere but the transport buttons) opens the player sheet for
 // the scrubber/shuffle/repeat controls that don't fit here.
-export function MiniPlayerBar() {
+export function MiniPlayerBar({ onOpen }: { onOpen: () => void }) {
   const { current, isPlaying, toggle, next } = useAudioPlayer();
   if (!current) return null;
 
   return (
     <div className="mini-player-bar" role="group" aria-label={`Сейчас играет: ${current.name}`}>
-      <Link to="/now-playing" className="mini-player-link" aria-label={`Развернуть плеер: ${current.name}`}>
+      <button type="button" onClick={onOpen} className="mini-player-link" aria-label={`Развернуть плеер: ${current.name}`}>
         <span className="mini-player-track">{current.name}</span>
-      </Link>
+      </button>
       <button
         type="button"
         onClick={toggle}

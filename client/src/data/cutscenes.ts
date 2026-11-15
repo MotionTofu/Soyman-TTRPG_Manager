@@ -36,7 +36,7 @@ export function cutsceneCatalogParams(filter: CutsceneCatalogFilter): URLSearchP
 export function updateCutsceneCatalogParams(current: URLSearchParams, patch: Partial<CutsceneCatalogFilter>): URLSearchParams {
   const next = { ...parseCutsceneCatalogFilter(current), ...patch }, params = cutsceneCatalogParams(next);
   if (next.search) params.set("search", next.search);
-  for (const key of [...current.keys()]) current.delete(key);
+  for (const key of ["archive", "sort", "order", "search", "campaignId"]) current.delete(key);
   params.forEach((value, key) => current.set(key, value));
   return current;
 }

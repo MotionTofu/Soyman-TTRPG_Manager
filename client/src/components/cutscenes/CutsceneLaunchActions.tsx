@@ -5,8 +5,8 @@ import { useAudioOwnership } from "../../sound/audioOwnership";
 import { CutsceneReadiness } from "./CutsceneReadiness";
 
 /** All entry points select the saved original; they never pass the workshop draft to playback. */
-export function CutsceneLaunchActions({ id, context = { kind: "library" }, name, onStarted, beforeSelect }: {
-  id: number; rehearsal?: boolean; context?: CutsceneLaunchContext; name?: string; onStarted?: () => void; beforeSelect?: () => Promise<boolean>;
+export function CutsceneLaunchActions({ id, context = { kind: "library" }, name, onStarted, beforeSelect, catalog }: {
+  id: number; rehearsal?: boolean; context?: CutsceneLaunchContext; name?: string; catalog?: boolean; onStarted?: () => void; beforeSelect?: () => Promise<boolean>;
 }) {
   const { controller, state } = useCutscenePlayback(), lease = useAudioOwnership();
   const [mode, setMode] = useState<"live" | "rehearsal" | null>(null), [loading, setLoading] = useState(false);
@@ -21,9 +21,10 @@ export function CutsceneLaunchActions({ id, context = { kind: "library" }, name,
       await controller.select(id);
     } finally { setLoading(false); }
   }
+  const playing = catalog && active && state.run?.snapshot.version.cutsceneId === id;
   const disabled = loading || state.busy || active || !!lease && !beforeSelect;
   return <>
-    <button type="button" className="primary" disabled={disabled} aria-label={name ? `Показать катсцену «${name}»` : undefined} onClick={() => void select("live")}>Показать игрокам</button>
+    <button type="button" className={catalog ? `d-btn d-btn--sm${playing ? " d-btn--primary" : ""}` : "primary"} disabled={disabled} aria-label={name && !playing ? `Показать катсцену «${name}»` : undefined} onClick={() => void select("live")}>{playing ? "Идёт показ" : "Показать игрокам"}</button>
     {mode && <CutsceneReadiness controller={controller} state={state} mode={mode} context={context}
       onClose={() => { if (controller.dismiss()) setMode(null); }} />}
   </>;

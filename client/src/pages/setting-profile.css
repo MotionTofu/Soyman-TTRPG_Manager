@@ -229,7 +229,9 @@
   font-size: var(--fs-data);
   font-weight: 600;
 }
+.setting-gallery__stack-name > strong { font-weight: inherit; }
 .setting-gallery__stack-name > span { color: var(--paper-ink-soft); font-weight: 400; }
+.setting-gallery__stack-name > span::before { content: "· "; }
 .setting-gallery__new {
   display: flex;
   flex-direction: column;

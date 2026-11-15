@@ -1,5 +1,5 @@
 import { CutscenePlayer } from "../components/cutscenes/CutscenePlayer";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getAuthToken, setAuthToken } from "../api/client";
 import { useEntity, useResource, write } from "../data/hooks";
@@ -38,6 +38,10 @@ import { workspaceMode } from "./workspaceMode";
 import { MapWorkspaceRail, onMapSearchRequest } from "../maps/workspace/MapWorkspace";
 import { MapWorkspaceContext, type MapPlacementController } from "../maps/workspace/workspaceContext";
 
+import { MEDIA_ROUTE, MEDIA_TABS, mediaTab } from "../media/routes";
+
+const NowPlayingSheet = lazy(() => import("../pages/NowPlayingPage").then(m => ({ default: m.NowPlayingSheet })));
+
 interface NavItem {
   to?: string;
   label: string;
@@ -57,8 +61,7 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/graph/adventures", label: "Связи приключений", icon: "graph" },
   { to: "/maps", label: "Редактор карт", icon: "map" },
   { to: "/mastering", label: "Библиотека", icon: "mastering" },
-  {to:"/gallery",label:"Галерея",icon:"image"},
-  {to:"/audio-library",label:"Аудиотека",icon:"volume"},
+  { to: MEDIA_ROUTE, label: "Медиатека", icon: "image" },
 ];
 
 // Player role: четыре места (Кабинет игрока, шаг 5) — Главная, Дневники,
@@ -498,7 +501,19 @@ export function AppShell() {
   // dock (see PreviewDock) instead — a GM running a live session gets a
   // place to keep creature/location previews visible instead of the app
   // nav they're not using mid-session.
-  const { pathname, search } = useLocation();
+  const { pathname, search, hash } = useLocation();
+  const mediaParams = new URLSearchParams(search);
+  const legacyPlaying = pathname === MEDIA_ROUTE && mediaParams.get("playing") === "1";
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const mediaSection = pathname === MEDIA_ROUTE ? MEDIA_TABS.find(tab => tab.id === mediaTab(mediaParams.get("tab"))) : undefined;
+  const mediaCrumbs = mediaSection ? [{ label: "Главная", to: "/" }, { label: "Медиатека", to: MEDIA_ROUTE }, { label: mediaSection.label }] : null;
+  function closePlayer() {
+    setPlayerOpen(false);
+    if (legacyPlaying) {
+      mediaParams.delete("playing");
+      navigate({ pathname, search: mediaParams.toString(), hash }, { replace: true });
+    }
+  }
   const profileId = !isPlayer ? pathname.match(/^\/campaigns\/(\d+)$/)?.[1] : undefined;
   const profileCampaign = useEntity<CampaignDetail>("campaign", profileId ? Number(profileId) : null).data;
   const playerProfileId = profileCampaign?.role === "player" ? profileCampaign.id : null;
@@ -895,7 +910,7 @@ export function AppShell() {
           // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
           <div className="shell-crumbs" style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <div className="shell-crumbs__trail">
-              <Breadcrumbs items={cutsceneCrumbs ?? workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
+              <Breadcrumbs items={mediaCrumbs ?? cutsceneCrumbs ?? workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
             </div>
             {!isPlayer && (playerProfileId || activeStorageName) && !isLivePult && (
               <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title={playerProfileId ? "Роль в кампании" : "Активное хранилище"}>
@@ -917,13 +932,14 @@ export function AppShell() {
           session soundtrack. The full bar is desktop-only (hidden on mobile
           via CSS, see index.css); mobile gets MiniPlayerBar below instead —
           a small "now playing" capsule that only exists while something is
-          actually playing, tapping it opens NowPlayingPage. */}
+          actually playing, tapping it opens the transport sheet. */}
       {!userLoading && !isPlayer && !playerHidden && (
         <div className="audio-player-slot">
           <AudioPlayerBar extras={<SoundBarExtras />} empty={<SoundSetEmpty />} />
         </div>
       )}
-      {!userLoading && !isPlayer && !playerHidden && pathname !== "/now-playing" && <MiniPlayerBar />}
+      {!userLoading && !isPlayer && !playerHidden && <MiniPlayerBar onOpen={() => setPlayerOpen(true)} />}
+      {!userLoading && !isPlayer && (playerOpen || legacyPlaying) && <Suspense fallback={null}><NowPlayingSheet onClose={closePlayer} /></Suspense>}
       {!userLoading && (
         <MobileBottomNav
           leftItems={bottomNavLeft}

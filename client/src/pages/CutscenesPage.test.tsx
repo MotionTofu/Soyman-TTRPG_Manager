@@ -37,11 +37,11 @@ function original(): CutsceneOriginal {
 function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname + location.search}</output>; }
 function renderPage(path = "/mastering/cutscenes") {
   return render(<QueryClientProvider client={queryClient}><MemoryRouter initialEntries={[path]}><Location /><Routes>
-    <Route path="/mastering/cutscenes" element={<CutscenesPage />} /><Route path="/mastering/cutscenes/:id" element={<CutsceneWorkshopPage />} />
+    <Route path="/media" element={<CutscenesPage />} /><Route path="/mastering/cutscenes" element={<CutscenesPage />} /><Route path="/mastering/cutscenes/:id" element={<CutsceneWorkshopPage />} />
   </Routes></MemoryRouter></QueryClientProvider>);
 }
 beforeEach(() => {
-  vi.clearAllMocks(); queryClient.clear(); mocks.role = "gm"; mocks.mobile = false; mocks.error = null; mocks.original = original();
+  vi.clearAllMocks(); localStorage.clear(); queryClient.clear(); mocks.role = "gm"; mocks.mobile = false; mocks.error = null; mocks.original = original();
   vi.mocked(cutscenes.create).mockResolvedValue({ ...original(), id: 12 });
   vi.mocked(cutscenes.duplicate).mockResolvedValue({ ...original(), id: 12 });
   vi.mocked(cutscenes.updateMetadata).mockImplementation(async (_id, patch) => ({ ...mocks.original!, document: { ...mocks.original!.document, ...patch } }));
@@ -50,34 +50,38 @@ afterEach(() => { cleanup(); queryClient.clear(); getSaveNotices().forEach(notic
 describe("каталог катсцен", () => {
   it("восстанавливает условия из URL и отправляет сортировку/поиск в ресурс каталога", () => {
     renderPage("/mastering/cutscenes?search=Порт&sort=name&order=desc&archive=all");
-    expect((screen.getByRole("textbox", { name: "Поиск катсцен" }) as HTMLInputElement).value).toBe("Порт");
-    fireEvent.change(screen.getByRole("combobox", { name: "Сортировка" }), { target: { value: "updated:asc" } });
+    expect((screen.getByRole("searchbox", { name: "Поиск катсцен" }) as HTMLInputElement).value).toBe("Порт");
+    fireEvent.click(screen.getByRole("button", { name: "Изменённые" }));
+    fireEvent.click(screen.getByRole("button", { name: "Изменённые" }));
     expect(screen.getByTestId("location").textContent).toContain("order=asc");
     expect(vi.mocked(useResource).mock.calls.some(([path]) => path?.startsWith("/cutscenes?") && path.includes("sort=updated") && path.includes("search="))).toBe(true);
   });
   it("карточка называет число шагов и кампании подборок, шапка — без «Библиотеки»", () => {
     renderPage("/mastering/cutscenes");
-    expect(screen.getByText("5 шагов · Берез, Вотердип")).toBeTruthy();
+    expect(screen.getByText("5 кадров")).toBeTruthy();
+    expect(screen.getByText("Берез")).toBeTruthy();
+    expect(screen.getByText("Вотердип")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Библиотека" })).toBeNull();
   });
   it("player-role не монтирует каталог и не читает закрытые документы", () => {
     mocks.role = "player"; renderPage(); expect(screen.getByText("Только для Мастера")).toBeTruthy(); expect(useResource).not.toHaveBeenCalled();
   });
   it("не теряет поиск при следующем изменении архива в том же пакете событий", () => {
-    renderPage("/mastering/cutscenes?search=Старое");
+    renderPage("/media?tab=cutscenes&search=Старое");
     act(() => {
-      fireEvent.change(screen.getByRole("textbox", { name: "Поиск катсцен" }), { target: { value: "Новое" } });
-      fireEvent.change(screen.getByRole("combobox", { name: "Архив" }), { target: { value: "archived" } });
+      fireEvent.change(screen.getByRole("searchbox", { name: "Поиск катсцен" }), { target: { value: "Новое" } });
+      fireEvent.click(screen.getByRole("tab", { name: /^Архив/ }));
     });
-    expect((screen.getByRole("textbox", { name: "Поиск катсцен" }) as HTMLInputElement).value).toBe("Новое");
+    expect((screen.getByRole("searchbox", { name: "Поиск катсцен" }) as HTMLInputElement).value).toBe("Новое");
     expect(screen.getByTestId("location").textContent).toContain("archive=archived");
+    expect(screen.getByTestId("location").textContent).toContain("tab=cutscenes");
   });
   it("телефон показывает каталог без создания и дублирования", () => {
     mocks.mobile = true; renderPage(); expect(screen.getByRole("heading", { name: "Порт" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Новая катсцена" })).toBeNull(); expect(screen.queryByRole("button", { name: /Дублировать/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ Новая катсцена" })).toBeNull(); expect(screen.queryByRole("button", { name: /Дублировать/ })).toBeNull();
   });
   it("создание сохраняет название/описание и открывает общий оригинал", async () => {
-    renderPage(); fireEvent.click(screen.getByRole("button", { name: "Новая катсцена" }));
+    renderPage(); fireEvent.click(screen.getByRole("button", { name: "+ Новая катсцена" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "Новая" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Описание" }), { target: { value: "Пролог" } });
     fireEvent.click(screen.getByRole("button", { name: "Создать" }));

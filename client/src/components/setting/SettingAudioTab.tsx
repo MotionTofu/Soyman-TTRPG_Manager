@@ -31,7 +31,7 @@ export function SettingAudioTab({ settingId }: { settingId: number }) {
       <div className="population__toolbar">
         <span className="muted">Наборы и треки этого сеттинга</span>
         <span className="population__spacer" />
-        <Link to="/audio-library">Открыть в Аудиотеке ›</Link>
+        <Link to={opened === null ? "/media?tab=sound" : `/media?tab=sound&set=${opened}`}>Открыть в Медиатеке ›</Link>
       </div>
       {sets.length === 0 && loose.length === 0 ? (
         <EmptyState title="Звука пока нет" hint="Аудионаборы и треки собираются в общей Аудиотеке — набор с сеттингом этого мира появится здесь." />

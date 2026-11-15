@@ -287,7 +287,7 @@ export function SoundSetsTab() {
       <div className="ss-layout">
         <div className="ss-list">
           <div className="ss-list-head">
-            <span className="ss-list-label">Наборы</span>
+            <span className="ss-list-label d-plate">Наборы</span>
             <span className="sl-section-spacer" />
             <button className="sl-add" onClick={() => setNaming("create")}>
               + Новый
@@ -320,8 +320,8 @@ export function SoundSetsTab() {
             Набор — глобальный. Сеттинг и кампания только поднимают его в списке, а не владеют им.
           </p>
 
-          <div className="ss-list-head" style={{ marginTop: 6 }}>
-            <span className="ss-list-label">Боевые темы</span>
+          <div className="ss-list-head ss-list-head--battle">
+            <span className="ss-list-label d-plate">Боевые темы</span>
             <span className="sl-section-spacer" />
             <button className="sl-add" onClick={() => setNaming("battle-create")}>
               + Новая
@@ -353,18 +353,16 @@ export function SoundSetsTab() {
             <div className="ss-editor-head">
               <span className="ss-editor-title">{current.name}</span>
               <span className="sl-section-spacer" />
-              <button className="sl-add" onClick={() => setNaming("rename")}>
-                Переименовать
-              </button>
-              <button
-                className="sl-add"
-                onClick={() => void removeSet(current.id)}
-              >
-                Удалить
-              </button>
+              <details className="cs-more media-sound__menu">
+                <summary aria-label="Действия набора">⋯</summary>
+                <div>
+                  <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); setNaming("rename"); }}>Переименовать</button>
+                  <button type="button" onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); void removeSet(current.id); }}>Удалить</button>
+                </div>
+              </details>
               {engine ? (
                 <button
-                  className="ss-on"
+                  className="d-btn d-btn--primary"
                   disabled={playing === current.id}
                   onClick={() => engine.setSet(current.id)}
                 >
@@ -376,7 +374,8 @@ export function SoundSetsTab() {
             <div className="ss-cols">
               <div className="ss-col">
                 <div className="ss-col-head">
-                  Бэкграунд
+                  <span className="d-plate">Бэкграунд</span>
+                  <span className="d-note">{current.tracks.length}</span>
                   <button className="ss-col-add" onClick={() => setPicking("tracks")}>
                     +
                   </button>
@@ -440,7 +439,7 @@ export function SoundSetsTab() {
                 return (
                   <div key={col.role} className="ss-col">
                     <div className="ss-col-head">
-                      {col.title}
+                      <span className="d-plate">{col.title}</span>
                       <button className="ss-col-add" onClick={() => setPicking(col.role)}>
                         +
                       </button>
@@ -629,6 +628,7 @@ export function SoundSetsTab() {
                   ? "Название набора"
                   : "Название боевой темы"
           }
+          creating={naming === "create" || naming === "battle-create"}
           initial={
             naming === "rename"
               ? (current?.name ?? "")
@@ -692,38 +692,32 @@ export function SoundSetsTab() {
 function NameModal({
   title,
   initial,
+  creating,
   onSubmit,
   onClose,
 }: {
   title: string;
   initial: string;
+  creating: boolean;
   onSubmit: (name: string) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial);
   return (
-    <Modal onClose={onClose} closeOnBackdropClick={false}>
-      <div className="ss-pick">
-        <div className="sl-edit-name">{title}</div>
-        <input
-          autoFocus
-          value={name}
-          placeholder="Например: Таверна у дороги"
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && name.trim()) onSubmit(name.trim());
-          }}
-        />
-        <div className="sl-edit-actions">
-          <button className="sl-add" onClick={onClose}>
-            Отмена
-          </button>
-          <span style={{ flex: "1 1 auto" }} />
-          <button className="primary" disabled={!name.trim()} onClick={() => onSubmit(name.trim())}>
-            Сохранить
-          </button>
+    <Modal onClose={onClose} ariaLabel={title} className="media-dialog" closeOnBackdropClick={false}>
+      <h2>{title}</h2>
+      <form onSubmit={event => { event.preventDefault(); if (name.trim()) onSubmit(name.trim()); }}>
+        <div className="media-dialog__body">
+          <label>Название
+            <input className="d-input" autoFocus value={name} placeholder="Например, Таверна у дороги" onChange={event => setName(event.target.value)} />
+          </label>
+          {creating && title === "Новый набор" && <p className="media-dialog__note">Пустой набор включает тишину. Добавьте звуки в карточках каналов.</p>}
         </div>
-      </div>
+        <div className="modal-footer">
+          <button type="button" className="d-btn" onClick={onClose}>Отмена</button>
+          <button type="submit" className="d-btn d-btn--primary" disabled={!name.trim()}>{creating ? "Создать" : "Сохранить"}</button>
+        </div>
+      </form>
     </Modal>
   );
 }

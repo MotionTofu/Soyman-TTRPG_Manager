@@ -24,10 +24,10 @@ const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) 
 const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
 const CampaignVesselPage = lazy(() => import("./pages/CampaignVesselPage").then((m) => ({ default: m.CampaignVesselPage })));
 const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
-const CutscenesPage = lazy(() => import("./pages/CutscenesPage").then(m => ({ default: m.CutscenesPage })));
+const LegacyMediaRoute = lazy(() => import("./pages/MediaLibraryPage").then(m => ({ default: m.LegacyMediaRoute })));
 const CutsceneWorkshopPage = lazy(() => import("./pages/CutsceneWorkshopPage").then(m => ({ default: m.CutsceneWorkshopPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
-const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
+
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
 const SessionDetailPage = lazy(() => import("./pages/SessionDetailPage").then((m) => ({ default: m.SessionDetailPage })));
 const SessionLivePage = lazy(() => import("./pages/SessionLivePage").then((m) => ({ default: m.SessionLivePage })));
@@ -50,10 +50,10 @@ const SettingDetailPage = lazy(() => import("./pages/SettingDetailPage").then((m
 const SystemsListPage = lazy(() => import("./pages/SystemsListPage").then((m) => ({ default: m.SystemsListPage })));
 const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) => ({ default: m.SystemDetailPage })));
 const DndCardProfilePage = lazy(() => import("./pages/DndCardProfilePage").then((m) => ({ default: m.DndCardProfilePage })));
-const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
+
 const WorkbookPage = lazy(()=>import("./pages/WorkbookPage").then(m=>({default:m.WorkbookPage})));
 
-const AudioLibraryPage = lazy(() => import("./pages/AudioLibraryPage").then(m=>({default:m.AudioLibraryPage})));
+const MediaLibraryPage = lazy(() => import("./pages/MediaLibraryPage").then(m => ({ default: m.MediaLibraryPage })));
 const PdfReaderPage = lazy(() => import("./pages/PdfReaderPage").then((m) => ({ default: m.PdfReaderPage })));
 const PdfMarkdownPage = lazy(() => import("./pages/PdfMarkdownPage").then((m) => ({ default: m.PdfMarkdownPage })));
 const MarkdownResourcePage = lazy(() => import("./pages/MarkdownResourcePage").then((m) => ({ default: m.MarkdownResourcePage })));
@@ -218,7 +218,7 @@ function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/library" element={<LibraryRoute />} />
-              <Route path="/now-playing" element={<NowPlayingPage />} />
+              <Route path="/now-playing" element={<LegacyMediaRoute nowPlaying />} />
               <Route path="/campaigns" element={<CampaignsRoute />} />
               <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />
               <Route path="/campaigns/:id/vessels/:vesselId" element={<CampaignVesselPage />} />
@@ -239,14 +239,15 @@ function App() {
               <Route path="/systems/:id" element={<SystemDetailPage />} />
               <Route path="/systems/:id/entries/:entryId" element={<DndCardProfilePage />} />
               <Route path="/resources" element={<Navigate to="/mastering?tab=misc" replace />} />
-              <Route path="/gallery" element={<ResourcesListPage mode="gallery" />} />
-              <Route path="/audio-library" element={<AudioLibraryPage />} />
+              <Route path="/media" element={<MediaLibraryPage />} />
+              <Route path="/gallery" element={<LegacyMediaRoute tab="gallery" />} />
+              <Route path="/audio-library" element={<LegacyMediaRoute tab="sound" />} />
               <Route path="/resources/:id/read" element={<PdfReaderPage />} />
               <Route path="/resources/:id/markdown" element={<PdfMarkdownPage />} />
               <Route path="/resources/:id/markdown-file" element={<MarkdownResourcePage />} />
               <Route path="/resources/link/:uid" element={<ResourceLinkPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
-              <Route path="/mastering/cutscenes" element={<CutscenesPage />} />
+              <Route path="/mastering/cutscenes" element={<LegacyMediaRoute tab="cutscenes" />} />
               <Route path="/mastering/cutscenes/:id" element={<CutsceneWorkshopPage />} />
               <Route path="/mastering/:id" element={<MasteringArticleRedirect />} />
               <Route path="/workbooks" element={<Navigate to="/mastering?tab=workbooks" replace />} />
