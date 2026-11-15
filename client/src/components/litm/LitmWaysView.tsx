@@ -10,6 +10,8 @@ import { BookText, Sidebars } from "./LitmRulesView";
 import { isMight, norm, paras, plural } from "./litmBookText";
 import { kitKey } from "./litmCompendium";
 import { grimoireHref } from "./useGrimoire";
+import { LitmCauldron, LitmRotes } from "./LitmMagicChapters";
+import { cauldronIngredientIndex, ingredientAnchor, magicChapter } from "./litmMagicChapterData";
 import { waysInTropes, waysOf, type MagicWay, type WayChapter } from "./litmWays";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
@@ -54,8 +56,9 @@ function KitCard({ kit, focus }: { kit: CompendiumEntry; focus: boolean }) {
 }
 
 /** Страница традиции по доске Litm-Way: эпиграф, суть, котёл, правила пути, вариант, наборы. */
-function WayPage({ way, focusKit, back, grim, inTropes }: {
+function WayPage({ way, focusKit, back, grim, inTropes, ingredientHref }: {
   way: MagicWay; focusKit: number | undefined; back: string; grim: GrimLinks; inTropes: string[];
+  ingredientHref: (name: string) => string | undefined;
 }) {
   const e = way.entry;
   useEffect(() => {
@@ -81,7 +84,13 @@ function WayPage({ way, focusKit, back, grim, inTropes }: {
       {way.ingredients.length > 0 && (
         <div className="lw-ingr">
           <div className="lb-lbl">Ингредиенты котла<small>правила пути собраны из общих частей — «Волшебный котёл»</small></div>
-          <div>{way.ingredients.map((i) => <span key={i.name} className="lw-ing">{i.name}{i.nameEn && <small>{i.nameEn}</small>}</span>)}</div>
+          <div>{way.ingredients.map((i) => {
+            const href = ingredientHref(i.nameEn);
+            const label = <>{i.name}{i.nameEn && <small lang="en">{i.nameEn}</small>}</>;
+            return href
+              ? <Link key={i.name} to={href} className="lw-ing lw-ing--link">{label}</Link>
+              : <span key={i.name} className="lw-ing">{label}</span>;
+          })}</div>
         </div>
       )}
       <BookText key={e.id} sections={way.sections} page={way.page} grim={grim} title="Правила пути" sub="перевод книги" open />
@@ -103,18 +112,26 @@ function WayPage({ way, focusKit, back, grim, inTropes }: {
   );
 }
 
-function ChapterPage({ chapter, back, grim }: { chapter: WayChapter; back: string; grim: GrimLinks }) {
+function ChapterPage({ chapter, back, grim, rotesHref }: {
+  chapter: WayChapter; back: string; grim: GrimLinks; rotesHref?: string;
+}) {
   const e = chapter.entry;
+  const magic = magicChapter(e);
   return (
     <article className="lb-art lw-way" aria-label={e.name}>
       <div className="lb-crumbs"><Link className="lb-back" to={back}>← Пути магии</Link></div>
       <div className="lb-art__head">
-        <h3>{e.name}{e.name_original && <span className="lb-orig">[{e.name_original}]</span>}</h3>
+        <h3>{e.name}{e.name_original && <span className="lb-orig" lang="en">[{e.name_original}]</span>}</h3>
       </div>
+      {magic && chapter.page && <div className="lmc-source">Том II · с. {chapter.page.replaceAll("B", "")}</div>}
       {e.description && <div className="lb-lead"><Paras lines={paras(e.description)} grim={grim} /></div>}
-      {chapter.sidebars.length > 0 && <div className="lw-sides"><Sidebars items={chapter.sidebars} grim={grim} /></div>}
-      <BookText key={e.id} sections={chapter.sections} page={chapter.page} grim={grim} title="Текст книги" sub="перевод" open />
-      {!chapter.sections.length && <p className="lb-empty">Текст главы ещё не переведён — у неё пока нет принятой доски.</p>}
+      {magic?.kind === "cauldron" ? <LitmCauldron chapter={magic} rotesHref={rotesHref} grim={grim} />
+        : magic?.kind === "rotes" ? <LitmRotes chapter={magic} grim={grim} />
+        : <>
+          {chapter.sidebars.length > 0 && <div className="lw-sides"><Sidebars items={chapter.sidebars} grim={grim} /></div>}
+          <BookText key={e.id} sections={chapter.sections} page={chapter.page} grim={grim} title="Текст книги" sub="перевод" open />
+          {!chapter.sections.length && <p className="lb-empty">Текст главы ещё не загружен.</p>}
+        </>}
     </article>
   );
 }
@@ -163,6 +180,14 @@ export function LitmWaysView({ systemId, sectionId, entries, selectedId }: {
   const back = `/systems/${systemId}?section=${sectionId}`;
   const way = ways.find((w) => w.entry.id === selectedId || w.kits.some((k) => k.id === selectedId));
   const chapter = chapters.find((c) => c.entry.id === selectedId);
+  const cauldron = chapters.find((c) => magicChapter(c.entry)?.kind === "cauldron");
+  const rotes = chapters.find((c) => magicChapter(c.entry)?.kind === "rotes");
+  const cauldronData = cauldron && magicChapter(cauldron.entry);
+  const ingredients = cauldronData?.kind === "cauldron" ? cauldronIngredientIndex(cauldronData) : undefined;
+  const ingredientHref = (name: string) => {
+    const id = ingredients?.get(norm(name));
+    return cauldron && id ? link(cauldron.entry.id) + "#" + ingredientAnchor(id) : undefined;
+  };
   const kitsTotal = ways.reduce((n, w) => n + w.kits.length, 0);
   return (
     <div className="lg lw">
@@ -172,9 +197,9 @@ export function LitmWaysView({ systemId, sectionId, entries, selectedId }: {
       </div>
       {way ? (
         <WayPage key={way.entry.id} way={way} focusKit={way.entry.id === selectedId ? undefined : selectedId} back={back} grim={grim}
-          inTropes={waysInTropes(way, tropes, kitKey)} />
+          inTropes={waysInTropes(way, tropes, kitKey)} ingredientHref={ingredientHref} />
       ) : chapter ? (
-        <ChapterPage chapter={chapter} back={back} grim={grim} />
+        <ChapterPage key={chapter.entry.id} chapter={chapter} back={back} grim={grim} rotesHref={rotes && link(rotes.entry.id)} />
       ) : (
         <>
           {chapters.filter((c) => c.sections.length).map((c) => (
@@ -194,7 +219,9 @@ export function LitmWaysView({ systemId, sectionId, entries, selectedId }: {
           {chapters.filter((c) => !c.sections.length).length > 0 && (
             <div className="lw-more">
               {chapters.filter((c) => !c.sections.length).map((c) => (
-                <Link key={c.entry.id} to={link(c.entry.id)}><b>{c.entry.name}</b>{c.entry.description && <span>{c.entry.description.split("\n")[0]}</span>}</Link>
+                <Link key={c.entry.id} to={link(c.entry.id)} className={magicChapter(c.entry) ? "lmc-chapter-link" : undefined}>
+                  <b>{c.entry.name}</b>{c.entry.description && <span>{c.entry.description.split("\n")[0]}</span>}
+                </Link>
               ))}
             </div>
           )}
