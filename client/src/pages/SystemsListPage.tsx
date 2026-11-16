@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { invalidateAffects } from "../data/entities";
+import { importModuleFile } from "../data/moduleImport";
 import { systemGroupAffects, systemPaths } from "../data/systems";
 import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
@@ -14,6 +14,7 @@ import { SectionBackground } from "../components/SectionBackground";
 import { RegAddRow, RegAddTile, RegArchive, RegMeta, RegRow, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
 import type { ContextMenuItem } from "../components/ContextMenu";
 import { plural } from "../sceneKinds";
+import { refreshMentionIndex } from "../mentions";
 
 import type { System, SystemGroup } from "../types";
 
@@ -46,6 +47,8 @@ export function SystemsListPage() {
   const systems = systemsState.data ?? NO_SYSTEMS;
   const loading = systemsState.loading;
   const loadError = systemsState.error;
+  const importInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -113,6 +116,23 @@ export function SystemsListPage() {
   const addToGroup = currentGroup ? () => setGroupModalGroupId(currentGroup.id) : undefined;
   const menuFor = (s: System): ContextMenuItem[] => (currentGroup ? [removeFromGroupItem("system", currentGroup, s.id, run)] : []);
 
+  async function importSystem(file: File) {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const installed = await run(labelled("Импорт системы", () => importModuleFile(file, "system")), {
+        affects: [],
+        retry: false,
+      });
+      if (!installed) return;
+      setActiveTab(null);
+      setQ("");
+      void refreshMentionIndex();
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function create() {
     if (!name.trim()) return;
     // При отказе окно остаётся открытым с набранным, а плашка говорит, что
@@ -134,7 +154,25 @@ export function SystemsListPage() {
         ds
         headingSection="systems"
         title="Системы"
-        actions={<Link to="/import-system" className="d-btn">Импорт системы</Link>}
+        actions={
+          <>
+            <button type="button" className="d-btn" disabled={importing} onClick={() => importInput.current?.click()}>
+              {importing ? "Импортируем…" : "Импорт системы"}
+            </button>
+            <input
+              ref={importInput}
+              type="file"
+              accept=".json,application/json"
+              aria-label="Файл экспорта системы"
+              hidden
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = "";
+                if (file) void importSystem(file);
+              }}
+            />
+          </>
+        }
         groups={groups.map((g, i) => ({ id: String(g.id), label: g.name, count: memberQueries[i]?.data?.length }))}
         groupsEndpoint="/system-groups"
         groupsDeleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
