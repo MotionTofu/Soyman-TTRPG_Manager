@@ -47,6 +47,7 @@ export type NavIconName =
   | "star"
   | "image"
   | "document"
+  | "pageBreak"
   | "book"
   | "bookmark"
   | "map"
@@ -419,6 +420,12 @@ const PATHS: Record<NavIconName, ReactNode> = {
     </>
   ),
   bookmark: <path d="M6 4h12v16l-6-4-6 4z" />,
+  pageBreak: (
+    <>
+      <path d="M5.5 9V3.5h9l4 4V9M5.5 15v5.5h13V15" />
+      <path d="M14.5 3.5v4h4M3.5 12h3M10.5 12h3M17.5 12h3" />
+    </>
+  ),
   book: (
     <>
       <path d="M4.5 5.5a2 2 0 0 1 2-2h9.5v16h-9.5a2 2 0 0 1-2-2V5.5Z" />

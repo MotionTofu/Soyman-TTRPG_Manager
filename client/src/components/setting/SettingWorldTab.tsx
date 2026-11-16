@@ -1,10 +1,12 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAction, useResource, write } from "../../data/hooks";
 import { useConfirm } from "../../hooks/useConfirm";
 import { syncMentionLinks } from "../../mentions";
 import { atlasStatusLabel, ENTRY_TYPE, ENTRY_TYPES, worldAffects, worldPath, STRICTNESS_OPTIONS, entryLine, strictnessLabel, type EntryType } from "../../settingWorld";
 import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
-import { AtlasEntryEditor, AtlasEntryRead, type AtlasDraft } from "./AtlasEntry";
+import { AtlasEntryEditor, AtlasEntryRead, type AtlasDraft, type AtlasListSection, type AtlasSection } from "./AtlasEntry";
+import { SettingWorldReading, WorldEntryGroup } from "./SettingWorldReading";
+import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
 import { MentionText } from "../mentions/MentionText";
 import { MentionTextarea } from "../mentions/MentionTextarea";
@@ -18,6 +20,12 @@ import type { SettingEntry } from "../../types";
 
 const NO_ENTRIES: SettingEntry[] = [];
 type Patch = Partial<Pick<SettingEntry, "title" | "content" | "fields" | "category" | "related_entry_ids">> & { visible_to_players?: boolean };
+type ViewMode = "list" | "read";
+type ReadingSettings = Record<AtlasSection, { all: boolean; overrides: ReadonlyMap<number, boolean> }>;
+const READING_SWITCHES = [
+  { section: "context", label: "Контексты" },
+  { section: "details", label: "Подробности" },
+] as const;
 
 function mentionText(e: Pick<SettingEntry, "content" | "fields">): string {
   return [e.content, ...Object.values(e.fields ?? {})].join("\n");
@@ -35,9 +43,22 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
   const [q, setQ] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[]; footer?: string } | null>(null);
   const [creating, setCreating] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewMode>("list");
+  const [listSections, setListSections] = useState<Partial<Record<number, ReadonlySet<AtlasListSection>>>>({});
+  const [reading, setReading] = useState<ReadingSettings>(() => ({
+    context: { all: false, overrides: new Map() },
+    details: { all: false, overrides: new Map() },
+  }));
+  const [readingEditor, setReadingEditor] = useState<{ type: EntryType; entry?: SettingEntry } | null>(null);
+  const readingMode = !categories && mode === "read";
   const rowId = useId();
+  const regionId = useId();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Record<ViewMode, number>>({ list: 0, read: 0 });
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const editorTrigger = useRef<HTMLElement>(null);
 
   const qq = q.trim().toLowerCase();
   const shown = entries.filter(
@@ -51,8 +72,59 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
       (!qq && (kind === type.key || (kind === "all" && !loading && !error && entries.length === 0 && type.atlas))),
   );
   const count = (key: string) => entries.filter((e) => e.category === key).length;
+  const emptyText = qq ? "Ничего не найдено." : kind === "visible" ? "Пока ни одна запись не видна игрокам." : "Записей пока нет.";
+  const readingEntry = readingEditor?.entry;
+
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollPositions.current[mode];
+  }, [mode]);
+
+  function changeMode(next: ViewMode) {
+    if (next === mode) return;
+    scrollPositions.current[mode] = scrollRef.current?.scrollTop ?? 0;
+    setMenu(null);
+    setMode(next);
+  }
+
+  function sectionOpen(id: number, section: AtlasSection) {
+    const { all, overrides } = reading[section];
+    return overrides.get(id) ?? all;
+  }
+
+  function toggleSection(id: number, section: AtlasSection) {
+    setReading((current) => {
+      const { all, overrides } = current[section];
+      const next = new Map(overrides);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, !all);
+      return { ...current, [section]: { all, overrides: next } };
+    });
+  }
+
+  function setAllSections(section: AtlasSection, all: boolean) {
+    setReading((current) => {
+      const overrides = new Map(current[section].overrides);
+      for (const entry of shown) overrides.delete(entry.id);
+      return { ...current, [section]: { all, overrides } };
+    });
+  }
+
+  function toggleListSection(id: number, section: AtlasListSection) {
+    setListSections((current) => {
+      const next = new Set(current[id]);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return { ...current, [id]: next };
+    });
+  }
+
+  function resetScroll() {
+    scrollPositions.current = { list: 0, read: 0 };
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }
 
   function selectKind(key: string) {
+    if (key !== kind) resetScroll();
     setCreating(null);
     setKind(key);
   }
@@ -66,9 +138,14 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
   }
 
   function jumpToEntry(entry: SettingEntry) {
-    selectEntry(entry);
+    if (readingMode) {
+      setQ("");
+      setKind((current) => current === "all" && entry.category !== "notes" ? current : entry.category);
+    } else {
+      selectEntry(entry);
+    }
     requestAnimationFrame(() => {
-      const row = document.getElementById(rowId + entry.id);
+      const row = document.getElementById(rowId + (readingMode ? "read-" : "") + entry.id);
       row?.focus({ preventScroll: true });
       row?.scrollIntoView({ block: "nearest" });
     });
@@ -85,17 +162,26 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
       { affects: worldAffects(settingId), retry: false }
     );
     if (created) {
-      selectEntry(created);
+      if (readingMode) {
+        setReadingEditor(draft ? null : { type, entry: created });
+      } else {
+        selectEntry(created);
+        if (!draft) setEditingId(created.id);
+      }
       if (draft) {
         await run(() => syncMentionLinks("setting", settingId, "", mentionText(created)), { affects: worldAffects(settingId), retry: false });
-      } else {
-        setEditingId(created.id);
       }
     }
   }
 
   function startCreate(type: EntryType) {
     setMenu(null);
+    if (readingMode) {
+      editorTrigger.current = addButtonRef.current;
+      if (type.atlas) setReadingEditor({ type });
+      else void saveNew(type);
+      return;
+    }
     if (!type.atlas) {
       void saveNew(type);
       return;
@@ -150,10 +236,21 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
     setMenu({
       x: r.right,
       y: r.bottom,
+      footer: readingMode && !isNote ? [
+        atlasStatusLabel(entry.fields.status) || strictnessLabel(entry.fields.strictness),
+        entry.category === "activity" && entry.fields.promised === "1" && "Обещано",
+        entry.visible_to_players ? "Видно игрокам" : "Только Мастеру",
+      ].filter(Boolean).join(" · ") : undefined,
       items: [
         {
           label: "Править",
           onClick: () => {
+            const type = ENTRY_TYPE.get(entry.category);
+            if (readingMode && type) {
+              editorTrigger.current = el;
+              setReadingEditor({ type, entry });
+              return;
+            }
             setCreating(null);
             setOpenId(entry.id);
             setEditingId(entry.id);
@@ -168,26 +265,90 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
   }
 
   const addButton = (
-    <button type="button" className={categories ? "d-btn d-btn--sm" : "d-btn d-btn--primary"} onClick={(e) => openAddMenu(e.currentTarget)}>
+    <button ref={addButtonRef} type="button" className={categories ? "d-btn d-btn--sm" : "d-btn d-btn--primary d-btn--sm"} onClick={(e) => openAddMenu(e.currentTarget)}>
       + Запись ▾
     </button>
   );
 
+  const searchField = (
+    <label className="set-field set-world__search">
+      <NavIcon name="search" />
+      <input
+        value={q}
+        onChange={(e) => {
+          resetScroll();
+          setQ(e.target.value);
+        }}
+        placeholder="Поиск по записям…"
+        aria-label="Поиск по записям"
+      />
+    </label>
+  );
+
   return (
-    <div className="set-world">
+    <div className={categories ? "set-world" : "set-world set-world--full"}>
       {confirmDialog}
       {categories ? (
         <div className="set-world__bar">{addButton}</div>
       ) : (
         <div className="d-head">
-          <div>
-            <h2>Мир</h2>
-            <div className="d-head__sub">Игрокам доступны записи, отмеченные глазом.</div>
+          <h2>Мир</h2>
+          <div className="set-world__toolbar">
+            {searchField}
+            {readingMode && (
+              <div className="set-world__switches" role="group" aria-label="Настройки чтения">
+                {READING_SWITCHES.map(({ section, label }) => (
+                  <label key={section}>
+                    <input type="checkbox" role="switch" aria-controls={regionId} checked={reading[section].all} onChange={(event) => setAllSections(section, event.target.checked)} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="d-head__acts">
+              <div className="d-seg set-world__modes" role="group" aria-label="Режим просмотра">
+                <button type="button" className={readingMode ? undefined : "active"} aria-pressed={!readingMode} onClick={() => changeMode("list")}>Список</button>
+                <button type="button" className={readingMode ? "active" : undefined} aria-pressed={readingMode} onClick={() => changeMode("read")}>Чтение</button>
+              </div>
+              {addButton}
+            </div>
           </div>
-          <div className="d-head__acts">{addButton}</div>
         </div>
       )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} footer={menu.footer} ariaLabel={readingMode ? "Действия с записью" : undefined} onClose={() => setMenu(null)} />}
+      {readingEditor && (
+        <Modal
+          wide
+          className="set-world-editor"
+          ariaLabel={readingEntry ? "Править запись" : `Новая запись · ${readingEditor.type.one}`}
+          closeOnBackdropClick={false}
+          returnFocusTo={editorTrigger}
+          onClose={() => setReadingEditor(null)}
+        >
+          {readingEditor.type.atlas ? (
+            <AtlasEntryEditor
+              type={{ ...readingEditor.type, atlas: readingEditor.type.atlas }}
+              entry={readingEntry}
+              settingId={settingId}
+              peers={allEntries.filter((peer) => peer.id !== readingEntry?.id && peer.category !== "notes")}
+              onSave={async (draft) => {
+                if (!readingEntry) await saveNew(readingEditor.type, draft);
+                else if (await patch(readingEntry, draft)) setReadingEditor(null);
+              }}
+              onCancel={() => setReadingEditor(null)}
+            />
+          ) : readingEntry && (
+            <EntryOpen
+              entry={readingEntry}
+              settingId={settingId}
+              editing
+              onEdit={() => setReadingEditor(null)}
+              onPatch={(body) => patch(readingEntry, body)}
+              onToWorld={(el) => toWorldMenu(readingEntry, el)}
+            />
+          )}
+        </Modal>
+      )}
 
       <div className={categories ? undefined : "set-cols"}>
         {!categories && (
@@ -216,110 +377,111 @@ export function SettingWorldTab({ settingId, categories }: { settingId: number; 
           </nav>
         )}
         <div className="set-world__main">
-          <label className="set-field">
-            <NavIcon name="search" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по записям…" aria-label="Поиск по записям" />
-          </label>
-          {loading && <p className="muted" role="status">Загрузка записей…</p>}
-          {error && <p className="muted" role="alert">{error}</p>}
-          {groups.map(({ type, items }) => (
-            <section key={type.key} aria-label={type.group}>
-              <div className="set-gh">
-                <h3 className="d-plate">{type.group}</h3>
-                <span className="d-note">{items.length}</span>
-                {type.key === "notes" && <span className="d-note set-gh__end">только для меня</span>}
-              </div>
-              {type.atlas && (
-                <details className="set-atlas__help">
-                  <summary>Что это?</summary>
-                  <p>{type.atlas.help}</p>
-                </details>
-              )}
-              {creating === type.key && type.atlas ? (
-                <AtlasEntryEditor
-                  key={type.key}
-                  type={{ ...type, atlas: type.atlas }}
-                  settingId={settingId}
-                  peers={allEntries.filter((entry) => entry.category !== "notes")}
-                  onSave={(draft) => saveNew(type, draft)}
-                  onCancel={() => setCreating(null)}
-                />
-              ) : !loading && !error && items.length === 0 && kind === type.key && (
-                <div className="set-world__empty">
-                  <p className="muted">Записей пока нет.</p>
-                  <button type="button" className="d-btn d-btn--sm" onClick={() => startCreate(type)}>+ {type.one}</button>
-                </div>
-              )}
-              {items.map((e) => {
-                const open = openId === e.id;
-                const status = type.atlas ? atlasStatusLabel(e.fields.status) : "";
-                return (
-                  <div key={e.id} className={open ? "set-er-open" : undefined}>
-                    <div className={`set-er${open ? " is-open" : ""}${type.atlas ? " set-er--atlas" : ""}`}>
-                      <button
-                        type="button"
-                        className="set-er__main"
-                        id={rowId + e.id}
-                        aria-expanded={open}
-                        onClick={() => {
-                          setCreating(null);
-                          setOpenId(open ? null : e.id);
-                          setEditingId(null);
-                        }}
-                      >
-                        <b>{e.title || "Без названия"}</b>
-                        {!(open && type.atlas) && <span className="set-er__ln">{entryLine(type, e.fields, e.content)}</span>}
-                      </button>
-                      <span className="set-er__tags">
-                        {status && <span className="set-str" data-status={e.fields.status}>{status}</span>}
-                        {!status && e.category === "world_truth" && e.fields.strictness && (
-                          <span className={`set-str${e.fields.strictness === "soft" ? " is-soft" : ""}`}>{strictnessLabel(e.fields.strictness)}</span>
-                        )}
-                        {e.category === "activity" && e.fields.promised === "1" && <span className="set-str">обещано</span>}
-                      </span>
-                      <VisibilityMark entry={e} onToggle={() => void patch(e, { visible_to_players: !e.visible_to_players })} />
-                      <button type="button" className="set-dots" aria-label="Действия с записью" onClick={(ev) => rowMenu(e, ev.currentTarget)}>
-                        ⋯
-                      </button>
+          {categories && searchField}
+          <div className="set-world__records" ref={categories ? undefined : scrollRef}>
+            {loading && <p className="muted" role="status">Загрузка записей…</p>}
+            {error && <p className="muted" role="alert">{error}</p>}
+            <div hidden={readingMode}>
+              {groups.map(({ type, items }) => (
+                <WorldEntryGroup key={type.key} type={type} count={items.length}>
+                  {creating === type.key && type.atlas ? (
+                    <AtlasEntryEditor
+                      key={type.key}
+                      type={{ ...type, atlas: type.atlas }}
+                      settingId={settingId}
+                      peers={allEntries.filter((entry) => entry.category !== "notes")}
+                      onSave={(draft) => saveNew(type, draft)}
+                      onCancel={() => setCreating(null)}
+                    />
+                  ) : !loading && !error && items.length === 0 && kind === type.key && (
+                    <div className="set-world__empty">
+                      <p className="muted">Записей пока нет.</p>
+                      <button type="button" className="d-btn d-btn--sm" onClick={() => startCreate(type)}>+ {type.one}</button>
                     </div>
-                    {open && (type.atlas ? editingId === e.id ? (
-                      <AtlasEntryEditor
-                        type={{ ...type, atlas: type.atlas }}
-                        entry={e}
-                        settingId={settingId}
-                        peers={allEntries.filter((peer) => peer.id !== e.id && peer.category !== "notes")}
-                        onSave={async (draft) => { if (await patch(e, draft)) setEditingId(null); }}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    ) : (
-                      <AtlasEntryRead
-                        type={{ ...type, atlas: type.atlas }}
-                        entry={e}
-                        peers={entries}
-                        onJump={jumpToEntry}
-                        onEdit={() => setEditingId(e.id)}
-                      />
-                    ) : (
-                      <EntryOpen
-                        key={`${e.id}-${editingId === e.id}`}
-                        entry={e}
-                        settingId={settingId}
-                        editing={editingId === e.id}
-                        onEdit={(v) => setEditingId(v ? e.id : null)}
-                        onPatch={(body) => patch(e, body)}
-                        onToWorld={(el) => toWorldMenu(e, el)}
-                      />
-                    ))}
-                  </div>
-                );
-              })}
-            </section>
-          ))}
-          {!loading && !error && groups.length === 0 && (
-            <p className="muted">
-              {qq ? "Ничего не найдено." : kind === "visible" ? "Пока ни одна запись не видна игрокам." : "Записей пока нет."}
-            </p>
-          )}
+                  )}
+                  {items.map((e) => {
+                    const open = openId === e.id;
+                    const status = type.atlas ? atlasStatusLabel(e.fields.status) : "";
+                    return (
+                      <div key={e.id} className={open ? "set-er-open" : undefined}>
+                        <div className={`set-er${open ? " is-open" : ""}${type.atlas ? " set-er--atlas" : ""}`}>
+                          <button
+                            type="button"
+                            className="set-er__main"
+                            id={rowId + e.id}
+                            aria-expanded={open}
+                            onClick={() => {
+                              setCreating(null);
+                              setOpenId(open ? null : e.id);
+                              setEditingId(null);
+                            }}
+                          >
+                            <b>{e.title || "Без названия"}</b>
+                            {!(open && type.atlas) && <span className="set-er__ln">{entryLine(type, e.fields, e.content)}</span>}
+                          </button>
+                          <span className="set-er__tags">
+                            {status && <span className="set-str" data-status={e.fields.status}>{status}</span>}
+                            {!status && e.category === "world_truth" && e.fields.strictness && (
+                              <span className={`set-str${e.fields.strictness === "soft" ? " is-soft" : ""}`}>{strictnessLabel(e.fields.strictness)}</span>
+                            )}
+                            {e.category === "activity" && e.fields.promised === "1" && <span className="set-str">обещано</span>}
+                          </span>
+                          <VisibilityMark entry={e} onToggle={() => void patch(e, { visible_to_players: !e.visible_to_players })} />
+                          <button type="button" className="set-dots" aria-label="Действия с записью" onClick={(ev) => rowMenu(e, ev.currentTarget)}>
+                            ⋯
+                          </button>
+                        </div>
+                        {open && (type.atlas ? editingId === e.id ? (
+                          <AtlasEntryEditor
+                            type={{ ...type, atlas: type.atlas }}
+                            entry={e}
+                            settingId={settingId}
+                            peers={allEntries.filter((peer) => peer.id !== e.id && peer.category !== "notes")}
+                            onSave={async (draft) => { if (await patch(e, draft)) setEditingId(null); }}
+                            onCancel={() => setEditingId(null)}
+                          />
+                        ) : (
+                          <AtlasEntryRead
+                            type={{ ...type, atlas: type.atlas }}
+                            entry={e}
+                            peers={entries}
+                            onJump={jumpToEntry}
+                            onEdit={() => setEditingId(e.id)}
+                            isOpen={categories ? undefined : (section) => listSections[e.id]?.has(section) ?? false}
+                            onToggle={categories ? undefined : (section) => toggleListSection(e.id, section)}
+                          />
+                        ) : (
+                          <EntryOpen
+                            key={`${e.id}-${editingId === e.id}`}
+                            entry={e}
+                            settingId={settingId}
+                            editing={editingId === e.id}
+                            onEdit={(v) => setEditingId(v ? e.id : null)}
+                            onPatch={(body) => patch(e, body)}
+                            onToWorld={(el) => toWorldMenu(e, el)}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })}
+                </WorldEntryGroup>
+              ))}
+            </div>
+            {readingMode && (
+              <div id={regionId}>
+                <SettingWorldReading
+                  groups={groups}
+                  peers={entries}
+                  rowId={rowId + "read-"}
+                  isOpen={sectionOpen}
+                  onToggle={toggleSection}
+                  onJump={jumpToEntry}
+                  onMenu={rowMenu}
+                />
+              </div>
+            )}
+            {!loading && !error && (readingMode ? !shown.length : !groups.length) && <p className="muted">{emptyText}</p>}
+          </div>
         </div>
       </div>
     </div>

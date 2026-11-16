@@ -626,6 +626,7 @@ export function SettingDetailPage() {
     <EntityPage
       paper
       hideIdent
+      fill={tab === "Мир"}
       crumbs={[{ label: "Сеттинги", to: "/settings" }, { label: setting.name }]}
       entityType="setting"
       title={setting.name}
@@ -771,7 +772,7 @@ export function SettingDetailPage() {
           onCreated={() => setCampaignWizardOpen(false)}
         />
       )}
-      {tab === "Мир" && <SettingWorldTab settingId={settingId} />}
+      {tab === "Мир" && <SettingWorldTab key={settingId} settingId={settingId} />}
       {tab === "География" && <GeographyTab settingId={settingId} />}
       {tab === "Население" && <PopulationTab settingId={settingId} />}
       {tab === "Приключения" && (

@@ -5,6 +5,8 @@ import { MentionText } from "../mentions/MentionText";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 
 type AtlasType = EntryType & { atlas: NonNullable<EntryType["atlas"]> };
+export type AtlasSection = "context" | "details";
+export type AtlasListSection = AtlasSection | "previous";
 export type AtlasDraft = Pick<SettingEntry, "title" | "content" | "fields"> & {
   related_entry_ids: number[];
   visible_to_players: boolean;
@@ -19,8 +21,12 @@ function fieldValue(field: EntryField, raw: string | undefined) {
   return raw ?? "";
 }
 
+function filledFields(fields: EntryField[], values: Record<string, string>) {
+  return fields.filter((field) => fieldValue(field, values[field.key]).trim());
+}
+
 function FieldValues({ fields, values }: { fields: EntryField[]; values: Record<string, string> }) {
-  const filled = fields.filter((field) => fieldValue(field, values[field.key]).trim());
+  const filled = filledFields(fields, values);
   return filled.length ? (
     <dl>
       {filled.map((field) => (
@@ -33,8 +39,21 @@ function FieldValues({ fields, values }: { fields: EntryField[]; values: Record<
   ) : <p className="muted">Пока пусто.</p>;
 }
 
-function AtlasDisclosure({ label, children }: { label: string; children: ReactNode }) {
-  return <details className="set-atlas__details"><summary>{label}</summary>{children}</details>;
+function AtlasDisclosure({ label, children, open, onToggle }: {
+  label: string;
+  children: ReactNode;
+  open?: boolean;
+  onToggle?: () => void;
+}) {
+  return (
+    <details className="set-atlas__details" open={open}>
+      <summary onClick={onToggle && ((event) => {
+        event.preventDefault();
+        onToggle();
+      })}>{label}</summary>
+      {children}
+    </details>
+  );
 }
 
 function previousFields(type: AtlasType, entry: SettingEntry | undefined) {
@@ -43,6 +62,66 @@ function previousFields(type: AtlasType, entry: SettingEntry | undefined) {
     (field) => entry?.fields[field.key]?.trim() &&
       !context.some(({ key }) => key === field.key) &&
       !type.atlas.details.some(({ key }) => key === field.key),
+  );
+}
+
+function RelatedEntries({ entries, onJump }: { entries: SettingEntry[]; onJump: (entry: SettingEntry) => void }) {
+  return (
+    <div className="set-atlas__related">
+      <span className="set-atlas__related-label">Связи</span>
+      {entries.map((entry) => (
+        <button key={entry.id} type="button" className="set-atlas__related-link" onClick={() => onJump(entry)}>
+          {entry.title || "Без названия"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AtlasReadingSections({
+  type, entry, peers, onJump, isOpen, onToggle,
+}: {
+  type: AtlasType;
+  entry: SettingEntry;
+  peers: SettingEntry[];
+  onJump: (entry: SettingEntry) => void;
+  isOpen: (section: AtlasSection) => boolean;
+  onToggle: (section: AtlasSection) => void;
+}) {
+  const context = filledFields([STATUS_FIELD, ...atlasContext(type)], entry.fields);
+  const details = filledFields(type.atlas.details, entry.fields);
+  const previous = previousFields(type, entry);
+  const linked = peers.filter((peer) => entry.related_entry_ids?.includes(peer.id));
+
+  function disclosure(section: AtlasSection, label: string, children: ReactNode) {
+    const open = isOpen(section);
+    return (
+      <AtlasDisclosure label={label} open={open} onToggle={() => onToggle(section)}>
+        {open && children}
+      </AtlasDisclosure>
+    );
+  }
+
+  return (
+    <>
+      {(context.length > 0 || linked.length > 0) && disclosure("context", "Контекст записи", (
+        <>
+          {context.length > 0 && <FieldValues fields={context} values={entry.fields} />}
+          {linked.length > 0 && <RelatedEntries entries={linked} onJump={onJump} />}
+        </>
+      ))}
+      {(details.length > 0 || previous.length > 0) && disclosure("details", "Подробности", (
+        <>
+          {details.length > 0 && <FieldValues fields={details} values={entry.fields} />}
+          {previous.length > 0 && (
+            <div>
+              <p className="d-note">Поля прежней анкеты</p>
+              <FieldValues fields={previous} values={entry.fields} />
+            </div>
+          )}
+        </>
+      ))}
+    </>
   );
 }
 
@@ -181,35 +260,31 @@ export function AtlasEntryEditor({
 }
 
 export function AtlasEntryRead({
-  type, entry, peers, onJump, onEdit,
+  type, entry, peers, onJump, onEdit, isOpen, onToggle,
 }: {
   type: AtlasType;
   entry: SettingEntry;
   peers: SettingEntry[];
   onJump: (entry: SettingEntry) => void;
   onEdit: () => void;
+  isOpen?: (section: AtlasListSection) => boolean;
+  onToggle?: (section: AtlasListSection) => void;
 }) {
   const previous = previousFields(type, entry);
   const linked = peers.filter((peer) => entry.related_entry_ids?.includes(peer.id));
+  const disclosure = (section: AtlasListSection, label: string, fields: EntryField[]) => (
+    <AtlasDisclosure label={label} open={isOpen?.(section)} onToggle={onToggle && (() => onToggle(section))}>
+      <FieldValues fields={fields} values={entry.fields} />
+    </AtlasDisclosure>
+  );
   return (
     <div className="set-open set-atlas__read">
       {entry.content.trim() && <div className="set-atlas__content"><MentionText text={entry.content} /></div>}
       {type.key === "activity" && entry.fields.promised === "1" && <p className="d-note">Входит в обещание сеттинга</p>}
-      {linked.length > 0 && (
-        <div className="set-atlas__related">
-          <span className="set-atlas__related-label">Связи</span>
-          {linked.map((peer) => (
-            <button key={peer.id} type="button" className="set-atlas__related-link" onClick={() => onJump(peer)}>
-              {peer.title || "Без названия"}
-            </button>
-          ))}
-        </div>
-      )}
-      <AtlasDisclosure label="Контекст записи"><FieldValues fields={[STATUS_FIELD, ...atlasContext(type)]} values={entry.fields} /></AtlasDisclosure>
-      <AtlasDisclosure label="Подробности"><FieldValues fields={type.atlas.details} values={entry.fields} /></AtlasDisclosure>
-      {previous.length > 0 && (
-        <AtlasDisclosure label="Поля прежней анкеты"><FieldValues fields={previous} values={entry.fields} /></AtlasDisclosure>
-      )}
+      {linked.length > 0 && <RelatedEntries entries={linked} onJump={onJump} />}
+      {disclosure("context", "Контекст записи", [STATUS_FIELD, ...atlasContext(type)])}
+      {disclosure("details", "Подробности", type.atlas.details)}
+      {previous.length > 0 && disclosure("previous", "Поля прежней анкеты", previous)}
       <div className="set-open__ft">
         <button type="button" className="d-btn d-btn--sm" onClick={onEdit}>Править</button>
         <span className="d-note">{entry.visible_to_players ? "Видно игрокам" : "Только Мастеру"}</span>
