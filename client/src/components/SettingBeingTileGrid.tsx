@@ -1,8 +1,7 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
-import { CreatureCardPreview } from "./EntityPreviewModal";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { addToBag } from "../bag";
@@ -241,9 +240,7 @@ export const SettingBeingTileGrid = memo(function SettingBeingTileGrid({
       )}
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.being.name} items={menuItems} onClose={() => setMenu(null)} />}
       {modal && (
-        <Modal onClose={() => setModal(null)}>
-          <CreatureCardPreview type="being" id={modal.id} statblockInline autoShowStatblock={modal.view === "statblock"} onClose={() => setModal(null)} />
-        </Modal>
+        <EntityPreviewModal type="being" id={modal.id} initialView={modal.view} onClose={() => setModal(null)} />
       )}
     </div>
   );

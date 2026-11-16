@@ -1,0 +1,111 @@
+.modal.entity-preview-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 680px);
+  max-width: 100%;
+  max-height: min(85dvh, 48rem);
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border-inline-start: 5px solid var(--profile-type, var(--edge));
+}
+
+.entity-preview-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-5) var(--sp-10) var(--sp-5) var(--sp-7);
+  border-bottom: 1px solid var(--line);
+}
+
+.entity-preview-head h2 {
+  margin: 0;
+  font: 500 var(--fs-h2)/1.12 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+
+.entity-preview-label {
+  color: var(--muted);
+  font: 500 var(--fs-meta)/1.35 var(--font-ui);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.entity-preview-portrait {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  aspect-ratio: 1;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--profile-type, var(--edge)) 22%, var(--sheet));
+}
+
+.entity-preview-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.entity-preview-portrait .type-glyph { width: 22px; height: 22px; }
+
+.entity-preview-content {
+  min-height: 0;
+  padding: var(--sp-5) var(--sp-7);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.entity-preview-content .reading-text,
+.entity-preview-content .creature-card__prose,
+.entity-preview-content .dnd-article__body { max-width: 68ch; }
+
+.entity-preview-content .entity-preview-card-body,
+.entity-preview-content .dnd-article,
+.entity-preview-content .sb-card.card-mini,
+.entity-preview-statblock .sbc {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.entity-preview-statblock .sbc__band {
+  padding: 0 0 var(--sp-4);
+  background: transparent;
+  color: var(--ink);
+}
+
+.entity-preview-statblock .sbc__name,
+.entity-preview-statblock .sbc__band .sbc__portrait-sm,
+.entity-preview-content .card-mini .sb-name { display: none; }
+
+.entity-preview-statblock .sbc__meta,
+.entity-preview-statblock .sbc__cr { color: var(--muted); }
+
+.entity-preview-content .card-mini .sb-head {
+  padding: 0 0 var(--sp-4);
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+}
+
+.entity-preview-card-body > :first-child { border-top: 0; }
+.entity-preview-card-body .creature-card__chips,
+.entity-preview-card-body .creature-card__section-head,
+.entity-preview-card-body .creature-card__section-body { padding-inline: 0; }
+
+.entity-preview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-7);
+  border-top: 1px solid var(--line);
+}
+
+.entity-preview-bag { margin-inline-start: auto; }
+
+@media (max-width: 520px), (pointer: coarse) {
+  .modal.entity-preview-modal { max-height: 90dvh; }
+  .entity-preview-head { padding: var(--sp-4) var(--sp-10) var(--sp-4) var(--sp-4); }
+  .entity-preview-head .entity-preview-portrait { width: 32px; }
+  .entity-preview-content, .entity-preview-actions { padding: var(--sp-4); }
+  .entity-preview-modal .modal-x { width: 44px; height: 44px; inset: var(--sp-2) var(--sp-2) auto auto; }
+  .entity-preview-actions .d-btn { min-height: 44px; }
+}

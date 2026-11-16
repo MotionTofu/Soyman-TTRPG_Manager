@@ -3,9 +3,8 @@ import { Link } from "react-router-dom";
 import { write } from "../data/hooks";
 import { addToBag } from "../bag";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
-import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
-import { CreatureCardPreview } from "./EntityPreviewModal";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { CHALLENGE_RATINGS, CREATURE_SIZES, normaliseCr } from "../compendium";
 import type { CompendiumEntry } from "../types";
 
@@ -177,15 +176,7 @@ export function MonsterTileGrid({
         />
       ))}
       {modal && (
-        <Modal onClose={() => setModal(null)}>
-          <CreatureCardPreview
-            type="compendium_entry"
-            id={modal.id}
-            statblockInline
-            autoShowStatblock={modal.view === "statblock"}
-            onClose={() => setModal(null)}
-          />
-        </Modal>
+        <EntityPreviewModal type="compendium_entry" id={modal.id} initialView={modal.view} onClose={() => setModal(null)} />
       )}
     </div>
   );

@@ -217,9 +217,11 @@
 }
 
 /* Диалоги и мешок */
-.workspace-editor-entity-dialog { width: min(560px, 100%); }
 .workspace-editor-label-dialog { border-radius: 0; background: var(--sheet); color: var(--ink); }
 .modal-backdrop:has(.workspace-editor-label-dialog) { left: 72px; right: 0; top: 56px; bottom: 32px; }
+@media (max-width: 520px) {
+  .modal-backdrop:has(.entity-preview-modal.workspace-editor-label-dialog) { inset: 0; }
+}
 /* Окно новой подписи: одно поле и две кнопки, без лишнего воздуха и без слипшихся краёв. */
 .modal.workspace-label-form { width: 360px; padding: var(--sp-7); border: var(--edge-width) solid var(--ink); }
 .workspace-label-form h2 { margin: 0 0 var(--sp-6); font-size: var(--fs-h2); line-height: 1.1; }

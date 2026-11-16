@@ -10,7 +10,7 @@ import { labelled } from "../data/notices";
 import { useConfirm } from "../hooks/useConfirm";
 import { useEvent } from "../hooks/useEvent";
 import { Modal } from "../components/Modal";
-import { EntityPreviewContent } from "../components/EntityPreviewModal";
+import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { mapWorkspaceApi, downloadMapJson, downloadStoredMapOriginal } from "../maps/workspace/mapApi";
 import { editGeometry } from "../maps/workspace/editDocument";
@@ -583,9 +583,7 @@ export function MapWorkspacePage() {
     <DungeonGenerator key={map.id} open={generatorOpen} current={disabled ? undefined : document} seed={map.seed} disabled={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"}
       onClose={() => setGeneratorOpen(false)} onApply={applyDungeon} />
     {label && <Modal className="workspace-editor-label-dialog workspace-label-form" ariaLabel="Подпись карты" onClose={() => setLabel(null)}><h2>Подпись карты</h2><form onSubmit={(event) => { event.preventDefault(); commit((before) => addLabel(before, label.layerId, randomUUID(), label.position, label.text.trim())); setLabel(null); }}><label>Текст<input autoFocus placeholder="Например: Старый мост" value={label.text} maxLength={200} onChange={(event) => setLabel({ ...label, text: event.target.value })} /></label><div className="modal-footer"><button type="button" onClick={() => setLabel(null)}>Отмена</button><button className="primary" disabled={!label.text.trim()}>Добавить</button></div></form></Modal>}
-    {entityPreview && <Modal className="workspace-editor-label-dialog workspace-editor-entity-dialog" ariaLabel="Карточка источника на карте" returnFocusTo={canvasRef} onClose={() => setEntityPreview(null)}>
-      <EntityPreviewContent type={entityPreview.type} id={entityPreview.id} hideProfileButton statblockInline onClose={() => setEntityPreview(null)} />
-    </Modal>}
+    {entityPreview && <EntityPreviewModal type={entityPreview.type} id={entityPreview.id} source="map" returnFocusTo={canvasRef} onClose={() => setEntityPreview(null)} />}
     {confirmDialog}
   </div>;
 }

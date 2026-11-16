@@ -39,13 +39,20 @@ export function useBagStorageId() {
   return useSyncExternalStore(subscribeToActiveStorage, activeStorageId);
 }
 
+const BAG_ITEM_TYPES = new Set([
+  "campaign", "setting", "player", "character", "location", "being", "community", "artifact",
+  "resource", "adventure", "scene", "session", "compendium_entry", "setting_event",
+]);
+
+export function isBagItemType(type: string): boolean {
+  return BAG_ITEM_TYPES.has(type);
+}
+
 function isValidBagItem(item: unknown): boolean {
   if (!item || typeof item !== "object") return false;
   const r = item as Record<string, unknown>;
   if (typeof r.type !== "string" || typeof r.id !== "number" || !Number.isFinite(r.id)) return false;
-  // allowlist — только реальные типы
-  const allowed = ["campaign","setting","player","character","location","being","community","artifact","resource","adventure","scene","session","compendium_entry","setting_event"];
-  if (!allowed.includes(r.type as string)) return false;
+  if (!isBagItemType(r.type)) return false;
   if (typeof r.title !== "string" || r.title.length > 200 || /[<>]/.test(r.title)) return false;
   if (r.rule !== undefined) {
     if (r.type !== "compendium_entry" || !r.rule || typeof r.rule !== "object") return false;

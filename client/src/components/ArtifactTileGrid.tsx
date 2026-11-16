@@ -5,7 +5,7 @@ import { settingPaths } from "../data/settingEntities";
 import type { Affect } from "../data/entities";
 import { Modal } from "./Modal";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
-import { EntityPreviewContent } from "./EntityPreviewModal";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
@@ -447,9 +447,7 @@ export function ArtifactTileGrid({
         />
       )}
       {cardId != null && (
-        <Modal onClose={() => setCardId(null)}>
-          <EntityPreviewContent type="artifact" id={cardId} onClose={() => setCardId(null)} />
-        </Modal>
+        <EntityPreviewModal type="artifact" id={cardId} onClose={() => setCardId(null)} />
       )}
       {editing && (
         <ArtifactEditModal

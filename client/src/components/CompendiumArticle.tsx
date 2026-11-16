@@ -26,10 +26,11 @@ export function CompendiumGrantFields({entry}:{entry:CompendiumEntry}) {
 }
 
 /** Одна статья для раскрытой строки раздела и умения в профиле. */
-export function CompendiumArticle({entry, parentName, typeLabel, onEdit, onCollapse, onDelete, onFavourite, actions, editing, children}: {
+export function CompendiumArticle({entry, parentName, typeLabel, onEdit, onCollapse, onDelete, onFavourite, actions, editing, children, inDialog}: {
   entry:CompendiumEntry; parentName?:string; typeLabel?:string; onEdit?:()=>void; onCollapse?:()=>void;
   onDelete?:()=>void; onFavourite?:()=>void; editing?:boolean; children?:ReactNode;
   actions?:ContextMenuItem[];
+  inDialog?: boolean;
 }) {
   const more = useRef<HTMLButtonElement>(null);
   const source = entryValue(entry,"source");
@@ -49,14 +50,14 @@ export function CompendiumArticle({entry, parentName, typeLabel, onEdit, onColla
     if (event.shiftKey || window.getSelection()?.toString().trim() || (event.target as Element).closest("input,textarea,select,a,button,[contenteditable=true]")) return;
     event.preventDefault(); event.stopPropagation(); menu(event.clientX,event.clientY);
   }}>
-    <header className="dnd-article__head"><div><h3>{entry.name || "Без названия"}</h3>{entry.name_original && <span className="dnd-article__original">{entry.name_original}</span>}</div>
-      <div className="dnd-article__actions"><button type="button" className="d-btn d-btn--sm d-btn--ghost dnd-article__bag" onClick={()=>addToBag({type:"compendium_entry",id:entry.id,title:entry.name,kind:entry.kind,system_id:entry.system_id,section_id:entry.section_id})}>В мешок</button>
+    <header className="dnd-article__head"><div>{!inDialog && <h3>{entry.name || "Без названия"}</h3>}{entry.name_original && <span className="dnd-article__original">{entry.name_original}</span>}</div>
+      <div className="dnd-article__actions">{!inDialog && <button type="button" className="d-btn d-btn--sm d-btn--ghost dnd-article__bag" onClick={()=>addToBag({type:"compendium_entry",id:entry.id,title:entry.name,kind:entry.kind,system_id:entry.system_id,section_id:entry.section_id})}>В мешок</button>}
         {onEdit && <button type="button" className="d-btn d-btn--sm" onClick={onEdit}>{editing ? "Отмена" : "Править"}</button>}
         <button type="button" className="d-btn d-btn--sm" aria-label={`Ещё действия: ${entry.name}`} ref={more} onClick={()=>{const r=more.current!.getBoundingClientRect();menu(r.left,r.bottom);}}>⋯</button>
         {onCollapse && <button type="button" className="d-btn d-btn--sm d-btn--ghost dnd-article__collapse" onClick={onCollapse}>Свернуть ▴</button>}
       </div>
     </header>
-    <div className="dnd-article__passport"><span>{label}</span>{[entryValue(entry,"category") || parentName,source].filter(Boolean).map((text,index)=><span key={index}>· {text}</span>)}</div>
+    <div className="dnd-article__passport">{!inDialog && <span>{label}</span>}{[entryValue(entry,"category") || parentName,source].filter(Boolean).map((text,index)=><span key={index}>{(!inDialog || index > 0) && "· "}{text}</span>)}</div>
     {!editing && <>
       {(facts.length > 0 || attack) && <dl className="dnd-facts">{facts.map((fact)=><div key={fact.key}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}{attack && <div><dt>Атака</dt><dd>{attack}</dd></div>}</dl>}
       {requirement && <dl className="dnd-requirement"><dt>Требование</dt><dd><MentionText text={requirement} /></dd></dl>}

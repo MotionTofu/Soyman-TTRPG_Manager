@@ -9,7 +9,10 @@ const fixture = vi.hoisted(() => ({ entry: {} as CompendiumEntry, entries: [] as
 vi.mock("../data/hooks", () => ({ useEntity: () => ({ data: fixture.entry, reload: vi.fn() }), useAction: () => async (fn: () => Promise<unknown>) => fn(), write: { put: vi.fn(), post: fixture.post }, useResource: (path: string) => ({ data: path?.endsWith("/sections") ? [{ id: 2, kind: "class", name: "Классы" }] : path?.includes("?section_id=") ? fixture.entries : { id: 1, name: "D&D 5.5", code: "phb" } }) }));
 vi.mock("../components/dnd/DndCards", () => ({ CardPicture: ({ name }: { name: string }) => <img alt={name} src="/card.webp" /> }));
 vi.mock("../components/mentions/MentionText", () => ({ MentionText: ({ text }: { text: string }) => <span>{text}</span> }));
-vi.mock("../components/EntityPreviewModal", () => ({ EntityPreviewModal: ({ children }: { children: React.ReactNode }) => <div role="dialog" aria-label="Упоминание">{children}</div> }));
+vi.mock("../api/currentUser", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../api/currentUser")>(),
+  useCurrentUser: () => ({ user: { role: "gm" }, loading: false }),
+}));
 vi.mock("../components/EntryImagesTab", () => ({ EntryImagesTab: ({ entryId }: { entryId: number }) => <div>Галерея записи {entryId}</div> }));
 vi.mock("../components/MentionsTab", () => ({ MentionsTab: ({ entityId }: { entityId: number }) => <div>Упоминания записи {entityId}</div> }));
 vi.mock("../components/dnd/EffectList", () => ({ EffectList: () => null }));
@@ -39,7 +42,10 @@ it("развитие читает столбцы данных, отдых и у�
   expect(screen.getByRole("columnheader", { name: /Второе дыхание.*↻ короткий/ })).toBeTruthy();
   expect([...container.querySelectorAll("tr.is-subclass-level")].map((row) => row.firstElementChild?.textContent)).toEqual(["3", "7"]);
   fireEvent.click(screen.getByRole("button", { name: "Второе дыхание" }));
-  expect(within(screen.getByRole("dialog", { name: "Упоминание" })).getByRole("article")).toBeTruthy();
+  const preview = within(screen.getByRole("dialog", { name: "Второе дыхание" }));
+  expect(preview.getByRole("article").textContent).toContain("Текст умения");
+  expect(preview.getAllByRole("heading", { name: "Второе дыхание" })).toHaveLength(1);
+  expect(preview.getAllByRole("button", { name: "В мешок" })).toHaveLength(1);
 });
 it("добавляет справа только существующие колонки подкласса по номеру уровня", () => {
   const { container } = show("?tab=Развитие");

@@ -298,6 +298,7 @@ export function CreatureCard({
   onEdit,
   forceExtras,
   tableHeading,
+  inDialog,
 }: {
   data: CreatureCardPayload;
   // Показ игрокам: секрет и тактика НЕ рендерятся вовсе — свёрнутый блок
@@ -325,6 +326,7 @@ export function CreatureCard({
   forceExtras?: ForceExtras;
   /** Население сеттинга: заголовок быстрого взгляда из Set-Population. */
   tableHeading?: boolean;
+  inDialog?: boolean;
 }) {
   const [statblockOpen, setStatblockOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ mechanics: true, description: true });
@@ -379,7 +381,7 @@ export function CreatureCard({
   const showForce = !playerSafe && (hasForce(force) || hasExtras);
   const showSecret = !playerSafe && !!data.secret.trim();
   const hasMechanics = !!creature || (!playerSafe && tactics.length > 0);
-  const hasDescription = !embedded && !!prose && (playerSafe || data.type !== "being");
+  const hasDescription = !embedded && !!prose && (inDialog || playerSafe || data.type !== "being");
   const isEmpty = !hasMechanics && !hasDescription && roles.length === 0 && !showForce && !showSecret;
 
   const profilePath = `${PROFILE_PATH[data.type] ?? "/beings"}/${data.id}`;
@@ -388,6 +390,7 @@ export function CreatureCard({
   // карточка показывала не то, что вкладка, и было непонятно, какую именно
   // картинку ты меняешь.
   const avatar = data.avatar_image_url ?? null;
+  const challenge = creature ? formatChallenge(creature) : "";
 
   if (!playerSafe && embedded && data.category === "bestiary") return <article className="creature-card creature-card--d creature-card--page is-embedded d-focal" style={profileStyle(data.type)}>
     <div className="creature-card__head"><span className="creature-card__head-label">В бою</span>{onEdit && <button type="button" className="creature-card__edit" onClick={onEdit}>Править</button>}</div>
@@ -399,8 +402,8 @@ export function CreatureCard({
   </article>;
 
   return (
-    <article className={`creature-card paper-scope${!playerSafe ? " creature-card--d" : ""}${variant === "page" ? " creature-card--page" : ""}${embedded ? " is-embedded d-focal" : ""}`} style={!playerSafe ? profileStyle(data.type) : undefined}>
-      {embedded ? (
+    <article className={`creature-card paper-scope${!playerSafe ? " creature-card--d" : ""}${variant === "page" ? " creature-card--page" : ""}${embedded ? " is-embedded d-focal" : ""}${inDialog ? " entity-preview-card-body" : ""}`} style={!playerSafe ? profileStyle(data.type) : undefined}>
+      {!inDialog && (embedded ? (
         <div className="creature-card__head">
           <span className="creature-card__head-label">За столом</span>
           {onEdit && (
@@ -425,9 +428,7 @@ export function CreatureCard({
         <div className="creature-card__title">
           <div className="creature-card__name">{data.name || "Без названия"}</div>
           {!playerSafe && <ProfileTypeLabel type={data.type} />}
-          {creature && formatChallenge(creature) && (
-            <div className="creature-card__cr">{formatChallenge(creature)}</div>
-          )}
+          {challenge && <div className="creature-card__cr">{challenge}</div>}
         </div>
         {onToggleCollapse && <span className="creature-card__mark">{collapsed ? "+" : "−"}</span>}
         {onClose && (
@@ -444,9 +445,9 @@ export function CreatureCard({
           </button>
         )}
       </header>
-      )}
+      ))}
 
-      {!collapsed && (creature?.creatureType || roles.length > 0 || creature?.size) && (
+      {!collapsed && (creature?.creatureType || roles.length > 0 || creature?.size || (inDialog && challenge)) && (
         <div className="creature-card__chips">
           {creature?.creatureType && (
             <span className="creature-card__chip is-type">{creature.creatureType}</span>
@@ -457,6 +458,7 @@ export function CreatureCard({
             </span>
           ))}
           {creature?.size && <span className="creature-card__chip is-size">{creature.size}</span>}
+          {inDialog && challenge && <span className="creature-card__chip">{challenge}</span>}
         </div>
       )}
       {!collapsed && rolesInherited && data.inherited && (
@@ -470,7 +472,7 @@ export function CreatureCard({
             <button type="button" className="creature-card__more" onClick={onEdit}>
               Заполнить
             </button>
-          ) : (
+          ) : (!hideProfileButton || !inDialog) && (
             // У записи компендиума карточка правится своей вкладкой; у существа
             // сеттинга — по месту в досье (Q8).
             <Link
@@ -565,7 +567,7 @@ export function CreatureCard({
         </Section>
       )}
 
-      {(!hideProfileButton || creature) && (
+      {!inDialog && (!hideProfileButton || creature) && (
         <footer className="creature-card__actions">
           {!hideProfileButton &&
             (profileInNewWindow ? (

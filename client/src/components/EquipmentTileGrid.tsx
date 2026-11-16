@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { addToBag } from "../bag";
-import { Modal } from "./Modal";
+import { EntityPreviewModal } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
 import { MentionText } from "./mentions/MentionText";
 import { EQUIPMENT_CATEGORIES } from "../compendium";
@@ -142,9 +142,10 @@ export function EquipmentTileGrid({
         />
       ))}
       {modal && (
-        <Modal onClose={() => setModal(null)}>
-          <div className="stack">
-            <h3 style={{ margin: 0 }}>{modal.name || "Без названия"}</h3>
+        <EntityPreviewModal type="compendium_entry" id={modal.id} onClose={() => setModal(null)} article={{
+          entry: modal,
+          label: "Снаряжение",
+          content: <div className="stack">
             <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
               {[categoryName(modal), costName(modal) && `Цена ${costName(modal)}`, weightName(modal) && `Вес ${weightName(modal)}`].filter(Boolean).join(" · ") || "Без категории"}
             </div>
@@ -154,27 +155,8 @@ export function EquipmentTileGrid({
               </div>
             )}
             {modal.description ? <MentionText text={modal.description} /> : <span className="muted">Нет описания.</span>}
-            <div className="row">
-              <button
-                type="button"
-                onClick={() => {
-                  addToBag({
-                    type: "compendium_entry",
-                    id: modal.id,
-                    title: modal.name,
-                    kind: modal.kind,
-                    system_id: modal.system_id,
-                    section_id: modal.section_id,
-                  });
-                  setModal(null);
-                }}
-              >
-                В мешок
-              </button>
-              <button type="button" onClick={() => setModal(null)}>Закрыть</button>
-            </div>
-          </div>
-        </Modal>
+          </div>,
+        }} />
       )}
     </div>
   );

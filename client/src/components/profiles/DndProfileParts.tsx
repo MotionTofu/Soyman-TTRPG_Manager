@@ -160,6 +160,15 @@ export function DndProfileProgression({ entry, features, subclasses, onEdit, onE
         })}
       </tbody></table></div>}
     </ProfileBlock>
-    {preview && <EntityPreviewModal type="compendium_entry" id={preview.id} onClose={() => setPreview(null)}><CompendiumArticle entry={preview} parentName={entry.name} typeLabel="Умение класса" onEdit={() => onEditFeature(preview)} /></EntityPreviewModal>}
+    {preview && <EntityPreviewModal
+      type="compendium_entry"
+      id={preview.id}
+      onClose={() => setPreview(null)}
+      article={{
+        entry: preview,
+        label: "Умение класса",
+        content: <CompendiumArticle entry={preview} parentName={entry.name} typeLabel="Умение класса" inDialog onEdit={() => onEditFeature(preview)} />,
+      }}
+    />}
   </>;
 }

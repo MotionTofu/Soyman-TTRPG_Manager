@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../data/hooks";
-import { Modal } from "./Modal";
 import { MentionText } from "./mentions/MentionText";
 import type { ArtifactCardPayload } from "../types";
 
@@ -42,6 +41,7 @@ export function ArtifactCard({
   onClose,
   collapsed,
   onToggleCollapse,
+  inDialog,
 }: {
   data: ArtifactCardPayload;
   variant?: "column" | "page";
@@ -49,6 +49,7 @@ export function ArtifactCard({
   onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  inDialog?: boolean;
 }) {
   const [sectionsOpen, setSectionsOpen] = useState({
     secret: true,
@@ -76,8 +77,8 @@ export function ArtifactCard({
   const meta = metaParts.join(" · ");
 
   return (
-    <article className={`creature-card${variant === "page" ? " creature-card--page" : ""}`}>
-      <header
+    <article className={`creature-card${variant === "page" ? " creature-card--page" : ""}${inDialog ? " entity-preview-card-body" : ""}`}>
+      {!inDialog && <header
         className={`creature-card__band${onToggleCollapse ? " is-clickable" : ""}`}
         onClick={onToggleCollapse}
         title={onToggleCollapse ? (collapsed ? "Развернуть" : "Свернуть") : undefined}
@@ -105,9 +106,9 @@ export function ArtifactCard({
             ✕
           </button>
         )}
-      </header>
+      </header>}
 
-      {!collapsed && (data.item_class || data.item_type) && (
+      {!collapsed && (data.item_class || data.item_type || (inDialog && meta)) && (
         <div className="creature-card__chips">
           {data.item_class && (
             <span className="creature-card__chip is-type">
@@ -115,6 +116,7 @@ export function ArtifactCard({
             </span>
           )}
           {data.item_type && <span className="creature-card__chip">{data.item_type}</span>}
+          {inDialog && metaParts.map((part, index) => <span className="creature-card__chip" key={index}>{part}</span>)}
         </div>
       )}
 
@@ -139,7 +141,7 @@ export function ArtifactCard({
       {!collapsed && isEmpty && (
         <div className="creature-card__empty">
           Карточка не заполнена.{" "}
-          <Link to={`${profilePath}?tab=${encodeURIComponent("Карточка предмета")}`}>Заполнить</Link>
+          {(!hideProfileButton || !inDialog) && <Link to={`${profilePath}?tab=${encodeURIComponent("Карточка предмета")}`}>Заполнить</Link>}
         </div>
       )}
 
@@ -191,7 +193,7 @@ export function ArtifactCard({
         </Section>
       )}
 
-      {!hideProfileButton && (
+      {!inDialog && !hideProfileButton && (
         <footer className="creature-card__actions">
           <Link className="creature-card__button" to={profilePath}>
             В профиль

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -21,6 +21,7 @@ interface Props {
   // Дополнительный класс на само окно (не на затемнение): размерные
   // варианты вроде модалки состояний, которой на мобиле нужен весь экран.
   className?: string;
+  style?: CSSProperties;
   // When the opener disappears while the dialog is open (e.g. a context
   // menu item), return to a stable trigger instead of focusing a dead node.
   returnFocusTo?: RefObject<HTMLElement | null>;
@@ -37,7 +38,7 @@ const modalStack: (() => void)[] = [];
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, onEscape, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className, returnFocusTo }: Props) {
+export function Modal({ onClose, onEscape, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className, style, returnFocusTo }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -116,7 +117,7 @@ export function Modal({ onClose, onEscape, children, closeOnBackdropClick = true
         mouseDownOnBackdrop.current = false;
       }}
     >
-      <div className={`modal${wide ? " modal-wide" : ""}${className ? ` ${className}` : ""}`} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
+      <div className={`modal${wide ? " modal-wide" : ""}${className ? ` ${className}` : ""}`} style={style} ref={modalRef} role="dialog" aria-modal="true" aria-label={ariaLabel} tabIndex={-1}>
         {children}
         {/* ✕ каркаса (гриллинг окон Q6): на телефоне нет Esc, а по фону
             закрываются не все окна. Последний в DOM — автофокус и Tab
