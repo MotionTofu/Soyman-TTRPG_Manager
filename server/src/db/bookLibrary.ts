@@ -113,3 +113,28 @@ export function migrateBookLibrary(db: Database.Database): void {
     db.exec(SOURCE_TRIGGERS);
   })();
 }
+
+export function migrateSettingWorkbookShelves(db: Database.Database): void {
+  db.transaction(() => {
+    const shelves = db.prepare(`SELECT s.id FROM library_shelves s
+      LEFT JOIN library_departments d ON d.id=s.department_id
+      WHERE s.workbook_role IN ('projects','campaigns')
+        AND (s.setting_id IS NOT NULL OR d.legacy_key GLOB 'workbook-setting:*')`).all() as { id: number }[];
+
+    const detachWorkbooks = db.prepare(`UPDATE library_books SET shelf_id=NULL,department_id=NULL
+      WHERE shelf_id=? AND source_type='workbook' AND source_id IN (
+        SELECT id FROM workbook_instances WHERE project_type IN ('setting','adventure','campaign')
+      )`);
+    const deleteEmptyShelf = db.prepare(`DELETE FROM library_shelves WHERE id=?
+      AND NOT EXISTS (SELECT 1 FROM library_books WHERE shelf_id=library_shelves.id)
+      AND NOT EXISTS (SELECT 1 FROM workbook_shelf_links WHERE shelf_id=library_shelves.id)`);
+    const keepShelf = db.prepare("UPDATE library_shelves SET workbook_role=NULL,setting_id=NULL WHERE id=?");
+    for (const { id } of shelves) {
+      detachWorkbooks.run(id);
+      if (!deleteEmptyShelf.run(id).changes) keepShelf.run(id);
+    }
+
+    // ON DELETE SET NULL оставляет пользовательские полки и книги без подраздела.
+    db.exec("DELETE FROM library_departments WHERE legacy_key GLOB 'workbook-setting:*'");
+  })();
+}

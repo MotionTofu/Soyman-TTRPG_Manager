@@ -25,7 +25,7 @@ beforeAll(()=>{
 const auth=(r:request.Test,token=gm)=>r.auth(token,{type:'bearer'});
 
 describe('тетради проектов и полки',()=>{
- it('автоматически создаёт три тетради с личным автором и двумя полками сеттинга',async()=>{
+ it('автоматически создаёт три личные тетради для одной полки во вкладке «Тетради»',async()=>{
   const setting=await auth(request(app).post('/settings')).send({name:'Мир тетрадей'});expect(setting.status).toBe(201);
   const sid=setting.body.id;
   const adventure=await auth(request(app).post('/story/arcs')).send({name:'Ваншот',setting_id:sid});expect(adventure.status).toBe(201);
@@ -33,10 +33,18 @@ describe('тетради проектов и полки',()=>{
   const rows=db.prepare('SELECT * FROM workbook_instances WHERE author_user_id=? ORDER BY id').all(author) as {id:number;project_type:string;project_id:number;revision:number;answers_json:string;template_id:number}[];
   expect(rows.map(r=>r.project_type)).toEqual(['setting','adventure','campaign']);
   expect(new Set(rows.map(r=>r.id)).size).toBe(3);
-  const shelves=db.prepare('SELECT workbook_role FROM library_shelves WHERE setting_id=? ORDER BY position').all(sid);
-  expect(shelves).toEqual([{workbook_role:'projects'},{workbook_role:'campaigns'}]);
+  const departments=await auth(request(app).get('/library/departments'));
+  expect(departments.body.some((d:{name:string})=>d.name==='Мир тетрадей')).toBe(false);
+  expect(db.prepare('SELECT id FROM library_shelves WHERE setting_id=?').all(sid)).toEqual([]);
+  const instances=await auth(request(app).get('/workbooks/instances'));
+  expect(instances.body).toHaveLength(3);
+  expect(instances.body).toEqual(rows.slice().reverse().map(row=>expect.objectContaining({
+   id:row.id,project_setting_id:sid,project_setting_name:'Мир тетрадей',
+  })));
   const books=await auth(request(app).get('/library/books')).query({setting:sid,include_unplaced:1});
-  expect(books.body.books.filter((b:{source_type:string})=>b.source_type==='workbook')).toHaveLength(3);
+  expect(books.body.books).toEqual(['projects','projects','campaigns'].map(workbook_role=>expect.objectContaining({
+   source_type:'workbook',workbook_role,department_id:null,shelf_id:null,
+  })));
   expect((await auth(request(app).get('/library/books'),other).query({setting:sid,include_unplaced:1})).body.books).toHaveLength(0);
   expect((await auth(request(app).get(`/workbooks/instances/${rows[0].id}`),other)).status).toBe(404);
   const again=await auth(request(app).post(`/workbooks/projects/adventure/${adventure.body.id}/notebook`)).send({});
@@ -49,13 +57,15 @@ describe('тетради проектов и полки',()=>{
   expect(db.prepare("SELECT count(*) n FROM workbook_instances WHERE project_type='campaign' AND project_id=?").get(oneshot.body.id)).toEqual({n:0});
   expect(db.prepare('SELECT count(*) n FROM workbook_instances WHERE author_user_id=?').get(author)).toEqual({n:before});
  });
- it('переносит полку при смене сеттинга и оставляет ответы и идентификатор',()=>{
+ it('переносит тетрадь на полку сеттинга и оставляет ответы и идентификатор',async()=>{
   const sid=Number(db.prepare("INSERT INTO settings(name) VALUES('Другой мир')").run().lastInsertRowid);
   const cid=Number(db.prepare("INSERT INTO campaigns(name) VALUES('Без сеттинга')").run().lastInsertRowid);
   const id=ensureProjectWorkbook(db,author,'campaign',cid);
   db.prepare('UPDATE workbook_instances SET answers_json=? WHERE id=?').run(JSON.stringify({recap:{events:'Событие'}}),id);
   db.prepare('UPDATE campaigns SET setting_id=? WHERE id=?').run(sid,cid);placeProjectWorkbooks(db,'campaign',cid);
-  expect(db.prepare("SELECT s.setting_id,s.workbook_role FROM library_books b JOIN library_shelves s ON s.id=b.shelf_id WHERE b.source_type='workbook' AND b.source_id=?").get(id)).toEqual({setting_id:sid,workbook_role:'campaigns'});
+  expect(db.prepare("SELECT department_id,shelf_id FROM library_books WHERE source_type='workbook' AND source_id=?").get(id)).toEqual({department_id:null,shelf_id:null});
+  const instances=await auth(request(app).get('/workbooks/instances'));
+  expect(instances.body).toContainEqual(expect.objectContaining({id,project_setting_id:sid,project_setting_name:'Другой мир'}));
   expect(ensureProjectWorkbook(db,author,'campaign',cid)).toBe(id);
   expect(db.prepare('SELECT answers_json FROM workbook_instances WHERE id=?').get(id)).toEqual({answers_json:'{"recap":{"events":"Событие"}}'});
  });

@@ -2,7 +2,7 @@ import {createContext} from "react";
 import type {WorkbookTemplate,WorkbookAnswers} from "@shared/workbooks";
 export interface WorkbookInstance {id:number;uid:string;title:string;template_id:number;template:WorkbookTemplate;answers:WorkbookAnswers;revision:number;project_type:string|null;project_id:number|null;archived_at:string|null;project_setting_id?:number|null}
 export interface TemplateSummary {id:number;template_key:string;version:number;title:string;archived_at:string|null}
-export interface InstanceSummary {id:number;uid:string;title:string;template_id:number;revision:number;template_title:string;template_version:number;archived_at:string|null;project_type?:string|null;project_name?:string|null;updated_at?:string;sheets?:number;progress?:{total:number;filled:number}}
+export interface InstanceSummary {id:number;uid:string;title:string;template_id:number;revision:number;template_title:string;template_version:number;archived_at:string|null;project_type?:string|null;project_name?:string|null;project_setting_id?:number|null;project_setting_name?:string|null;updated_at?:string;sheets?:number;progress?:{total:number;filled:number}}
 export const WORKBOOK_AFFECTS=[{path:"/workbooks"},{path:"/book-library"}] as const;
 export function downloadWorkbook(name:string,contents:string,type="application/json"){const url=URL.createObjectURL(new Blob([contents],{type}));const a=document.createElement("a");a.href=url;a.download=name.replace(/[<>:"/\\|?*]/g,"_");a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 export function mergeWorkbookAnswers(base:WorkbookAnswers,mine:WorkbookAnswers,theirs:WorkbookAnswers){

@@ -13,7 +13,7 @@ import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs, isVaultPath } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 import { migrateDndSkillNames } from "./dndSkillNames";
-import { migrateBookLibrary } from "./bookLibrary";
+import { migrateBookLibrary, migrateSettingWorkbookShelves } from "./bookLibrary";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
@@ -7644,6 +7644,7 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE statblocks ADD COLUMN creation_key TEXT");
   }
   database.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_statblocks_creation_key ON statblocks(owner_type, owner_id, creation_key)");
+  migrateSettingWorkbookShelves(database);
 }
 
 /**

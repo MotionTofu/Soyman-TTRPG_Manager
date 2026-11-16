@@ -50,8 +50,21 @@ export function LibraryWorkbooks() {
   const term = query.trim().toLocaleLowerCase("ru");
   const matches = (...fields: string[]) => fields.some(field => field.toLocaleLowerCase("ru").includes(term));
   const visibleInstances = (instances.data ?? []).filter(item =>
-    matches(item.title, item.template_title ?? "", item.project_name ?? "") && (!purpose || (item.project_type ?? "standalone") === purpose));
+    matches(item.title, item.template_title ?? "", item.project_name ?? "", item.project_setting_name ?? "") &&
+      (!purpose || (item.project_type ?? "standalone") === purpose));
   const visibleTemplates = latest.filter(item => matches(item.title));
+  const shelvesBySetting = new Map<number | null, { name: string; items: InstanceSummary[] }>();
+  for (const item of visibleInstances) {
+    const id = item.project_setting_id ?? null;
+    let shelf = shelvesBySetting.get(id);
+    if (!shelf) {
+      shelf = { name: item.project_setting_name ?? "Без сеттинга", items: [] };
+      shelvesBySetting.set(id, shelf);
+    }
+    shelf.items.push(item);
+  }
+  const settingShelves = [...shelvesBySetting].sort(([aId, a], [bId, b]) =>
+    Number(aId === null) - Number(bId === null) || a.name.localeCompare(b.name, "ru"));
 
   async function importFile(file: File | undefined) {
     if (!file) return;
@@ -128,12 +141,11 @@ export function LibraryWorkbooks() {
     </article>;
   }
 
-  const list = tab === "mine" ? visibleInstances.map(instanceEntry) : visibleTemplates.map(templateEntry);
+  const filteredCount = tab === "mine" ? visibleInstances.length : visibleTemplates.length;
   const activeQuery = tab === "mine" ? instances : templates;
   const archiveCount = archivedInstances.data?.length ?? 0;
-  const tableColumns = tab === "mine" ? columns : [
-    columns[0], { ...columns[1], label: "Версия" }, { ...columns[2], label: "Действие" },
-  ];
+  const templateColumns = [columns[0], { ...columns[1], label: "Версия" }, { ...columns[2], label: "Действие" }];
+  const templateList = tab === "templates" ? visibleTemplates.map(templateEntry) : [];
   return <>
     <div className="library-registry__actions">
       <button className="d-btn" type="button" onClick={() => upload.current?.click()}>Загрузить шаблон</button>
@@ -146,7 +158,7 @@ export function LibraryWorkbooks() {
       extraTabs={[{ id: "mine", label: "Мои тетради" }, { id: "templates", label: "Шаблоны", count: latest.length }]}
       activeGroup={tab} onGroupChange={value => setTab(value === "templates" ? "templates" : "mine")}
       search={query} onSearch={setQuery} searchPlaceholder="Поиск по названию, проекту…"
-      filteredCount={list.length} totalCount={tab === "mine" ? instances.data?.length ?? 0 : latest.length}
+      filteredCount={filteredCount} totalCount={tab === "mine" ? instances.data?.length ?? 0 : latest.length}
       onResetSearch={() => { setQuery(""); setArchived(false); setPurpose(""); }} showReset={!!term || archived || (tab === "mine" && !!purpose)}
       view={view} onViewChange={setView}
       filters={tab === "mine" && <div className="row">
@@ -158,15 +170,24 @@ export function LibraryWorkbooks() {
           aria-pressed={archived} onClick={() => setArchived(value => !value)}>Архив · {archiveCount}</button>}
       </div>}>
       <Loadable loading={activeQuery.loading} error={activeQuery.error} errorTitle="Не удалось загрузить тетради" onRetry={activeQuery.reload} skeleton={<ListSkeleton variant="tiles" />}>
-        {list.length ? view === "rows"
-          ? <RegTable columns={tableColumns} label="Тетради">{list}</RegTable>
-          : <RegTiles>{list}</RegTiles>
-          : <EmptyState kind={term ? "search" : "primary"}
+        {filteredCount === 0 ? <EmptyState kind={term ? "search" : "primary"}
               title={term ? "Ничего не найдено" : tab === "templates" ? "Шаблонов пока нет" : archived ? "В архиве пока пусто" : "Тетрадей пока нет"}
               action={!term && !archived && <div className="library-registry__actions">
                 <a href="/workbook-example.md" download>Пример шаблона</a>
                 <a href="/workbook-author-guide.md" download>Как сделать шаблон</a>
-              </div>} />}
+              </div>} />
+          : tab === "mine" ? <div className="mastering-shelves">
+              {settingShelves.map(([id, { name, items }]) => <section className="mastering-shelf" key={id ?? "none"} aria-label={name}>
+                <header className="mastering-shelf__head">
+                  <div className="mastering-shelf__name"><h2>{name}</h2></div>
+                </header>
+                {view === "rows"
+                  ? <RegTable columns={columns} label={name}>{items.map(instanceEntry)}</RegTable>
+                  : <RegTiles>{items.map(instanceEntry)}</RegTiles>}
+              </section>)}
+            </div>
+          : view === "rows" ? <RegTable columns={templateColumns} label="Шаблоны">{templateList}</RegTable>
+            : <RegTiles>{templateList}</RegTiles>}
       </Loadable>
     </ListPage>
     {creating !== null && <NewWorkbook templates={latest} initial={creating === "pick" ? null : creating}

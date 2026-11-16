@@ -46,11 +46,13 @@ workbooksRouter.get('/templates/:id',(req,res)=>{const t=definition(Number(req.p
 workbooksRouter.post('/templates',(req,res)=>{try{const id=templateImport(req.body);res.status(201).json({id,template:definition(id)});}catch(e){res.status(400).json({error:(e as Error).message});}});
 workbooksRouter.put('/templates/:id/archive',(req,res)=>{db.prepare('UPDATE workbook_templates SET archived_at=? WHERE id=?').run(req.body.archived?new Date().toISOString():null,req.params.id);res.json({ok:true});});
 workbooksRouter.get('/instances',(req:AuthedRequest,res)=>{
- let rows=db.prepare(`SELECT w.*, coalesce(c.name, s.name, a.name) AS project_name
+ let rows=db.prepare(`SELECT w.*,
+  CASE w.project_type WHEN 'setting' THEN s.name WHEN 'campaign' THEN c.name WHEN 'adventure' THEN a.name END AS project_name,
+  s.id AS project_setting_id, s.name AS project_setting_name
   FROM workbook_instances w
   LEFT JOIN campaigns c ON w.project_type='campaign' AND w.project_id=c.id
-  LEFT JOIN settings s ON w.project_type='setting' AND w.project_id=s.id
   LEFT JOIN ${projectTable('adventure')} a ON w.project_type='adventure' AND w.project_id=a.id
+  LEFT JOIN settings s ON s.id=coalesce(c.setting_id, a.setting_id, CASE WHEN w.project_type='setting' THEN w.project_id END)
   WHERE w.author_user_id=? ORDER BY w.updated_at DESC,w.id DESC`).all(req.user!.id) as Instance[];
  rows=rows.filter(row=>req.query.archived==='1'?!!row.archived_at:!row.archived_at);
  if(req.query.template)rows=rows.filter(row=>definition(row.template_id)?.key===req.query.template);

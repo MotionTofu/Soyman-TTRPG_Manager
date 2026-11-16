@@ -6,9 +6,9 @@ import {beforeEach,afterEach,describe,it,expect,vi} from 'vitest';
 import {BookLibraryPage} from './BookLibraryPage';
 import type {LibraryBook} from '../components/mastering/libraryTypes';
 const mock=vi.hoisted(()=>({read:vi.fn(),post:vi.fn(),put:vi.fn()}));
-vi.mock('../data/hooks',()=>({useResource:(p:string|null)=>({data:mock.read(p),error:null,loading:false,reload:vi.fn()}),resourceQuery:(p:string)=>({queryKey:[p],queryFn:async()=>[]}),useAction:()=>async(a:()=>Promise<unknown>)=>a(),write:{post:mock.post,put:mock.put}}));
+vi.mock('../data/hooks',()=>({useResource:(p:string|null)=>({data:mock.read(p),error:null,loading:false,reload:vi.fn()}),resourceQuery:(p:string)=>({queryKey:[p],queryFn:async()=>[]}),useAction:()=>async(a:()=>Promise<unknown>)=>a(),useAfterWrite:()=>vi.fn(),write:{post:mock.post,put:mock.put}}));
 vi.mock('../api/currentUser',()=>({getCachedUser:()=>({id:1})}));
-vi.mock('../hooks/useConfirm',()=>({useConfirm:()=>[null,vi.fn()]}));
+vi.mock('../hooks/useConfirm',()=>({useConfirm:()=>[null,vi.fn()],useAlert:()=>[null,vi.fn()]}));
 vi.mock('../components/PageFrame',()=>({PageFrame:({children}:{children:React.ReactNode})=><div>{children}</div>}));
 vi.mock('../components/SectionBackground',()=>({SectionBackground:()=>null}));
 vi.mock('../components/mentions/MentionTextarea',()=>({MentionTextarea:({value,onChange}:{value:string;onChange:(v:string)=>void})=><textarea aria-label="Текст" value={value} onChange={e=>onChange(e.target.value)}/>}));
@@ -55,5 +55,25 @@ describe('общая библиотека',()=>{
   mount();fireEvent.click(screen.getByRole('button',{name:'Добавить книгу на полку Большая полка'}));fireEvent.change(screen.getByLabelText('Название'),{target:{value:'Новые правила'}});
   fireEvent.click(within(screen.getByRole('dialog',{name:'Новая книга'})).getByRole('button',{name:'Добавить книгу'}));
   await waitFor(()=>expect(mock.post).toHaveBeenCalledWith('/book-library/articles',expect.objectContaining({title:'Новые правила',department_id:1,shelf_id:1})));
+ });
+ it('показывает одну полку на сеттинг внутри вкладки «Тетради»',()=>{
+  const read=mock.read.getMockImplementation();
+  mock.read.mockImplementation((path:string|null)=>path==='/workbooks/instances'?[
+   {id:1,title:'Тетрадь сеттинга',project_type:'setting',project_setting_id:4,project_setting_name:'Зелёный мир'},
+   {id:2,title:'Тетрадь кампании',project_type:'campaign',project_setting_id:4,project_setting_name:'Зелёный мир'},
+   {id:3,title:'Тетрадь приключения',project_type:'adventure',project_setting_id:5,project_setting_name:'Синий мир'},
+   {id:4,title:'Самостоятельная тетрадь'},
+  ]:read?.(path));
+  mount();
+  expect(screen.queryByText('Зелёный мир')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Тетради'}));
+  const shelf=screen.getByRole('region',{name:'Зелёный мир'});
+  expect(within(shelf).getByText('Тетрадь сеттинга')).toBeTruthy();
+  expect(within(shelf).getByText('Тетрадь кампании')).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'Синий мир'})).getByText('Тетрадь приключения')).toBeTruthy();
+  expect(within(screen.getByRole('region',{name:'Без сеттинга'})).getByText('Самостоятельная тетрадь')).toBeTruthy();
+  fireEvent.change(screen.getByRole('searchbox'),{target:{value:'Зелёный мир'}});
+  expect(screen.queryByRole('region',{name:'Синий мир'})).toBeNull();
+  expect(within(shelf).getByText('Тетрадь кампании')).toBeTruthy();
  });
 });
