@@ -6,21 +6,24 @@
 
 const MAX_LEN = 2000;
 const MAX_SIGNATURES = 5;
+const ATLAS_CONTEXT = ["status", "scope", "branch", "basis", "knowledge", "access", "check", "revisit"] as const;
+const ATLAS_STATUS = ["accepted", "provisional", "idea"] as const;
+const RELATED_ENTRY_IDS = "related_entry_ids";
 
 export const PASSPORT_KEYS = ["promise", "premise", "experience", "tone", "scale", "not_this"] as const;
 
 /** Вид записи → ключи её полей. `notes` — «Задумки», у них только текст. */
 export const ENTRY_FIELDS: Record<string, readonly string[]> = {
-  world_truth: ["formula", "strictness", "scope", "noticeable", "enables", "hinders", "exceptions", "exception_cost", "consequences"],
-  tradition: ["names", "where", "languages", "practices", "prestige", "contested", "axes", "rituals", "sacred", "schools", "syncretism", "transmission", "player_notice"],
-  norm: ["declared", "practice", "exemptions", "at_risk"],
-  tension: ["state", "forces", "incompatibility", "escalates", "unbalances", "without", "signs", "interventions", "play_types", "adventures"],
-  activity: ["supports", "needs", "tradeoff", "changes", "where", "promised"],
-  capability: ["allows", "access", "prevalence", "cost", "learnability", "reliability", "maintenance", "limits", "consequences", "informal", "risks"],
-  flow: ["stages", "owner", "informal", "substitutes", "noticeable", "failure"],
-  claim: ["claim", "truth", "common", "versions", "before_pc"],
-  diegetic_doc: ["author", "purpose", "distorts", "names"],
-  negative_space: ["area", "why", "must_fit", "when_needed"],
+  world_truth: ["formula", "strictness", "noticeable", "enables", "hinders", "exceptions", "exception_cost", "consequences", "conditions", ...ATLAS_CONTEXT],
+  tradition: ["names", "where", "languages", "practices", "prestige", "contested", "axes", "rituals", "sacred", "schools", "syncretism", "transmission", "player_notice", "participants", "participation", ...ATLAS_CONTEXT],
+  norm: ["declared", "practice", "exemptions", "at_risk", "authority", "exceptions", ...ATLAS_CONTEXT],
+  tension: ["state", "forces", "incompatibility", "escalates", "unbalances", "without", "signs", "interventions", "play_types", "adventures", "intents", "first_move", "outcome", ...ATLAS_CONTEXT],
+  activity: ["supports", "needs", "tradeoff", "changes", "where", "promised", "actions", "entry", "stakes", ...ATLAS_CONTEXT],
+  capability: ["allows", "access", "prevalence", "cost", "learnability", "reliability", "maintenance", "limits", "consequences", "informal", "risks", "requirements", "knowledge_access", ...ATLAS_CONTEXT.filter((key) => key !== "access")],
+  flow: ["stages", "owner", "informal", "substitutes", "noticeable", "failure", "resource", "operators", ...ATLAS_CONTEXT],
+  claim: ["claim", "truth", "common", "versions", "before_pc", "source", "confirmation", "evidence", ...ATLAS_CONTEXT],
+  diegetic_doc: ["author", "purpose", "distorts", "names", "assertions", ...ATLAS_CONTEXT],
+  negative_space: ["area", "why", "must_fit", "when_needed", ...ATLAS_CONTEXT],
   notes: [],
 };
 
@@ -84,13 +87,25 @@ export function parseEntryFields(category: string, raw: unknown): Record<string,
   return pick(parseJson(raw), ENTRY_FIELDS[category] ?? []);
 }
 
-export function serializeEntryFields(category: string, raw: unknown): string {
+export function normalizeRelatedEntryIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0))];
+}
+
+export function parseRelatedEntryIds(raw: unknown): number[] {
+  const fields = parseJson(raw) as Record<string, unknown> | null;
+  return normalizeRelatedEntryIds(fields?.[RELATED_ENTRY_IDS]);
+}
+
+export function serializeEntryFields(category: string, raw: unknown, relatedEntryIds: readonly number[] = []): string {
   const out = pick(raw, ENTRY_FIELDS[category] ?? []);
   // Строгость — выбор из пяти (Q10), а не свободный текст.
   if (out.strictness && !(STRICTNESS as readonly string[]).includes(out.strictness)) delete out.strictness;
   // «Обещано» у деятельности (Q9) — флажок.
   if (out.promised && out.promised !== "1") delete out.promised;
-  return JSON.stringify(out);
+  if (out.status && !(ATLAS_STATUS as readonly string[]).includes(out.status)) delete out.status;
+  // Связи хранятся рядом с полями, а API отдаёт их отдельно от текстов.
+  return JSON.stringify(relatedEntryIds.length ? { ...out, [RELATED_ENTRY_IDS]: relatedEntryIds } : out);
 }
 
 // Паспорт приключения (гриллинг профилей 2026-10-02, Q14; словарь граф №1–8):

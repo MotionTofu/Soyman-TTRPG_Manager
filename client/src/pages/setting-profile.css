@@ -1083,14 +1083,17 @@ button.set-gch:hover { background: var(--tab); }
 /* Метка машинописью с кромкой: строгость правила, «обещано». */
 .set-str {
   padding: 0 var(--sp-3);
-  border: 1px solid var(--edge);
+  border: var(--card-border-width) solid var(--edge);
   font-family: var(--font-mono);
   font-size: var(--fs-micro);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.set-str.is-soft { border-style: dashed; }
+.set-str[data-status] { padding: var(--sp-1) var(--sp-2); line-height: 1.1; letter-spacing: 0.04em; }
+.set-str.is-soft,
+.set-str[data-status="provisional"] { border-style: dashed; }
+.set-str[data-status="idea"] { border-style: dotted; }
 .set-dots {
   display: inline-flex;
   align-items: center;
@@ -1144,6 +1147,8 @@ button.set-gch:hover { background: var(--tab); }
 /* Скрыто от игроков — по умолчанию (Q5): блёклый глаз, а не яркая метка. */
 .set-er__vis.is-hidden { color: var(--muted); opacity: 0.6; }
 .set-er.is-open { padding-inline: var(--sp-6); border: 1px solid var(--edge); border-bottom: 0; background: color-mix(in srgb, var(--ink) 3%, var(--sheet)); }
+.set-er--atlas.is-open .set-er__main { grid-template-columns: minmax(0, 1fr); }
+.set-er--atlas.is-open .set-er__main > b { white-space: normal; overflow-wrap: anywhere; }
 .set-open { margin-bottom: var(--sp-2); padding: var(--sp-5) var(--sp-6) var(--sp-5); border: 1px solid var(--edge); border-top: 0; background: color-mix(in srgb, var(--ink) 3%, var(--sheet)); }
 .set-open dl { margin: 0; }
 .set-open dl > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); border-top: 1px solid var(--line); }
@@ -1152,6 +1157,57 @@ button.set-gch:hover { background: var(--tab); }
 .set-open dd { margin: 0; padding: var(--sp-3) 0; font-size: var(--fs-data); line-height: 1.45; }
 .set-open__ft { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); margin-top: var(--sp-5); }
 .set-open__ft > .d-note { margin-left: auto; }
+.set-world__empty { padding-block: var(--sp-3); }
+.set-atlas__help,
+.set-atlas__details { color: var(--ink-2); font-size: var(--fs-data); }
+.set-atlas__help { padding-block: var(--sp-3); }
+.set-atlas__help > summary,
+.set-atlas__details > summary { width: fit-content; color: var(--ink); cursor: pointer; }
+.set-atlas__help > p,
+.set-atlas__details > :not(summary) { margin: var(--sp-3) 0 0; }
+.set-atlas__help > p { max-width: 68ch; }
+.set-atlas__details { padding-block: var(--sp-3); border-top: var(--edge-width) solid var(--line); }
+.set-atlas__content {
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.set-atlas__read dd,
+.set-atlas__related { overflow-wrap: anywhere; }
+.set-atlas__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--sp-4); }
+.set-atlas__links { display: grid; gap: var(--sp-2); min-width: 0; padding: var(--sp-3); border: var(--edge-width) solid var(--line); }
+.set-atlas__links input,
+.set-world .setting-world__toggle input { flex: none; }
+.set-atlas__related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block: var(--sp-4);
+}
+.set-atlas__related-label {
+  color: var(--muted);
+  font: var(--fs-micro)/1.45 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.set-atlas__related-link {
+  max-width: 100%;
+  padding: var(--sp-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: var(--sp-2);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.set-atlas__related-link:hover { color: var(--ink); }
+.set-world section > form.set-open { border-top: var(--edge-width) solid var(--edge); }
 @media (max-width: 900px) {
   .set-cols { grid-template-columns: minmax(0, 1fr); }
   .set-lc { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: var(--sp-2); }

@@ -1840,6 +1840,7 @@ export interface SettingEntry {
   fields: Record<string, string>;
   visible_to_players: number;
   created_at: string;
+  related_entry_ids?: number[];
 }
 
 export interface SettingCalendarEra {
