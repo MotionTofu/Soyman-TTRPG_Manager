@@ -22,6 +22,7 @@ export * from "./practicalWorkbooks";
 export * from "./workbookActivity";
 export * from "./textTables";
 export * from "./searchText";
+export * from "./resourceCategories";
 export * from "./battleLog";
 export * from "./campaignWorld";
 export * from "./presentation";

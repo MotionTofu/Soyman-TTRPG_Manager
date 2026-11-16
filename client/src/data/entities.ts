@@ -119,6 +119,10 @@ export function pathHasPrefix(path: string, prefix: string): boolean {
  */
 const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly EntityKind[]; skipCard?: boolean }[] = [
   { prefix: "/book-library", kinds: ["mastering", "resource", "system"], skipCard: true },
+  {
+    prefix: /^\/settings\/\d+\/counts$/,
+    kinds: ["adventure", "scene", "resource", "location", "being", "community", "setting_event"],
+  },
   // «Кто здесь» в реестре Географии: считает существ и сообщества по местам.
   { prefix: "/setting-locations/inhabitant-counts", kinds: ["being", "community"] },
   {
@@ -156,7 +160,13 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   const [scope, a, b] = queryKey as readonly unknown[];
   if ("path" in affect) {
     const boundCampaignId = /^\/campaigns\/(\d+)\/cutscenes$/.exec(affect.path)?.[1];
+    const countsSettingId = typeof a === "string" ? /^\/settings\/(\d+)\/counts$/.exec(a)?.[1] : undefined;
+    const changedChronicleSettingId = /^\/settings\/(\d+)\/(calendar-events|calendar-eras|calendar-timelines|cycles|cycle-groups|important-dates)(\/|\?|$)/.exec(affect.path)?.[1];
     return scope === "resource" && typeof a === "string" && (pathHasPrefix(a, affect.path) ||
+      // Счётчики перечитываются при изменении содержимого вкладок.
+      (countsSettingId !== undefined && (
+        countsSettingId === changedChronicleSettingId || pathHasPrefix(affect.path, "/albums") || pathHasPrefix(affect.path, "/resources")
+      )) ||
       // Collection/plan summaries carry original names and must refresh after a cutscene edit.
       (pathHasPrefix(affect.path, "/archive") && /^\/cutscenes(\/|\?|$)/.test(a)) ||
       (pathHasPrefix(affect.path, "/cutscenes") && a === "/archive") ||

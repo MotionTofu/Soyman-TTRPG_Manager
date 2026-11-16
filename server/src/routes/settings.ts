@@ -5,6 +5,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { isGalleryResource } from "@soyman/shared";
 import { db } from "../db/db";
 import { requireKind } from "../db/entityKinds";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
@@ -334,29 +335,24 @@ settingsRouter.put("/:id/calendar", (req, res) => {
   res.json(getCalendar(req.params.id));
 });
 
-// Aggregate of every important date belonging to any being/community in
-// this setting — used to mark the setting's own calendar preview and every
-// campaign calendar built on this setting.
-settingsRouter.get("/:id/important-dates", (req, res) => {
-  const rows = db
-    .prepare(
-      `SELECT d.*, b.name as owner_name FROM important_dates d
+const SETTING_IMPORTANT_DATES = `SELECT d.*, b.name as owner_name FROM important_dates d
        JOIN setting_beings b ON b.id = d.owner_id AND d.owner_type = 'being'
-       WHERE b.setting_id = ? AND b.archived_at IS NULL
+       WHERE b.setting_id = @setting_id AND b.archived_at IS NULL
        UNION ALL
        SELECT d.*, c.name as owner_name FROM important_dates d
        JOIN setting_communities c ON c.id = d.owner_id AND d.owner_type = 'community'
-       WHERE c.setting_id = ? AND c.archived_at IS NULL
+       WHERE c.setting_id = @setting_id AND c.archived_at IS NULL
        UNION ALL
        SELECT d.*, l.name as owner_name FROM important_dates d
        JOIN setting_locations l ON l.id = d.owner_id AND d.owner_type = 'location'
-       WHERE l.setting_id = ? AND l.archived_at IS NULL
+       WHERE l.setting_id = @setting_id AND l.archived_at IS NULL
        UNION ALL
        SELECT d.*, NULL as owner_name FROM important_dates d
-       WHERE d.owner_type = 'setting' AND d.owner_id = ?`
-    )
-    .all(req.params.id, req.params.id, req.params.id, req.params.id);
-  res.json(rows);
+       WHERE d.owner_type = 'setting' AND d.owner_id = @setting_id`;
+
+// Даты сеттинга и его сущностей видны и в календаре сеттинга, и в кампаниях.
+settingsRouter.get("/:id/important-dates", (req, res) => {
+  res.json(db.prepare(SETTING_IMPORTANT_DATES).all({ setting_id: req.params.id }));
 });
 
 settingsRouter.post("/:id/important-dates", (req, res) => {
@@ -400,21 +396,70 @@ settingsRouter.delete("/important-dates/:dateId", (req, res) => {
   res.json({ ok: true });
 });
 
-// Счётчики язычков профиля и блока «В мире» на «Обзоре» (макет, доски 11–25):
-// одним запросом, а не чтением каждой вкладки целиком.
-settingsRouter.get("/:id/counts", (req, res) => {
+function settingHasGallery(settingId: number, viewerId: number): boolean {
+  if (db.prepare("SELECT 1 FROM albums WHERE setting_id = ? LIMIT 1").get(settingId)) return true;
+
+  const resources = db.prepare(`
+    SELECT r.category, r.type, r.file_path, r.link_url, r.name FROM resources r
+    WHERE r.scope = 'setting' AND r.archived_at IS NULL AND r.type <> 'statblock_template'
+      AND (r.setting_id = @setting_id OR r.id IN (
+        SELECT owner_id FROM resource_setting_links WHERE owner_type = 'resource' AND setting_id = @setting_id
+      ))
+      AND (r.type <> 'pdf_notes' OR EXISTS (
+        SELECT 1 FROM pdf_note_documents d WHERE d.markdown_resource_id = r.id AND d.author_user_id = @viewer_id
+      ))
+  `).iterate({ setting_id: settingId, viewer_id: viewerId }) as Iterable<{
+    category: string | null;
+    type: string;
+    file_path: string | null;
+    link_url: string | null;
+    name: string;
+  }>;
+  for (const resource of resources) {
+    const fileUrl = resource.file_path && resource.type !== "pdf_notes"
+      ? `/files/${encodeURIComponent(path.win32.basename(resource.file_path))}`
+      : null;
+    if (isGalleryResource(resource.category, fileUrl || resource.link_url || resource.name)) return true;
+  }
+  return false;
+}
+
+// Счётчики и наличие содержимого для полосы вкладок и «Обзора».
+settingsRouter.get("/:id/counts", (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const count = (sql: string, ...params: unknown[]) => (db.prepare(sql).get(...params) as { n: number }).n;
+  const events = count("SELECT COUNT(*) n FROM setting_calendar_events WHERE setting_id = ?", id);
+  const hasChronicle = events > 0 || !!db.prepare(`
+    SELECT 1 FROM setting_cycles WHERE setting_id = @setting_id AND campaign_id IS NULL
+    UNION ALL SELECT 1 FROM setting_cycle_groups WHERE setting_id = @setting_id AND campaign_id IS NULL
+    UNION ALL SELECT 1 FROM setting_calendar_eras WHERE setting_id = @setting_id AND campaign_id IS NULL
+    UNION ALL SELECT 1 FROM setting_calendar_timelines WHERE setting_id = @setting_id AND campaign_id IS NULL
+    UNION ALL SELECT 1 FROM (${SETTING_IMPORTANT_DATES})
+    LIMIT 1
+  `).get({ setting_id: id });
+  const adventures = count(
+    "SELECT COUNT(*) n FROM story_arcs WHERE setting_id = ? AND archived_at IS NULL AND campaign_id IS NULL AND parent_id IS NULL AND kind = 'adventure' AND is_default = 0",
+    id
+  );
+  // Пустой служебный контейнер создаётся автоматически. Сцены в нём,
+  // включая ещё не перенесённые старые сцены, считаются содержимым вкладки.
+  const hasAdventures = adventures > 0 || !!db.prepare(`
+    SELECT 1 FROM story_scenes s
+    LEFT JOIN story_arcs a ON a.id = s.arc_id
+    WHERE s.setting_id = ? AND s.archived_at IS NULL AND s.campaign_id IS NULL
+      AND (s.arc_id IS NULL OR (a.is_default = 1 AND a.archived_at IS NULL AND a.campaign_id IS NULL))
+    LIMIT 1
+  `).get(id);
   res.json({
     places: count("SELECT COUNT(*) n FROM setting_locations WHERE setting_id = ? AND archived_at IS NULL", id),
     beings: count("SELECT COUNT(*) n FROM setting_beings WHERE setting_id = ? AND archived_at IS NULL", id),
     communities: count("SELECT COUNT(*) n FROM setting_communities WHERE setting_id = ? AND archived_at IS NULL", id),
-    events: count("SELECT COUNT(*) n FROM setting_calendar_events WHERE setting_id = ?", id),
-    adventures: count(
-      "SELECT COUNT(*) n FROM story_arcs WHERE setting_id = ? AND archived_at IS NULL AND parent_id IS NULL AND kind = 'adventure' AND is_default = 0",
-      id
-    ),
+    events,
+    adventures,
     world: count("SELECT COUNT(*) n FROM setting_entries WHERE setting_id = ? AND category <> 'notes'", id),
+    hasChronicle,
+    hasAdventures,
+    hasGallery: settingHasGallery(id, req.user!.id),
   });
 });
 

@@ -10,7 +10,7 @@ import { ContextMenu, type ContextMenuItem } from "../ContextMenu";
 import { EmptyState } from "../EmptyState";
 import { ImageLightbox } from "../ImageLightbox";
 import { GalleryStack, GalleryPhoto } from "../GalleryPhotos";
-import { DRAG_ALBUM, galleryImageCategory, useGalleryImage } from "../../media/galleryImages";
+import { DRAG_ALBUM, isGalleryResource, useGalleryImage } from "../../media/galleryImages";
 import type { Album, Resource, Setting } from "../../types";
 
 // «Галерея» сеттинга (разбор профиля сеттинга, Q12/Q28; альбомы — Q20–Q22,
@@ -48,7 +48,7 @@ export function SettingGalleryTab({ setting }: { setting: Setting }) {
   const albumsPath = `/albums?setting_id=${setting.id}`;
   const all = useResource<Resource[]>(settingPagePaths.resources(setting.id)).data ?? NO_RESOURCES;
   const albums = useResource<Album[]>(albumsPath).data ?? NO_ALBUMS;
-  const images = useMemo(() => all.filter((r) => ["image", "map"].includes(galleryImageCategory(r))), [all]);
+  const images = useMemo(() => all.filter(isGalleryResource), [all]);
   const [picked, setPicked] = useState<Open | null>(null);
   const [query, setQuery] = useState("");
   const [slotsOpen, setSlotsOpen] = useState(false);

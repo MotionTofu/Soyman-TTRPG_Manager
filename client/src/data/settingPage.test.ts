@@ -36,4 +36,15 @@ describe("страница Сеттинга в слое данных", () => {
     expect(hit(dataKeys.resource(populationPaths.bestiary(3)))).toBe(true);
     expect(hit(dataKeys.resource(chroniclePaths.events(3)))).toBe(true);
   });
+
+  it("изменения содержимого вкладок обновляют счётчики профиля", () => {
+    const counts = dataKeys.resource("/settings/3/counts");
+    for (const path of [chroniclePaths.cycles(3, 10), chroniclePaths.importantDates(3), chroniclePaths.eras(3), "/albums", "/resources"]) {
+      expect(matchesAffect(counts, { path })).toBe(true);
+    }
+    expect(matchesAffect(counts, { kind: "adventure", id: 4 })).toBe(true);
+    expect(matchesAffect(counts, { kind: "scene", id: 8 })).toBe(true);
+    expect(matchesAffect(counts, { kind: "campaign", id: 10 })).toBe(false);
+    expect(matchesAffect(counts, { path: chroniclePaths.cycles(30) })).toBe(false);
+  });
 });

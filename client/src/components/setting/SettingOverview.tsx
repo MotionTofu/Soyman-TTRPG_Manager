@@ -22,6 +22,9 @@ export interface SettingCounts {
   beings: number;
   communities: number;
   events: number;
+  hasChronicle: boolean;
+  hasAdventures: boolean;
+  hasGallery: boolean;
   adventures: number;
   world: number;
 }

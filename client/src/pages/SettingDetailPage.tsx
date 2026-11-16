@@ -84,8 +84,7 @@ import type {
   SettingGroup,
 } from "../types";
 
-// Вкладки профиля сеттинга (разбор 2026-10-01, Q1; «Заметки» убраны
-// 2026-10-02, Q19). Под «…» — то, к чему ходят реже.
+// Порядок вкладок профиля сеттинга, в том числе в меню «Ещё».
 const TABS = [
   "Обзор",
   "Мир",
@@ -101,8 +100,6 @@ const TABS = [
   "Аудиотека",
 ] as const;
 type Tab = (typeof TABS)[number];
-const MORE_TABS: readonly Tab[] = ["Сокровищница", "Граф связей", "Библиотека", "Аудиотека"];
-// Пустой сеттинг (Q13): на виду четыре вкладки, остальные — под «…».
 const CORE_TABS: readonly Tab[] = ["Обзор", "Мир", "География", "Население"];
 const TAB_ALIASES: Readonly<Record<string, string>> = {
   "Хроника мира": "Хроника",
@@ -132,9 +129,7 @@ export function SettingDetailPage() {
   const setting = settingState.data ?? null;
   const { save, saving: savingFields } = useSaveEntity<Setting>("setting", settingId);
   const settingAffects: Affect[] = [{ kind: "setting", id: settingId }];
-  // Кампании нужны сразу: по ним решается, какие вкладки показать.
-  const campaignsState = useResource<Campaign[]>(settingPagePaths.campaigns(settingId));
-  const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
+  const campaigns = useResource<Campaign[]>(settingPagePaths.campaigns(settingId)).data ?? NO_CAMPAIGNS;
   // Фон и тамбнейл живут в карточке «Изображения сеттинга» внизу «Обзора» и
   // заливаются сразу по выбору файла — не откладываются до «Сохранить» рядом с
   // именем, как было раньше.
@@ -322,9 +317,7 @@ export function SettingDetailPage() {
     );
   }
 
-  // Пока кампаний нет, набор вкладок не решён: без них страница мигнула бы
-  // четырьмя вкладками вместо девяти.
-  if (!setting || (campaignsState.loading && !campaignsState.error)) {
+  if (!setting) {
     return (
       <EntityPage crumbs={rootCrumbs} entityType="setting" title="" loading>
         {null}
@@ -607,7 +600,6 @@ export function SettingDetailPage() {
       : null
   );
 
-  const isNewSetting = campaigns.length === 0;
   // Счётчик ярлыка — машинописью (§6.2); ноль не показывается.
   const tabCounts: Partial<Record<Tab, number>> = {
     Мир: counts?.world,
@@ -617,9 +609,15 @@ export function SettingDetailPage() {
     Приключения: counts?.adventures,
     Тетрадь: workbooks.length,
   };
-  // «Тетрадь» — только когда к сеттингу привязана тетрадь (Q1).
-  const available = TABS.filter((t) => t !== "Тетрадь" || workbooks.length > 0);
-  const shownTabs = available.filter((t) => (isNewSetting ? CORE_TABS.includes(t) : !MORE_TABS.includes(t)));
+  const hasWorkbook = workbooks.length > 0;
+  const tabsWithContent: Partial<Record<Tab, boolean>> = {
+    Хроника: counts?.hasChronicle,
+    Приключения: counts?.hasAdventures,
+    Галерея: counts?.hasGallery,
+    Тетрадь: hasWorkbook,
+  };
+  const available = TABS.filter((t) => t !== "Тетрадь" || hasWorkbook);
+  const shownTabs = available.filter((t) => CORE_TABS.includes(t) || tabsWithContent[t]);
   const hiddenTabs = available.filter((t) => !shownTabs.includes(t));
 
   return (

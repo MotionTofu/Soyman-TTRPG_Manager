@@ -1,6 +1,7 @@
 import type { NavIconName } from "./components/NavIcons";
+import type { ResourceCategory } from "@shared/resourceCategories";
 
-export type ResourceCategory = "folder" | "pdf" | "markdown" | "map" | "image" | "audio" | "link" | "other";
+export { guessResourceCategory, type ResourceCategory } from "@shared/resourceCategories";
 
 export const RESOURCE_CATEGORIES: { key: ResourceCategory; label: string; icon: NavIconName }[] = [
   { key: "folder", label: "Папки", icon: "folder" },
@@ -16,25 +17,3 @@ export const RESOURCE_CATEGORIES: { key: ResourceCategory; label: string; icon: 
 export const RESOURCE_CATEGORY_LABELS: Record<ResourceCategory, string> = Object.fromEntries(
   RESOURCE_CATEGORIES.map((c) => [c.key, c.label])
 ) as Record<ResourceCategory, string>;
-
-const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
-const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac|opus|webm)$/i;
-const PDF_EXT = /\.pdf$/i;
-const MARKDOWN_EXT = /\.md$/i;
-// Windows drive path ("C:\..."), UNC share ("\\server\...") or a file://
-// URL — the closest thing to "a folder on this computer" a plain text
-// field can express (there's no real folder-picker in a browser/webview).
-const FOLDER_LIKE = /^[a-zA-Z]:[\\/]|^\\\\|^file:\/\//i;
-
-// Best-effort guess so the create dialog opens with a sensible default —
-// the user can always override it before saving.
-export function guessResourceCategory(nameOrUrl: string): ResourceCategory {
-  if (FOLDER_LIKE.test(nameOrUrl)) return "folder";
-  const withoutQuery = nameOrUrl.split(/[?#]/)[0];
-  if (PDF_EXT.test(withoutQuery)) return "pdf";
-  if (MARKDOWN_EXT.test(withoutQuery)) return "markdown";
-  if (IMAGE_EXT.test(withoutQuery)) return "image";
-  if (AUDIO_EXT.test(withoutQuery)) return "audio";
-  if (/^https?:\/\//i.test(nameOrUrl)) return "link";
-  return "other";
-}
