@@ -22,7 +22,8 @@
     },
     {
       "from": "server/node_modules",
-      "to": "app/server/node_modules"
+      "to": "app/server/node_modules",
+      "filter": ["**/*", "!@soyman/shared", "!@soyman/shared/**"]
     },
     {
       "from": "shared/dist",
