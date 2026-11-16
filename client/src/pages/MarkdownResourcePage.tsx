@@ -307,7 +307,7 @@ export function MarkdownResourcePage() {
       {editing
         ? <SheetEditor hybrid={mode === "hybrid"} value={draft} onChange={changeDraft} insertRequest={insertRequest} menuRequest={menuRequest}
             onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
-        : <div ref={readingText}><MentionText text={draft} /></div>}
+        : <div ref={readingText} className="markdown-library__prose"><MentionText text={draft} /></div>}
     </SheetView>
   </section>;
 }

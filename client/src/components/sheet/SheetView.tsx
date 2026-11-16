@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PageHead } from "../PageFrame";
+import { NavIcon } from "../NavIcons";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import "./sheet.css";
@@ -63,6 +64,41 @@ export function SheetMenu({ label, icon, open, onOpenChange, children, wide }: {
   wide?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const trigger = ref.current;
+    const pop = popRef.current;
+    if (!open || !trigger || !pop) return;
+
+    const frame = trigger.closest<HTMLElement>(".sheet-stage, .app-content") ?? document.documentElement;
+    const updatePosition = () => {
+      const bounds = frame.getBoundingClientRect();
+      const anchor = trigger.getBoundingClientRect();
+      const frameLeft = bounds.left + frame.clientLeft;
+      const left = Math.max(0, frameLeft);
+      const right = Math.min(document.documentElement.clientWidth, frameLeft + frame.clientWidth);
+
+      pop.style.setProperty("--sheet-pop-max-width", `${Math.max(0, right - left)}px`);
+      const width = pop.getBoundingClientRect().width;
+      const opensLeft = anchor.right - left > right - anchor.left;
+      const preferred = opensLeft ? anchor.right - width : anchor.left;
+      const x = Math.max(left, Math.min(preferred, right - width));
+      pop.style.setProperty("--sheet-pop-left", `${x - anchor.left}px`);
+    };
+
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(frame);
+    observer.observe(pop);
+    window.addEventListener("resize", updatePosition);
+    frame.addEventListener("scroll", updatePosition);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updatePosition);
+      frame.removeEventListener("scroll", updatePosition);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (event: PointerEvent) => {
@@ -77,7 +113,7 @@ export function SheetMenu({ label, icon, open, onOpenChange, children, wide }: {
     <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
       <button type="button" className={`sheet-btn${open ? " is-on" : ""}`} title={label} aria-label={label}
         aria-expanded={open} onClick={() => onOpenChange(!open)}>{icon}</button>
-      {open && <div className="sheet-pop" style={wide ? { width: 360 } : undefined}>{children}</div>}
+      {open && <div ref={popRef} className="sheet-pop" style={wide ? { width: 360 } : undefined}>{children}</div>}
     </span>
   );
 }
@@ -315,7 +351,9 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
                 title="По ширине" aria-label="По ширине" onClick={() => setZoom("fit")}>↔</button>
               <span className="document-sheet-plate__sep" />
               <button type="button" className={`sheet-btn${breaks ? " is-on" : ""}`} aria-pressed={breaks}
-                title="Разрывы страниц" aria-label="Разрывы страниц" onClick={toggleBreaks}>⋯</button>
+                title="Показать границы страниц А4" aria-label="Показать границы страниц А4" onClick={toggleBreaks}>
+                <NavIcon name="pageBreak" />
+              </button>
             </div>
           </div>
           <article ref={sheetRef} className={`sheet sheet--${mode}`} onMouseDown={focusEditorEnd}

@@ -1,3 +1,6 @@
+/* The map editor overrides --fs-micro for its controls. Keep search on the root scale. */
+:root { --search-fs-micro: var(--fs-micro); }
+
 .side-search {
   --search-line: #d4cfc4;
   --search-tab: #e6e1d6;
@@ -154,7 +157,7 @@
   gap: 3px var(--sp-4);
   padding-bottom: var(--sp-3);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
 }
 .side-search-empty { display: grid; justify-items: start; gap: var(--sp-3); font-weight: 700; }
 .side-search .side-search-broaden {
@@ -173,11 +176,11 @@
   background: transparent;
 }
 .side-search-meta, .side-search-item-main { display: flex; min-width: 0; }
-.side-search-meta { flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--muted); font-size: 11px; }
+.side-search-meta { flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--muted); font-size: var(--search-fs-micro); }
 .side-search-meta .search-result-context { font-size: inherit; }
 .side-search-item-main { align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .side-search-title { color: var(--ink); font-weight: 730; overflow-wrap: anywhere; }
-.side-search-subtitle { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.side-search-subtitle { color: var(--muted); font-size: var(--fs-meta); overflow-wrap: anywhere; }
 .side-search-type.d-chip {
   padding: 1px var(--sp-2);
   border: 0;
@@ -196,7 +199,7 @@
 .side-search .search-result-goto { width: 28px; height: 28px; }
 .side-search .search-result-goto svg { width: 16px; height: 16px; transform: rotate(-45deg); }
 .side-search-fragments { display: grid; gap: var(--sp-2); margin-top: 3px; }
-.side-search-fragments summary { color: var(--muted); font-size: 12px; font-weight: 650; cursor: pointer; }
+.side-search-fragments summary { color: var(--muted); font-size: var(--fs-meta); font-weight: 650; cursor: pointer; }
 .side-search-fragments details .side-search-fragment { margin-top: var(--sp-2); }
 .side-search a.side-search-fragment {
   display: grid;
@@ -205,7 +208,7 @@
   border-left: 2px solid var(--search-line);
   background: color-mix(in srgb, var(--search-tab) 55%, var(--sheet));
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-meta);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -213,7 +216,7 @@
   border-color: var(--edge);
   background: var(--search-tab);
 }
-.side-search-fragment-label { display: flex; justify-content: space-between; gap: var(--sp-2); color: var(--ink); font-size: 11px; }
+.side-search-fragment-label { display: flex; justify-content: space-between; gap: var(--sp-2); color: var(--ink); font-size: var(--search-fs-micro); }
 .side-search-fragment mark,
 ::highlight(soyman-search-match) { background-color: color-mix(in srgb, var(--acid) 37%, transparent); color: inherit; }
 
@@ -224,7 +227,7 @@
   .side-search .search-result:has([data-format]):not(:hover):not(:focus-within) .side-search-preview { opacity: 0; }
 }
 @media (pointer: coarse) {
-  .side-search .search-input-wrap > .d-input { font-size: 16px; }
+  .side-search .search-input-wrap > .d-input { font-size: var(--fs-body); }
   .side-search :is(.search-input-wrap > .d-input, .side-search-toggle, .side-search-groups button, .side-search-filters select.d-input, .side-search-tag, .side-search-reset, .side-search-broaden, .side-search-fragment) {
     min-height: 44px;
   }
