@@ -11,9 +11,17 @@ const campaigns = [
   { id: 2, name: "Цена вопроса", role: "player", status: "completed", system_name: "City of Mist", setting_name: "Город" },
   { id: 3, name: "Дозоры", role: "gm", status: "paused", system_name: "D&D", setting_name: "Север" },
 ];
-const mocks = vi.hoisted(() => ({ prompt: vi.fn(), put: vi.fn().mockResolvedValue({}) }));
-vi.mock("../data/hooks", () => ({ useAfterWrite: () => vi.fn(), useAction: () => (fn: () => Promise<unknown>) => fn(), write: { put: mocks.put }, resourceQuery: () => ({}),
+const mocks = vi.hoisted(() => ({ prompt: vi.fn(), put: vi.fn().mockResolvedValue({}), post: vi.fn().mockResolvedValue({}) }));
+vi.mock("../data/hooks", () => ({ useAfterWrite: () => vi.fn(), useAction: () => (fn: () => Promise<unknown>) => fn(), write: { put: mocks.put, post: mocks.post }, resourceQuery: () => ({}),
   useResource: (path: string) => ({ loading: false, data: path === "/campaigns" ? campaigns : [] }) }));
+// Обрезку в этом файле не проверяем: она общая с мастерским «Обзором» и живёт в
+// ImageCropModal. Здесь важно, что пункт меню доводит файл до сервера.
+vi.mock("../hooks/useImageCrop", () => ({
+  useImageCrop: (_shape: string, onDone: (file: File) => void) => ({
+    onSelect: (file: File | null) => { if (file) onDone(file); },
+    modal: null,
+  }),
+}));
 vi.mock("../hooks/useConfirm", () => ({ useConfirm: () => [null, vi.fn()], useAlert: () => [null, vi.fn()], usePrompt: () => [null, mocks.prompt] }));
 vi.mock("../components/SectionBackground", () => ({ SectionBackground: () => null }));
 vi.mock("../utils/fileUrl", () => ({ useAuthenticatedFileUrl: () => null }));
@@ -62,21 +70,41 @@ describe("список кампаний в Д", () => {
     try {
       const shown = show();
       fireEvent.click(screen.getByRole("button", { name: "Действия: Дозоры" }));
-      const rename = opened.mock.lastCall?.[0].detail.local[0];
+      const rename = opened.mock.lastCall?.[0].detail.local.find((i: { label: string }) => i.label === "Переименовать")!;
       expect(rename.label).toBe("Переименовать");
       mocks.prompt.mockResolvedValueOnce("  Дозоры Севера  ");
       await rename.onClick();
       expect(mocks.put).toHaveBeenCalledWith("/campaigns/3", { name: "Дозоры Севера" });
       const row = shown.container.querySelector('[data-entity-id="3"]')!;
       fireEvent.contextMenu(row);
-      expect(opened.mock.lastCall?.[0].detail.local[0].label).toBe("Переименовать");
+      expect(opened.mock.lastCall?.[0].detail.local.some((i: { label: string }) => i.label === "Переименовать")).toBe(true);
       mocks.prompt.mockResolvedValueOnce(null);
-      await opened.mock.lastCall?.[0].detail.local[0].onClick();
+      await opened.mock.lastCall?.[0].detail.local.find((i: { label: string }) => i.label === "Переименовать")!.onClick();
       expect(mocks.put).toHaveBeenCalledTimes(1);
       opened.mockClear();
       fireEvent.contextMenu(row, { shiftKey: true });
       expect(opened).not.toHaveBeenCalled();
     } finally { window.removeEventListener(ENTITY_MENU_EVENT, opened); }
+  });
+  it("ставит обложку кампании «Я игрок» из «…» и шлёт файл на сервер", async () => {
+    const opened = vi.fn();
+    window.addEventListener(ENTITY_MENU_EVENT, opened);
+    mocks.post.mockClear();
+    try {
+      const shown = show();
+      fireEvent.click(screen.getByRole("button", { name: "Действия: Цена вопроса" }));
+      const item = opened.mock.lastCall?.[0].detail.local.find((i: { label: string }) => i.label === "Сменить обложку")!;
+      expect(item).toBeTruthy();
+      item.onClick();
+      // Обложку в «Обзоре» у такой кампании не поставить — пункт меню и есть вход.
+      const input = shown.container.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [new File(["image"], "cover.png", { type: "image/png" })] } });
+      await vi.waitFor(() =>
+        expect(mocks.post).toHaveBeenCalledWith("/campaigns/2/thumbnail", expect.any(FormData), { timeoutMs: 120_000 })
+      );
+    } finally {
+      window.removeEventListener(ENTITY_MENU_EVENT, opened);
+    }
   });
   it("«Список» — таблица с колонками, разделы по статусу; выбор вида помнится", () => {
     localStorage.removeItem("soyman.listView.campaigns");

@@ -10,6 +10,8 @@ import { usePrompt } from "../hooks/useConfirm";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { GroupMembersModal, removeFromGroupItem } from "../components/GroupMembersModal";
+import { useCampaignCoverUpload } from "../hooks/useCampaignCoverUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import { SectionBackground } from "../components/SectionBackground";
 import { RegAddRow, RegAddTile, RegArchive, RegMeta, RegRow, RegSection, RegTable, RegTile, RegTiles, useListView, type RegColumn } from "../components/ListRegistry";
 import { formatNearestDate } from "../nearestDate";
@@ -35,12 +37,21 @@ export function CampaignsListPage() {
   const run = useAction();
   const [promptDialog, prompt] = usePrompt();
   const [view, setView] = useListView("campaigns");
+  const cover = useCampaignCoverUpload();
   function menuFor(campaign: Campaign): ContextMenuItem[] {
-    const items: ContextMenuItem[] = campaign.folder_missing ? [] : [{ label: "Переименовать", onClick: async () => {
-      const name = (await prompt({ title: "Переименовать кампанию", message: "Название", defaultValue: campaign.name, confirmLabel: "Сохранить" }))?.trim();
-      if (!name || name === campaign.name) return;
-      await run(() => write.put(campaignPaths.detail(campaign.id), { name }), { affects: campaignFieldsAffects(campaign.id), retry: false });
-    } }];
+    const items: ContextMenuItem[] = campaign.folder_missing ? [] : [
+      // У кампаний «Я игрок» обложки в «Обзоре» нет — ставится отсюда. У
+      // «Я мастер» пункт дублирует щелчок по обложке и ничего не ломает.
+      { label: cover.uploading ? "Загрузка…" : "Сменить обложку", onClick: () => cover.pick(campaign.id) },
+      {
+        label: "Переименовать",
+        onClick: async () => {
+          const name = (await prompt({ title: "Переименовать кампанию", message: "Название", defaultValue: campaign.name, confirmLabel: "Сохранить" }))?.trim();
+          if (!name || name === campaign.name) return;
+          await run(() => write.put(campaignPaths.detail(campaign.id), { name }), { affects: campaignFieldsAffects(campaign.id), retry: false });
+        },
+      },
+    ];
     if (currentGroup) items.push(removeFromGroupItem("campaign", currentGroup, campaign.id, run));
     return items;
   }
@@ -116,6 +127,17 @@ export function CampaignsListPage() {
     <div className="stack campaigns-list" style={{ position: "relative" }}>
       <SectionBackground />
       {promptDialog}
+      <input
+        ref={cover.input}
+        type="file"
+        hidden
+        accept={IMAGE_ACCEPT}
+        onChange={(e) => {
+          cover.onSelect(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      {cover.modal}
       <ListPage
         headingSection="campaigns"
         title="Кампании"
