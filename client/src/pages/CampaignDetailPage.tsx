@@ -55,6 +55,7 @@ import { formatInworldDate } from "../inworldCalendar";
 import { EntityPage } from "../components/EntityPage";
 import { LoadErrorCard } from "../components/Loadable";
 import { useImageCrop } from "../hooks/useImageCrop";
+import { useCampaignCoverUpload } from "../hooks/useCampaignCoverUpload";
 import { loadHideFinance } from "../financePrivacy";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
@@ -224,6 +225,9 @@ export function CampaignDetailPage() {
   const run = useAction();
   const campaignState = useResource<CampaignDetail>(invalidCampaignId ? null : campaignPaths.detail(campaignId));
   const campaign = campaignState.data ?? null;
+  // Обложка из меню «…»: у «Я игрок» кликабельной обложки в «Обзоре» нет,
+  // у «Я мастер» пункт дублирует её щелчок.
+  const cover = useCampaignCoverUpload();
   const calendar = useSettingCalendar(campaign?.setting_id);
   const sessions = useResource<SessionSummary[]>(invalidCampaignId ? null : campaignPaths.sessions(campaignId)).data ?? NO_SESSIONS;
   const allPlayers = useResource<Player[]>(campaignPaths.players()).data ?? NO_PLAYERS;
@@ -513,7 +517,13 @@ export function CampaignDetailPage() {
           />
         )
       }
-      actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
+      actions={[
+        // Без папки загрузка вернёт 409 — пункт не предлагаем (в списке так же).
+        ...(campaign.folder_missing ? [] : [
+          { label: cover.uploading ? "Загрузка…" : "Сменить обложку", onClick: () => cover.pick(campaignId) },
+        ]),
+        { label: "Архивировать", danger: true, onClick: archiveCampaign },
+      ]}
       tabs={tabs.filter(id => !CAMPAIGN_MORE_TABS.some(t => t === id)).map(id => {
         // Ярлыки «Д» без знаков, счётчик машинописью (блок «Кампании», пачка 1).
         return { id, label: TAB_SHORT[id] ?? id, count: tabCounts[id] || undefined };
@@ -801,6 +811,17 @@ export function CampaignDetailPage() {
 
 
       {sessionMenu && <ContextMenu {...sessionMenu} onClose={() => setSessionMenu(null)} />}
+      <input
+        ref={cover.input}
+        type="file"
+        hidden
+        accept={IMAGE_ACCEPT}
+        onChange={(e) => {
+          cover.onSelect(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+      />
+      {cover.modal}
       {confirmDialog}
       {alertDialog}
       {outcomeSessionId != null && <SessionOutcomeModal sessionId={outcomeSessionId} onClose={() => setOutcomeSessionId(null)} />}
