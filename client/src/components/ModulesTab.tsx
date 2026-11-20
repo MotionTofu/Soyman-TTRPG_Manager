@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAfterWrite, useResource, write } from "../data/hooks";
+import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
+import { importModuleFile } from "../data/moduleImport";
 import { useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "../components/EmptyState";
 import { refreshMentionIndex } from "../mentions";
@@ -128,24 +129,14 @@ export function ModulesTab() {
   }
 
   async function handleFile(file: File | null) {
-    if (!file) return;
-    if (file.size > 200 * 1024 * 1024) {
-      setError("Файл слишком большой — лимит 200 МБ");
-      return;
-    }
+    if (!file || importing) return;
     setImporting(true);
     setError("");
     try {
-      const text = await file.text();
-      if (text.includes("__proto__") || text.includes("\"constructor\"")) throw new Error("Недопустимое содержимое");
-      const data = JSON.parse(text);
-      const type = data.sections && data.entries ? "system" : data.locations && data.communities ? "setting" : null;
-      if (!type) throw new Error("Файл не похож на экспорт системы или сеттинга.");
-      await write.post("/modules/import", { type, data }, { timeoutMs: LONG_MS });
+      await importModuleFile(file);
       refresh();
-    } catch (e: any) {
-      const msg = e?.response?.data?.error || String(e);
-      setError(`Ошибка импорта: ${msg}`);
+    } catch (e) {
+      setError(`Ошибка импорта: ${errorText(e)}`);
     } finally {
       setImporting(false);
     }
@@ -243,7 +234,17 @@ export function ModulesTab() {
           <div className="row">
             <label className="row" style={{ cursor: "pointer" }}>
               {importing ? "Загрузка…" : "+ Добавить модуль из файла"}
-              <input type="file" accept="application/json" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept=".json,application/json"
+                hidden
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0] ?? null;
+                  e.currentTarget.value = "";
+                  void handleFile(file);
+                }}
+              />
             </label>
           </div>
           <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>

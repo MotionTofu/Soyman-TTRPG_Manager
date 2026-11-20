@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
 import { sourceNameByCode } from "../services/mentions";
+import { readExportFile, uploadExportFile } from "../services/exportFileUpload";
 import { createSystemBackup, importSystemExport, updateSystemFromExport, type SystemExportData } from "./systems";
 import { createSettingBackup, importSettingExport, updateSettingFromExport, type SettingExportData } from "./settings";
 
@@ -111,12 +112,14 @@ interface ModuleRow {
   type: "system" | "setting";
   name: string;
   source: "local" | "imported";
-  source_json: string | null;
   enabled: number;
   system_id: number | null;
   setting_id: number | null;
   created_at: string;
 }
+
+// A pending module can contain hundreds of MB. Load its export only on first enable.
+const MODULE_COLUMNS = "id, type, name, source, enabled, system_id, setting_id, created_at, remote_id, remote_version";
 
 // Any system/setting not yet wrapped by a module row gets one lazily — this
 // is what lets pre-existing (non-imported) systems/settings show up in the
@@ -158,8 +161,59 @@ function syncLocalWrappers() {
 
 modulesRouter.get("/", (_req, res) => {
   syncLocalWrappers();
-  const rows = db.prepare("SELECT * FROM modules ORDER BY type, name").all() as ModuleRow[];
-  res.json(rows.map((r) => ({ ...r, source_json: undefined })));
+  res.json(db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules ORDER BY type, name`).all());
+});
+
+function registerModule(type: ModuleRow["type"], name: string, json: string): ModuleRow {
+  const { lastInsertRowid } = db.prepare(
+    "INSERT INTO modules (type, name, source, source_json, enabled) VALUES (?, ?, 'imported', ?, 0)"
+  ).run(type, name, json);
+  return db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE id = ?`).get(lastInsertRowid) as ModuleRow;
+}
+
+modulesRouter.post("/import-file", uploadExportFile, async (req, res) => {
+  const systemOnly = req.query.install === "system";
+  let json: string;
+  let data: Partial<SystemExportData & SettingExportData> | null;
+  try {
+    json = readExportFile(req);
+    data = JSON.parse(json, (key, value: unknown) => {
+      if (key === "__proto__" || key === "constructor") throw new Error("Недопустимое содержимое файла");
+      return value;
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Не удалось прочитать файл";
+    return res.status(400).json({ error: error instanceof SyntaxError ? "Файл содержит некорректный JSON" : message });
+  }
+
+  const systemName = data?.system?.name;
+  const settingName = data?.setting?.name;
+  const system = typeof systemName === "string" && systemName.trim()
+    && Array.isArray(data?.sections) && Array.isArray(data?.entries) ? systemName : null;
+  const setting = typeof settingName === "string" && settingName.trim()
+    && Array.isArray(data?.locations) && Array.isArray(data?.communities) ? settingName : null;
+
+  if (systemOnly && !system) return res.status(400).json({ error: "Выберите JSON, выгруженный через «Экспорт» системы SoyMan." });
+
+  try {
+    if (!systemOnly) {
+      if (system) return res.status(201).json(registerModule("system", system, json));
+      if (setting) return res.status(201).json(registerModule("setting", setting, json));
+      return res.status(400).json({ error: "Файл не похож на экспорт системы или сеттинга." });
+    }
+
+    const id = await importSystemExport(data as SystemExportData);
+    const { name } = db.prepare("SELECT name FROM systems WHERE id = ?").get(id) as { name: string };
+    // If the module list was opened during import, it may have added a local wrapper.
+    const updated = db.prepare("UPDATE modules SET source = 'imported', enabled = 1 WHERE system_id = ?").run(id);
+    if (!updated.changes) {
+      db.prepare("INSERT INTO modules (type, name, source, enabled, system_id) VALUES ('system', ?, 'imported', 1, ?)")
+        .run(name, id);
+    }
+    return res.status(201).json(db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE system_id = ?`).get(id));
+  } catch (error) {
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Не удалось импортировать файл" });
+  }
 });
 
 modulesRouter.post("/import", (req, res) => {
@@ -174,20 +228,17 @@ modulesRouter.post("/import", (req, res) => {
         : (data as SettingExportData)?.setting?.name;
     if (!name) return res.status(400).json({ error: "invalid export file" });
 
-    const info = db
-      .prepare(
-        "INSERT INTO modules (type, name, source, source_json, enabled, system_id, setting_id) VALUES (?, ?, 'imported', ?, 0, NULL, NULL)"
-      )
-      .run(type, name, JSON.stringify(data));
-    res.status(201).json(db.prepare("SELECT id, type, name, source, enabled, system_id, setting_id, created_at FROM modules WHERE id = ?").get(info.lastInsertRowid));
+    res.status(201).json(registerModule(type, name, JSON.stringify(data)));
   } catch (e) {
     console.error("Module import error:", e);
     res.status(500).json({ error: e instanceof Error ? e.message : "Import failed" });
   }
 });
 
+const enablingModules = new Set<number>();
+
 modulesRouter.put("/:id/enable", async (req, res) => {
-  const mod = db.prepare("SELECT * FROM modules WHERE id = ?").get(req.params.id) as ModuleRow | undefined;
+  const mod = db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE id = ?`).get(req.params.id) as ModuleRow | undefined;
   if (!mod) return res.status(404).json({ error: "not found" });
   if (mod.enabled) return res.json({ ok: true });
 
@@ -195,14 +246,30 @@ modulesRouter.put("/:id/enable", async (req, res) => {
     db.prepare("UPDATE systems SET archived_at = NULL WHERE id = ?").run(mod.system_id);
   } else if (mod.setting_id != null) {
     db.prepare("UPDATE settings SET archived_at = NULL WHERE id = ?").run(mod.setting_id);
-  } else if (mod.source === "imported" && mod.source_json) {
-    const data = JSON.parse(mod.source_json);
-    if (mod.type === "system") {
-      const newId = await importSystemExport(data as SystemExportData);
-      db.prepare("UPDATE modules SET system_id = ? WHERE id = ?").run(newId, mod.id);
-    } else {
-      const newId = await importSettingExport(data as SettingExportData);
-      db.prepare("UPDATE modules SET setting_id = ? WHERE id = ?").run(newId, mod.id);
+  } else if (mod.source === "imported") {
+    if (enablingModules.has(mod.id)) return res.status(409).json({ error: "Модуль уже включается" });
+    enablingModules.add(mod.id);
+    try {
+      const { source_json } = db.prepare("SELECT source_json FROM modules WHERE id = ?").get(mod.id) as { source_json: string | null };
+      if (!source_json) return res.status(400).json({ error: "module has no source to enable from" });
+      const data = JSON.parse(source_json);
+      if (mod.type === "system") {
+        const newId = await importSystemExport(data as SystemExportData);
+        db.transaction(() => {
+          db.prepare("DELETE FROM modules WHERE source = 'local' AND system_id = ?").run(newId);
+          db.prepare("UPDATE modules SET system_id = ? WHERE id = ?").run(newId, mod.id);
+        })();
+      } else {
+        const newId = await importSettingExport(data as SettingExportData);
+        db.transaction(() => {
+          db.prepare("DELETE FROM modules WHERE source = 'local' AND setting_id = ?").run(newId);
+          db.prepare("UPDATE modules SET setting_id = ? WHERE id = ?").run(newId, mod.id);
+        })();
+      }
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Не удалось включить модуль" });
+    } finally {
+      enablingModules.delete(mod.id);
     }
   } else {
     return res.status(400).json({ error: "module has no source to enable from" });
@@ -213,8 +280,9 @@ modulesRouter.put("/:id/enable", async (req, res) => {
 });
 
 modulesRouter.put("/:id/disable", (req, res) => {
-  const mod = db.prepare("SELECT * FROM modules WHERE id = ?").get(req.params.id) as ModuleRow | undefined;
+  const mod = db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE id = ?`).get(req.params.id) as ModuleRow | undefined;
   if (!mod) return res.status(404).json({ error: "not found" });
+  if (enablingModules.has(mod.id)) return res.status(409).json({ error: "Модуль уже включается" });
 
   if (mod.system_id != null) {
     db.prepare("UPDATE systems SET archived_at = datetime('now') WHERE id = ?").run(mod.system_id);
@@ -233,8 +301,9 @@ modulesRouter.put("/:id/disable", (req, res) => {
 // registration row is just dropped. Permanent, cascading deletion lives only
 // on the Archive page (DELETE /archive/:type/:id), uniform across all types.
 modulesRouter.delete("/:id", (req, res) => {
-  const mod = db.prepare("SELECT * FROM modules WHERE id = ?").get(req.params.id) as ModuleRow | undefined;
+  const mod = db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE id = ?`).get(req.params.id) as ModuleRow | undefined;
   if (!mod) return res.status(404).json({ error: "not found" });
+  if (enablingModules.has(mod.id)) return res.status(409).json({ error: "Модуль уже включается" });
 
   if (mod.system_id != null) {
     db.prepare("UPDATE systems SET archived_at = datetime('now') WHERE id = ?").run(mod.system_id);
@@ -361,7 +430,7 @@ modulesRouter.post("/catalog/:remoteId/install", async (req, res) => {
 // createSystemBackup/updateSystemFromExport (and the setting equivalents)
 // so both update paths behave identically.
 modulesRouter.post("/catalog/:remoteId/update", async (req, res) => {
-  const mod = db.prepare("SELECT * FROM modules WHERE remote_id = ?").get(req.params.remoteId) as ModuleRow | undefined;
+  const mod = db.prepare(`SELECT ${MODULE_COLUMNS} FROM modules WHERE remote_id = ?`).get(req.params.remoteId) as ModuleRow | undefined;
   if (!mod) return res.status(404).json({ error: "модуль не установлен — сначала нажми «Установить»" });
 
   let entry: CatalogManifestEntry;

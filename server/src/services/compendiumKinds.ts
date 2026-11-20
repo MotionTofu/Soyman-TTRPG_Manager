@@ -12,6 +12,7 @@
  * - KIND_DEFS клиента (compendium.ts): kinds всех разделов, включая вложенные
  *   (class_option, skill, vehicle_post, все mechanic_*_item);
  * - mechanic_group — родительские группы справочника (импорт систем);
+ * - lineage — драконьи предки из миграции dragon_ancestry_v1;
  * - виды Legend in the Mist, подтверждённые `SELECT DISTINCT kind`
  *   (magic_way, theme_kit, themebook, treasure, trope).
  */
@@ -26,6 +27,7 @@ export const COMPENDIUM_KINDS: ReadonlySet<string> = new Set([
   "item",
   "magic_item",
   "species",
+  "lineage",
   "feat",
   "background",
   "monster",

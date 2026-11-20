@@ -2,12 +2,12 @@ import { Router } from "express";
 import { requireAuth, type AuthedRequest } from "../services/auth";
 import fs from "fs";
 import multer from "multer";
-import os from "os";
 import path from "path";
 import { db } from "../db/db";
 import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../db/defaultSections";
 import { broadcastToCampaign } from "../services/realtime";
 import {
+  deleteVaultFolder,
   entryImageFolder,
   isCardKind,
   ensureSubfolder,
@@ -37,6 +37,7 @@ import {
 import { estimateCreatureDpr, extractArmorHp } from "../services/creatureDpr";
 import { isCompendiumKind } from "../services/compendiumKinds";
 import { applyTidy, planTidy } from "../services/tidyCompendium";
+import { readExportFile, uploadExportFile } from "../services/exportFileUpload";
 
 export const systemsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -1166,9 +1167,13 @@ export interface SystemExportData {
 // and by the modules "enable" flow.
 export async function importSystemExport(data: SystemExportData): Promise<number> {
   if (!data.system?.name) throw new Error("invalid export file");
-  const { system, sections, entries } = data;
-  // Ссылки правятся после вставки — почему именно так, см. ImportedEntities.
-  const imported = new ImportedEntities();
+  const { system, entries } = data;
+  const badKinds = (entries ?? []).filter((e) => !isCompendiumKind(e.kind));
+  if (badKinds.length > 0) {
+    throw new Error(
+      `Неизвестные виды записей в импорте: ${[...new Set(badKinds.map((e) => e.kind))].join(", ")}`
+    );
+  }
 
   // Only disambiguate the name if it actually collides — a fresh install
   // importing "D&D 5.5" should end up with a system named exactly
@@ -1195,8 +1200,26 @@ export async function importSystemExport(data: SystemExportData): Promise<number
       system.code ? cleanCode(system.code) : suggestCode("systems", importedName)
     );
   const newSystemId = sysInfo.lastInsertRowid as number;
-  const folder = systemFolder(importedName);
-  db.prepare("UPDATE systems SET folder_path = ? WHERE id = ?").run(folder, newSystemId);
+  let folder: string | undefined;
+  try {
+    folder = systemFolder(importedName);
+    db.prepare("UPDATE systems SET folder_path = ? WHERE id = ?").run(folder, newSystemId);
+    await populateSystemExport(newSystemId, folder, data);
+    return newSystemId;
+  } catch (error) {
+    db.transaction(() => {
+      db.prepare("DELETE FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id IN (SELECT id FROM compendium_entries WHERE system_id = ?)").run(newSystemId);
+      db.prepare("DELETE FROM modules WHERE system_id = ?").run(newSystemId);
+      db.prepare("DELETE FROM systems WHERE id = ?").run(newSystemId);
+    })();
+    deleteVaultFolder(folder);
+    throw error;
+  }
+}
+
+async function populateSystemExport(newSystemId: number, folder: string, { system, sections, entries }: SystemExportData) {
+  // Ссылки правятся после вставки — почему именно так, см. ImportedEntities.
+  const imported = new ImportedEntities();
 
   if (system.thumbnail_data) {
     const { filename, base64 } = system.thumbnail_data;
@@ -1225,14 +1248,6 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     `INSERT INTO compendium_entries (system_id, section_id, parent_id, kind, name, aliases, name_original, level, data, description, position)
      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
-  // Кинды из выгрузки сверяются с каноническим списком до вставки: запись с
-  // несуществующим видом молча сломала бы раздел, лучше упасть на импорте.
-  const badKinds = (entries ?? []).filter((e) => !isCompendiumKind(e.kind));
-  if (badKinds.length > 0) {
-    throw new Error(
-      `Неизвестные виды записей в импорте: ${[...new Set(badKinds.map((e) => e.kind))].join(", ")}`
-    );
-  }
   for (const e of entries ?? []) {
     // П2.6 — фолбэк brackets → колонки, чтобы старый файл с «Имя [Original]» не увёз грязь
     if (!e.name_original && typeof e.name === "string" && e.name.includes("[")) {
@@ -1326,8 +1341,6 @@ export async function importSystemExport(data: SystemExportData): Promise<number
   // Импорт принёс data пустой (дача её хранит в статблоках) — заполняем сводку
   // тут же, а не на каждый GET. См. backfillEntrySummary/backfillCompendiumSummaries.
   backfillCompendiumSummaries(db, newSystemId);
-  // См. importSettingExport: зачёркнутые ссылки на принесённое оживают сами.
-  return newSystemId;
 }
 
 // Merges a newer export into an already-materialized system IN PLACE,
@@ -1671,109 +1684,49 @@ systemsRouter.post("/import", async (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newSystemId));
 });
 
-// Импорт большого экспорта файлом (multipart), а не JSON-телом: 220 МБ
-// через file.text()/JSON.stringify держат всё в памяти дважды (браузер +
-// сервер) и упираются в express.json limit. Здесь multer кладёт файл на диск
-// (тот же приём, что import-backup в storages.ts, и тот же лимит 500 МБ),
-// сервер читает и парсит его один раз, временный файл удаляется в finally.
-const MAX_SYSTEM_IMPORT_BYTES = 500 * 1024 * 1024;
-const systemImportFileUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
-    filename: (_req, file, cb) =>
-      cb(
-        null,
-        `rpg-system-import-${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname) || ".json"}`
-      ),
-  }),
-  limits: { fileSize: MAX_SYSTEM_IMPORT_BYTES },
-  fileFilter: (_req, file, cb) => {
-    if (!file.originalname.toLowerCase().endsWith(".json")) {
-      return cb(new Error("Нужен .json экспорта системы"));
-    }
-    cb(null, true);
-  },
-});
-
-/** Читает загруженный .json с диска и удаляет временный файл. */
-function readSystemImportFile(req: { file?: { path?: string } }): SystemExportData {
-  const tmpPath = req.file?.path;
-  if (!tmpPath) throw new Error("file is required");
+systemsRouter.post("/import-file", uploadExportFile, async (req, res) => {
   try {
-    return JSON.parse(fs.readFileSync(tmpPath, "utf8")) as SystemExportData;
-  } finally {
-    try {
-      fs.unlinkSync(tmpPath);
-    } catch {}
+    const data = JSON.parse(readExportFile(req)) as SystemExportData;
+    const newSystemId = await importSystemExport(data);
+    return res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newSystemId));
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
   }
-}
-
-systemsRouter.post("/import-file", (req, res) => {
-  systemImportFileUpload.single("file")(req, res, async (err: unknown) => {
-    if (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const tooLarge = err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE";
-      return res.status(tooLarge ? 413 : 400).json({
-        error: tooLarge ? "Файл слишком большой — максимум 500 МБ для импорта" : msg,
-      });
-    }
-    let data: SystemExportData;
-    try {
-      data = readSystemImportFile(req as unknown as { file?: { path?: string } });
-    } catch (e) {
-      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
-    }
-    try {
-      const newSystemId = await importSystemExport(data);
-      return res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newSystemId));
-    } catch (e) {
-      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
-    }
-  });
 });
 
 // Обновление уже заведённой системы из большого файла — то же слияние, что
 // POST /:id/update, но файл едет multipart'ом (см. /import-file выше).
-systemsRouter.post("/:id/update-file", (req, res) => {
-  systemImportFileUpload.single("file")(req, res, async (err: unknown) => {
-    if (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const tooLarge = err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE";
-      return res.status(tooLarge ? 413 : 400).json({
-        error: tooLarge ? "Файл слишком большой — максимум 500 МБ для импорта" : msg,
-      });
-    }
-    const targetId = Number(req.params.id);
-    const target = db.prepare("SELECT id, name FROM systems WHERE id = ?").get(targetId) as
-      | { id: number; name: string }
-      | undefined;
-    if (!target) return res.status(404).json({ error: "not found" });
+systemsRouter.post("/:id/update-file", uploadExportFile, async (req, res) => {
+  let data: SystemExportData;
+  try {
+    data = JSON.parse(readExportFile(req)) as SystemExportData;
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+  }
 
-    let data: SystemExportData;
-    try {
-      data = readSystemImportFile(req as unknown as { file?: { path?: string } });
-    } catch (e) {
-      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
-    }
+  const targetId = Number(req.params.id);
+  const target = db.prepare("SELECT id, name FROM systems WHERE id = ?").get(targetId) as
+    | { id: number; name: string }
+    | undefined;
+  if (!target) return res.status(404).json({ error: "not found" });
 
-    let backup: { id: number; name: unknown };
-    try {
-      backup = await createSystemBackup(targetId, target.name);
-    } catch (e) {
-      return res.status(500).json({ error: "не удалось создать резервную копию: " + String(e) });
-    }
+  let backup: { id: number; name: unknown };
+  try {
+    backup = await createSystemBackup(targetId, target.name);
+  } catch (e) {
+    return res.status(500).json({ error: "не удалось создать резервную копию: " + String(e) });
+  }
 
-    let summary: SystemUpdateSummary;
-    try {
-      summary = await updateSystemFromExport(targetId, data);
-    } catch (e) {
-      return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
-    }
+  let summary: SystemUpdateSummary;
+  try {
+    summary = await updateSystemFromExport(targetId, data);
+  } catch (e) {
+    return res.status(400).json({ error: e instanceof Error ? e.message : "invalid export file" });
+  }
 
-    res.json({
-      system: db.prepare("SELECT * FROM systems WHERE id = ?").get(targetId),
-      backup,
-      summary,
-    });
+  res.json({
+    system: db.prepare("SELECT * FROM systems WHERE id = ?").get(targetId),
+    backup,
+    summary,
   });
 });
