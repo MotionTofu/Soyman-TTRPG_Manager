@@ -9,7 +9,7 @@ import { DndGroupIndex, DndRegister } from "./DndCompendiumViews";
 import { SimpleKindTileGrid } from "./SimpleKindTileGrid";
 
 const fixture = vi.hoisted(()=>({entries:[] as CompendiumEntry[],code:"phb",put:vi.fn().mockResolvedValue({}),sync:vi.fn().mockResolvedValue(undefined)}));
-vi.mock("../data/hooks",()=>({useAction:()=>async(fn:()=>Promise<unknown>)=>fn(),write:{put:fixture.put},useResource:(path:string)=>({data:path==="/systems/1" ? {code:fixture.code} : path?.includes("?section_id=") ? fixture.entries : [],reload:vi.fn()})}));
+vi.mock("../data/hooks",()=>({useAction:()=>async(fn:()=>Promise<unknown>)=>fn(),useAfterWrite:()=>vi.fn(),write:{put:fixture.put},useResource:(path:string)=>({data:path==="/systems/1" ? {code:fixture.code} : path?.includes("?section_id=") ? fixture.entries : [],reload:vi.fn()})}));
 vi.mock("../data/imperative",()=>({readResource:vi.fn().mockResolvedValue([])}));
 vi.mock("../dataSync",()=>({notifyDataChanged:vi.fn()}));
 vi.mock("../api/currentUser",()=>({useCurrentUser:()=>({user:{id:7}})}));

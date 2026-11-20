@@ -6,6 +6,7 @@ import { TypeGlyph } from "./TypeGlyph";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { attemptWithNotice } from "../data/notices";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
+import { WORKBENCH_PATH } from "../workbench";
 import "./WebInbox.css";
 
 // Входящие Мешка: фрагменты, присланные расширением браузера (гриллинг
@@ -69,6 +70,12 @@ export function WebInbox({ items }: { items: InboxItem[] }) {
     }
   }
 
+  async function toWorkbench(item: InboxItem) {
+    if (await attemptWithNotice("Фрагмент не попал на верстак", () => write.post(`/web-capture/inbox/${item.id}/to-workbench`, {}))) {
+      afterWrite([{ path: INBOX_PATH }, { path: WORKBENCH_PATH }]);
+    }
+  }
+
   function openMenu(e: MouseEvent, item: InboxItem) {
     e.preventDefault();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -77,6 +84,7 @@ export function WebInbox({ items }: { items: InboxItem[] }) {
 
   const menuItems = (item: InboxItem): ContextMenuItem[] => [
     { label: "Создать сущность…", onClick: () => setCreating(item) },
+    { label: "На верстак", onClick: () => void toWorkbench(item) },
     { label: "Открыть страницу", dividerBefore: true, onClick: () => window.open(item.url, "_blank", "noopener,noreferrer") },
     { label: "Удалить", danger: true, dividerBefore: true, hint: "Del", onClick: () => void remove(item) },
   ];
@@ -85,7 +93,7 @@ export function WebInbox({ items }: { items: InboxItem[] }) {
   // «Создано» должно остаться.
   return <>
     {!items.length && <p className="web-inbox__empty">
-      Пусто. На сайте: выделить текст → ПКМ → «Во входящие SoyMan». Расширение подключается в Настройках, раздел «Расширение браузера».
+      Пусто. На сайте: выделить текст → ПКМ → SoyMan → «Во входящие». Расширение подключается в Настройках, вкладка «Расширение».
     </p>}
     {items.length > 0 && <ul className="web-inbox" aria-label="Входящие">
       {items.map((item) => <li key={item.id} className="web-inbox__row" onContextMenu={(e) => openMenu(e, item)}
@@ -99,6 +107,8 @@ export function WebInbox({ items }: { items: InboxItem[] }) {
           <small>{host(item.url)} · {when(item.captured_at)}</small>
           <div className="web-inbox__acts">
             <button type="button" className="d-btn d-btn--sm" onClick={() => setCreating(item)}>Сущность</button>
+            <button type="button" className="d-btn d-btn--sm d-btn--quiet" title="В черновик печати; фрагмент уйдёт из Входящих"
+              onClick={() => void toWorkbench(item)}>Верстак</button>
             <button type="button" className="d-dots" aria-label="Ещё действия с фрагментом" aria-haspopup="menu"
               onClick={(e) => openMenu(e, item)}>⋯</button>
           </div>

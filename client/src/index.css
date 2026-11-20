@@ -3999,10 +3999,9 @@ body.live-hide-search.live-hide-dock .app-content {
   font-weight: 600;
 }
 
-/* Погашенный пункт навигации — раздел, в котором пока ничего нет. Это <span>,
-   а не ссылка: серое, что всё равно переходит, обещает «нельзя» и тут же
-   врёт. Геометрия повторяет .app-nav a, чтобы ряд не дёргался, когда в
-   разделе появится первая запись и <span> сменится ссылкой. */
+/* Пустой пункт навигации — раздел, в котором пока ничего нет. Остаётся
+   ссылкой: первый игрок или первая книга заводятся внутри самого раздела,
+   поэтому запирать вход нельзя. Серый, но нажимаемый и с пояснением. */
 .app-nav .nav-empty {
   display: flex;
   align-items: center;
@@ -4011,7 +4010,7 @@ body.live-hide-search.live-hide-dock .app-content {
   border-radius: var(--card-radius);
   font-family: var(--font-body);
   color: var(--muted);
-  cursor: default;
+  cursor: pointer;
   opacity: 0.6;
 }
 .app-nav .nav-empty .nav-empty-count {
@@ -4363,59 +4362,6 @@ body.live-hide-search.live-hide-dock .app-content {
 .bag-toast-error {
   background: var(--status-cancelled);
   color: var(--status-cancelled-fg);
-}
-
-/* Верстак-модалка из мешка — боковая панель со списком предметов */
-.bag-verstak-sidebar {
-  border-left: 1px solid var(--line);
-  padding-left: var(--sp-4);
-}
-.bag-verstak-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: 3px;
-  cursor: default;
-  user-select: none;
-}
-.bag-verstak-item:hover {
-  background: var(--bg-elevated);
-}
-.bag-verstak-item-type {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.bag-verstak-item-name {
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.bag-verstak-context-menu {
-  background: var(--bg-elevated);
-  border: 1px solid var(--line);
-  border-radius: var(--card-radius);
-  padding: var(--sp-2);
-  min-width: 160px;
-}
-.bag-verstak-context-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
-  font-size: var(--fs-meta);
-  border: none;
-  background: transparent;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.bag-verstak-context-menu button:hover {
-  background: var(--accent);
-  color: var(--accent-fg, #fff);
 }
 
 /* Home sidebar's compact calendar (see MiniCalendar.tsx) — square day cells

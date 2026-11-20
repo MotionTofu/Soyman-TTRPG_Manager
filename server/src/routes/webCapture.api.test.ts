@@ -75,7 +75,7 @@ describe("web capture from the browser extension", () => {
     expect((await request(server.app).post("/api/web-capture/ext/inbox").auth(key, { type: "bearer" })
       .send({ ...fragment("frag-0002"), url: "file:///C:/secret.txt" })).status).toBe(400);
     const status = await request(server.app).get("/api/web-capture/ext/status").auth(key, { type: "bearer" });
-    expect(status.body).toEqual({ connected: true, inbox: 1 });
+    expect(status.body).toEqual({ connected: true, inbox: 1, workbench: 0 });
     expect((await request(server.app).get("/api/web-capture/inbox").auth(player, { type: "bearer" })).status).toBe(403);
     const inbox = await request(server.app).get("/api/web-capture/inbox").auth(gm, { type: "bearer" });
     expect(inbox.body).toEqual([expect.objectContaining({ id: first.body.id, heading: "Старая обсерватория", captured_at: "2026-11-05T12:40:00.000Z" })]);
@@ -101,6 +101,63 @@ describe("web capture from the browser extension", () => {
     db.prepare("DELETE FROM setting_locations WHERE id = ?").run(location.body.id);
     expect(db.prepare("SELECT COUNT(*) AS n FROM web_entity_sources WHERE target_kind = 'location' AND target_id = ?")
       .get(location.body.id)).toEqual({ n: 0 });
+  });
+
+  it("creates an entity straight from the browser, warning about a same-name one first", async () => {
+    const ext = (method: "get" | "post", url: string) => request(server.app)[method](`/api/web-capture/ext${url}`).auth(key, { type: "bearer" });
+    const settings = await ext("get", "/settings");
+    expect(settings.body).toContainEqual({ id: settingId, name: "Мир для захвата" });
+    const capture = { ...fragment("unused"), name: "Звездочёты", setting_id: settingId };
+    const routes = { being: "/api/setting-beings", location: "/api/setting-locations", community: "/api/setting-communities", artifact: "/api/artifacts" };
+    for (const kind of ["being", "location", "community", "artifact"] as const) {
+      const created = await ext("post", "/entities").send({ ...capture, kind, name: `Звездочёты (${kind})` });
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({ kind, setting: "Мир для захвата" });
+      // Созданное расширением открывается обычным маршрутом вида, с описанием.
+      const opened = await request(server.app).get(`${routes[kind]}/${created.body.id}`).auth(gm, { type: "bearer" });
+      expect(opened.status).toBe(200);
+      expect(opened.body).toMatchObject({ name: `Звездочёты (${kind})`, description: capture.text, setting_id: settingId });
+      const sources = await request(server.app).get(`/api/web-capture/sources/entity/${kind}/${created.body.id}`).auth(gm, { type: "bearer" });
+      expect(sources.body).toEqual([expect.objectContaining({ field_name: "description", url: capture.url, quote: capture.text })]);
+    }
+
+    // Имя уже занято другим видом того же сеттинга — регистр не важен.
+    const dup = await ext("post", "/entities").send({ ...capture, kind: "location", name: "звездочёты (COMMUNITY)" });
+    expect(dup.status).toBe(409);
+    expect(dup.body.duplicates).toEqual([expect.objectContaining({ kind: "community", name: "Звездочёты (community)", label: "Сообщество" })]);
+    const forced = await ext("post", "/entities").send({ ...capture, kind: "location", name: "звездочёты (COMMUNITY)", force: true });
+    expect(forced.status).toBe(201);
+
+    expect((await ext("post", "/entities").send({ ...capture, kind: "location", setting_id: 999_999 })).status).toBe(404);
+    expect((await ext("post", "/entities").send({ ...capture, kind: "compendium" })).status).toBe(400);
+    // Без Electron окно открыть некому — расширение откроет вкладку.
+    expect((await ext("post", "/open").send({ kind: "location", id: forced.body.id })).body)
+      .toEqual({ opened: false, route: `/locations/${forced.body.id}` });
+    expect((await ext("post", "/open").send({ kind: "location", id: 999_999 })).status).toBe(404);
+  });
+
+  it("puts fragments on the workbench from the browser and from the inbox", async () => {
+    const ext = (url: string) => request(server.app).post(`/api/web-capture/ext${url}`).auth(key, { type: "bearer" });
+    const sent = await ext("/workbench").send({ ...fragment("bench-0001"), show_source: true });
+    expect(sent.status).toBe(201);
+    expect(sent.body.count).toBe(1);
+    expect((await ext("/workbench").send(fragment("bench-0001"))).body).toMatchObject({ duplicate: true, count: 1 });
+    expect((await request(server.app).get("/api/web-capture/ext/status").auth(key, { type: "bearer" })).body.workbench).toBe(1);
+    // Ключ расширения кладёт на верстак, но не читает его.
+    expect((await request(server.app).get("/api/workbench/blocks").auth(key, { type: "bearer" })).status).toBe(401);
+
+    const queued = await ext("/inbox").send(fragment("bench-0002"));
+    const moved = await request(server.app).post(`/api/web-capture/inbox/${queued.body.id}/to-workbench`).auth(gm, { type: "bearer" });
+    expect(moved.status).toBe(201);
+    expect(moved.body.count).toBe(2);
+    expect((await request(server.app).get("/api/web-capture/inbox").auth(gm, { type: "bearer" })).body).toEqual([]);
+    const bench = (await request(server.app).get("/api/workbench/blocks").auth(gm, { type: "bearer" })).body;
+    expect(bench).toEqual([
+      expect.objectContaining({ kind: "fragment", title: "Старая обсерватория", show_source: 1, url: fragment("x").url }),
+      expect.objectContaining({ kind: "fragment", show_source: 0, text: fragment("x").text }),
+    ]);
+    expect((await ext("/open").send({ kind: "workbench" })).body).toEqual({ opened: false, route: "/workbench" });
+    db.prepare("DELETE FROM workbench_blocks").run();
   });
 
   it("stops accepting fragments once the GM disconnects the extension", async () => {

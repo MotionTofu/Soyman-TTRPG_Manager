@@ -104,6 +104,7 @@ async function main() {
   db.exec("DELETE FROM web_capture_keys");
   db.exec("DELETE FROM web_capture_pairings");
   db.exec("DELETE FROM web_inbox");
+  db.exec("DELETE FROM workbench_blocks");
 
   // Полиморфные спутники внешнего ключа не имеют, поэтому каскад их не
   // уносит: после удаления персонажей их листы, галереи и важные даты

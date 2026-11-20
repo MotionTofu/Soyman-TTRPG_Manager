@@ -1,6 +1,9 @@
 // Окошко у значка (макет Web-Popup, состояния 4–6): подключение кодом,
 // состояние связи, очередь, горячая клавиша.
-const DEFAULT_BASE = "http://127.0.0.1:3001";
+// Установленный SoyMan слушает 4732, запущенный из репозитория — 3001.
+// Поле адреса пустое — подключение пробует оба.
+const CANDIDATES = ["http://127.0.0.1:4732", "http://127.0.0.1:3001"];
+const DEFAULT_BASE = CANDIDATES[0];
 const $ = (id) => document.getElementById(id);
 
 async function store() {
@@ -14,7 +17,7 @@ function show(id) {
 
 async function render() {
   const { key, base, queue, disconnected } = await store();
-  $("base").value = base;
+  $("base").value = key ? base : "";
   if (!key || disconnected) {
     $("head").textContent = "Первый запуск";
     $("pair-why").hidden = !(key && disconnected);
@@ -64,22 +67,28 @@ $("pair-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const error = $("pair-error");
   error.hidden = true;
-  const base = $("base").value.trim().replace(/\/+$/, "") || DEFAULT_BASE;
-  try {
-    const res = await fetch(`${base}/api/web-capture/ext/pair`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: $("code").value, label: browserName() }),
-    });
+  const typed = $("base").value.trim().replace(/\/+$/, "");
+  let refusal = "";
+  // Код выдал один из запущенных SoyMan — подходит тот, что его принял.
+  for (const base of typed ? [typed] : CANDIDATES) {
+    let res;
+    try {
+      res = await fetch(`${base}/api/web-capture/ext/pair`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: $("code").value, label: browserName() }),
+      });
+    } catch {
+      continue; // по этому адресу никто не слушает
+    }
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error || "Код не подошёл");
+    if (!res.ok) { refusal = body.error || "Код не подошёл"; continue; }
     await chrome.storage.local.set({ key: body.key, base, disconnected: false });
     await chrome.runtime.sendMessage({ type: "flush" });
-    await render();
-  } catch (e) {
-    error.textContent = e instanceof TypeError ? `SoyMan не отвечает по адресу ${base}. Он запущен?` : e.message;
-    error.hidden = false;
+    return render();
   }
+  error.textContent = refusal || `SoyMan не отвечает${typed ? ` по адресу ${typed}` : ""}. Он запущен?`;
+  error.hidden = false;
 });
 
 $("shortcuts").addEventListener("click", (e) => {

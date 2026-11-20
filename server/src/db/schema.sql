@@ -357,6 +357,32 @@ CREATE TABLE IF NOT EXISTS web_entity_sources (
 );
 CREATE INDEX IF NOT EXISTS idx_web_entity_sources_target ON web_entity_sources(target_kind, target_id);
 
+-- Верстак: единственный сохраняемый черновик печати (гриллинг 2026-11-11,
+-- В1–В18; .scratch/web-sources/extension-decisions.md). Блоки идут потоком в
+-- порядке position; листы раскладывает клиент. Карточка — ссылка на запись
+-- компендиума без внешнего ключа: удалённая запись показывается «Запись
+-- удалена», а не пропадает молча (В8). revision — защита правки текста от
+-- второго окна (В12). client_id — повтор отправки из расширения не добавляет
+-- фрагмент дважды.
+CREATE TABLE IF NOT EXISTS workbench_blocks (
+  id TEXT PRIMARY KEY,
+  position REAL NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('fragment', 'card', 'text', 'page_break')),
+  width TEXT NOT NULL DEFAULT 'full' CHECK (width IN ('full', 'half')),
+  title TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '',
+  url TEXT,
+  page_title TEXT,
+  captured_at TEXT,
+  show_source INTEGER NOT NULL DEFAULT 0,
+  entry_id INTEGER,
+  card_mode TEXT,
+  client_id TEXT UNIQUE,
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Named, manually-ordered collections of audio resources. A session can
 -- either own playlists directly or attach a setting's playlist via
 -- generic_links (section='attached_playlist') to reuse it without copying.

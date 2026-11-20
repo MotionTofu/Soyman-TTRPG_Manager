@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разобрать сейчас · SoyMan</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body class="win">
+<header class="plate"><span class="logo">S</span><span>Разобрать сейчас</span><small id="note"></small></header>
+
+<p id="loading" class="hint pad">Связываюсь с SoyMan…</p>
+
+<form id="form" novalidate hidden>
+  <section>
+    <div class="src">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>
+      <div><b id="src-title"></b><span id="src-meta" class="mono"></span></div>
+    </div>
+
+    <div class="seg" role="tablist" aria-label="Куда">
+      <button type="button" role="tab" id="mode-entity" data-mode="entity">Сущность</button>
+      <button type="button" role="tab" id="mode-wb" data-mode="wb">Верстак</button>
+    </div>
+
+    <div id="pane-entity">
+    <span class="lbl" id="kind-label">Вид</span>
+    <div class="kinds" role="radiogroup" aria-labelledby="kind-label">
+      <label><input type="radio" name="kind" value="being"><i style="--g:url(glyphs/being.webp)"></i>Существо</label>
+      <label><input type="radio" name="kind" value="location"><i style="--g:url(glyphs/location.webp)"></i>Место</label>
+      <label><input type="radio" name="kind" value="community"><i style="--g:url(glyphs/community.webp)"></i>Сообщество</label>
+      <label><input type="radio" name="kind" value="artifact"><i style="--g:url(glyphs/artifact.webp)"></i>Артефакт</label>
+    </div>
+
+    <label class="lbl" for="setting">Сеттинг</label>
+    <select id="setting" class="field" required></select>
+
+    <label class="lbl" for="name">Название</label>
+    <div class="named">
+      <input id="name" class="field" maxlength="120" required autocomplete="off">
+      <span id="name-tag" class="tag">ИЗ ЗАГОЛОВКА</span>
+    </div>
+
+    <div id="dup" class="dup" hidden>
+      <span id="dup-head"></span>
+      <ul id="dup-list"></ul>
+    </div>
+
+    <span class="lbl" id="preview-label">В описание</span>
+    <div id="preview" class="prev" aria-labelledby="preview-label"></div>
+    </div>
+
+    <div id="pane-wb" hidden>
+      <label class="lbl" for="wb-title">Заголовок</label>
+      <div class="named">
+        <input id="wb-title" class="field" maxlength="300" autocomplete="off">
+        <span id="wb-title-tag" class="tag">ИЗ ЗАГОЛОВКА</span>
+      </div>
+      <span class="lbl" id="paper-label">Фрагмент на листе</span>
+      <div class="paper" aria-labelledby="paper-label"><h4 id="paper-title"></h4><div id="paper-text"></div></div>
+      <label class="chk"><input type="checkbox" id="wb-source">Подпись источника при печати</label>
+      <p id="wb-count" class="stat" hidden></p>
+    </div>
+    <p id="error" class="error" role="alert" hidden></p>
+  </section>
+  <footer>
+    <button type="button" id="force" class="btn left" hidden>Всё равно создать</button>
+    <button type="button" id="to-inbox" class="btn left">Во входящие</button>
+    <button type="submit" id="create" class="primary">Создать</button>
+    <button type="submit" id="to-wb" class="primary" hidden>На верстак</button>
+  </footer>
+</form>
+
+<div id="off" hidden>
+  <section><div class="warnbox"><span class="dot"></span><div><b id="off-head">SoyMan не запущен</b>
+    <span id="off-text">Создать сущность или положить на верстак можно, когда SoyMan открыт. Фрагмент подождёт в очереди и уйдёт во Входящие при запуске.</span></div></div></section>
+  <footer><button type="button" id="to-queue" class="primary">В очередь</button></footer>
+</div>
+<script src="parse.js"></script>
+</body>
+</html>

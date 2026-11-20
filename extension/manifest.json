@@ -2,21 +2,43 @@
   "manifest_version": 3,
   "name": "SoyMan — захват с сайтов",
   "short_name": "SoyMan",
-  "version": "0.1.0",
-  "description": "Выделенный текст с любого сайта — во Входящие SoyMan, вместе с адресом страницы.",
+  "version": "0.3.0",
+  "description": "Выделенный текст с любого сайта — во Входящие SoyMan или сразу в сущность, вместе с адресом страницы.",
   "minimum_chrome_version": "116",
-  "permissions": ["contextMenus", "storage", "scripting", "activeTab", "alarms"],
-  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "scripting",
+    "activeTab",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "SoyMan",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
   },
-  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "commands": {
     "to-inbox": {
-      "suggested_key": { "default": "Alt+Shift+S" },
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
       "description": "Выделенное — во Входящие SoyMan"
     }
   }
