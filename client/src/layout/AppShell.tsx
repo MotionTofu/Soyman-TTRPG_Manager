@@ -88,7 +88,7 @@ const PLAYER_NAV_BOTTOM_ITEMS: NavItem[] = [
 // (<860px, same breakpoint as the off-canvas nav), modeled after D&D
 // Beyond's app nav per the user's request — the hamburger menu stays for
 // everything else (Настройки/Внешний вид/Архив/etc.), this is just the 3-4
-// things worth one tap. GM's "Библиотека" points at the new /library page
+// things worth one tap. GM's "Обзор" points at the /library page
 // (see LibraryPage.tsx); the player-role slots are Дневники (left) and
 // Персонажи (right) — те же четыре места, что в боковой навигации.
 // Отдельной страницы «Плеер» больше нет:
@@ -356,14 +356,14 @@ function LogoutButton({ username }: { username?: string }) {
   );
 }
 
-// Подсказка к погашенному пункту навигации — по разделу, а не одна на всех.
-// Ключ — путь без ведущего слэша, как его считает navCounts.
+// Подсказка к серому (но кликабельному) пункту навигации — по разделу, а не
+// одна на всех. Ключ — путь без ведущего слэша, как его считает navCounts.
 const NAV_EMPTY_HINT: Record<string, string> = {
-  campaigns: "Кампаний пока нет — заведи первую на Главной",
-  settings: "Сеттингов пока нет — мир создаётся мастером сеттингов",
-  players: "Игроков пока нет — добавь их к кампании",
+  campaigns: "Кампаний пока нет — заведи первую здесь",
+  settings: "Сеттингов пока нет — создай первый мир здесь",
+  players: "Игроков пока нет — заведи первого здесь",
   resources: "Ресурсов пока нет — сюда кладут карты, музыку и файлы",
-  mastering: "Книг в библиотеке пока нет",
+  mastering: "Книг в библиотеке пока нет — загрузи PDF или .md",
 };
 
 const CRUMB_LABEL: Record<string, string> = {
@@ -462,7 +462,9 @@ export function AppShell() {
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const updateAvailable = useUpdateAvailable();
-  // 2.1 — серые пункты на пустой БД (badge 0 + muted + disabled tooltip) — не display:none.
+  // 2.1 — серые пункты на пустой БД (badge 0 + muted + пояснение), но кликабельные:
+  // создавать первую запись раздела надо там же, куда ведёт пункт, иначе вход
+  // в пустой раздел запрещён и наполнить его неоткуда.
   // Списки — под ключами слоя, теми же, что у страниц разделов: созданное или
   // удалённое в разделе задевает список и сразу меняет счётчик в меню.
   const gm = !isPlayer && !userLoading;
@@ -472,13 +474,16 @@ export function AppShell() {
   const settingsList = useResource<unknown[]>(gm ? "/settings" : null).data;
   const playersList = useResource<unknown[]>(gm ? "/players" : null).data;
   const resourcesList = useResource<unknown[]>(gm ? "/resources" : null).data;
-  const masteringList = useResource<unknown>(gm ? "/mastering?view=library" : null).data;
+  // Счётчик — книги именно библиотеки (PDF/Markdown из «Ресурсов», статьи,
+  // тетради), а не только старые заметки мастерения: пункт меню ведёт в
+  // /mastering, и загруженная туда книга должна его разблокировать.
+  const libraryCatalog = useResource<{ total: number }>(gm ? "/book-library/books?limit=1" : null).data;
   const navCounts: Record<string, number | null | undefined> = {
     campaigns: campaignsList?.length,
     settings: settingsList?.length,
     players: playersList?.length,
     resources: resourcesList?.length,
-    mastering: masteringList === undefined ? undefined : Array.isArray(masteringList) ? masteringList.length : 0,
+    mastering: libraryCatalog?.total,
   };
 
   // Нижний список разделов: свои пункты роли плюс Boosty. Пункт уходит за
@@ -796,36 +801,24 @@ export function AppShell() {
             const key = item.to?.replace(/^\//, "") ?? "";
             const cnt = navCounts[key];
             const isEmpty = cnt === 0;
-            // Пустой раздел гасится и ПЕРЕСТАЁТ нажиматься: серый пункт,
-            // который всё равно уводит в пустоту, обещает «нельзя» и тут же
-            // это обещание нарушает. Подсказка — своя на раздел: одна общая
-            // («заведи кампанию») висела и на «Игроках», и на «Ресурсах».
+            // Пустой раздел не гасится насмерть: серый пункт остаётся ссылкой.
+            // Раньше это был <span>, но тогда в пустую «Библиотеку» нельзя было
+            // войти и загрузить первую книгу, в «Игроков» — завести первого
+            // игрока: раздел, который наполняют изнутри, сам себя запирал.
             const emptyLabel = isEmpty ? (NAV_EMPTY_HINT[key] ?? "Пока пусто") : undefined;
-            if (isEmpty) {
-              return (
-                <span
-                  key={item.to}
-                  className="nav-empty"
-                  title={navNarrow ? undefined : emptyLabel}
-                  data-tip={`${item.label} — ${emptyLabel}`}
-                  aria-disabled="true"
-                >
-                  <NavIcon name={item.icon} />
-                  {item.label}
-                  <span className="badge tag nav-empty-count">0</span>
-                </span>
-              );
-            }
             return (
               <NavLink
                 key={item.to}
                 to={item.to!}
                 end={item.end}
-                className={({ isActive }) => (isActive ? "active" : "")}
+                className={({ isActive }) => [isActive ? "active" : "", isEmpty && !isActive ? "nav-empty" : ""].filter(Boolean).join(" ")}
                 onClick={() => setNavOpen(false)}
+                title={navNarrow ? undefined : emptyLabel}
+                data-tip={emptyLabel ? `${item.label} — ${emptyLabel}` : undefined}
               >
                 <NavIcon name={item.icon} />
                 {item.label}
+                {isEmpty && <span className="badge tag nav-empty-count">0</span>}
               </NavLink>
             );
           })}

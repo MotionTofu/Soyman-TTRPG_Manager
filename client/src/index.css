@@ -3999,10 +3999,9 @@ body.live-hide-search.live-hide-dock .app-content {
   font-weight: 600;
 }
 
-/* Погашенный пункт навигации — раздел, в котором пока ничего нет. Это <span>,
-   а не ссылка: серое, что всё равно переходит, обещает «нельзя» и тут же
-   врёт. Геометрия повторяет .app-nav a, чтобы ряд не дёргался, когда в
-   разделе появится первая запись и <span> сменится ссылкой. */
+/* Пустой пункт навигации — раздел, в котором пока ничего нет. Остаётся
+   ссылкой: первый игрок или первая книга заводятся внутри самого раздела,
+   поэтому запирать вход нельзя. Серый, но нажимаемый и с пояснением. */
 .app-nav .nav-empty {
   display: flex;
   align-items: center;
@@ -4011,7 +4010,7 @@ body.live-hide-search.live-hide-dock .app-content {
   border-radius: var(--card-radius);
   font-family: var(--font-body);
   color: var(--muted);
-  cursor: default;
+  cursor: pointer;
   opacity: 0.6;
 }
 .app-nav .nav-empty .nav-empty-count {
