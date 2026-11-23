@@ -451,17 +451,46 @@
   color-scheme: dark;
 }
 
-/* Тумблер «Рамки и обводки» (Настройки → Интерфейс, themes.ts). Гасит только
-   пару обводки карточек/блоков; --line, --edge-width и тушь-рамка остаются
-   (§4.2). Значение на :root пишет applyTheme(), а поверхности со своей парой
-   (бумажные профили) переопределяют её у себя — им правило нужно адресно.
-   Лист персонажа и холст/статблок — исключения: их рамки не гаснут никогда.
-   Лист держится за body.sheet-fullscreen (его ставит CharacterDetailPage), а
-   не только за .sheet-page: модалки листа порталятся в body и тоже должны
-   остаться с рамками. */
+/* Тумблер «Рамки и обводки» (Настройки → Интерфейс, themes.ts).
+   «Выключено» — три токена. applyTheme() обнуляет пару толщин карточек
+   (--card-border-width*) и гасит цвет линий (--line: transparent) — им
+   нарисованы 1 px рамки малых блоков и разделители. Здесь обнуляется толстая
+   кромка (--edge-width): ею обведены листы, разделы и главные блоки, включая
+   двойные тушь-рамки (§4.2). Внутреннюю линию двойной рамки (outline) снимаем
+   адресно у её носителей: свойством outline селектором не управлять.
+   Кромка и линии остаются у органов управления, у плавающих поверхностей
+   (диалог, меню, окно) и у защищённых экранов: лист персонажа, статблок и
+   холст. Им --line возвращается через --line-ink — цвет линий темы, который
+   кладёт applyTheme(). Лист держится за body.sheet-fullscreen (его ставит
+   CharacterDetailPage), а не только за .sheet-page: модалки листа порталятся
+   в body и тоже должны остаться с рамками. */
+html[data-card-borders="off"] {
+  --edge-width: 0px;
+}
 html[data-card-borders="off"] .paper-scope {
   --card-border-width: 0px;
   --card-border-width-strong: 0px;
+}
+
+/* Внутренняя линия двойной рамки — у листов и главных блоков (§4.2). */
+html[data-card-borders="off"] .list-page--d .list-page__sheet { outline: none; }
+html[data-card-borders="off"] .entity-page--paper > .paper-sheet { outline: none; }
+html[data-card-borders="off"] :is(.d-focal, .d-sheet) { outline: none; }
+html[data-card-borders="off"] :is(.entity-page[data-entity-type="setting"], .population-sheet) :is(.miller-card, .population__aside.is-open) { outline: none; }
+
+/* Органы управления: кромка и линии остаются (§1.3, §6.6). */
+html[data-card-borders="off"] :is(button, input, select, textarea, .d-btn, .d-field, .d-select, .d-seg, .d-check) {
+  --edge-width: 2px;
+  --card-border-width: 1px;
+  --line: var(--line-ink);
+}
+html[data-card-borders="off"] :focus-visible { --edge-width: 2px; }
+
+/* Поверхности над приложением и защищённые экраны: рамки не гаснут. */
+html[data-card-borders="off"] :is(.modal, .context-menu, .wb-menu__list, .float-window),
+html[data-card-borders="off"] :is(body.sheet-fullscreen, .sb-scope, .canvas-page) {
+  --edge-width: 2px;
+  --line: var(--line-ink);
 }
 html[data-card-borders="off"] body.sheet-fullscreen {
   --card-border-width: 1px;

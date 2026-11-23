@@ -733,7 +733,7 @@ export function StoragesSettingsPage() {
                 <input type="checkbox" checked={cardBorders} onChange={(e) => changeCardBorders(e.target.checked)} />
                 <span className="stack" style={{ gap: 2 }}>
                   Рамки и обводки
-                  <span className="muted" style={{ maxWidth: "62ch" }}>Обводки карточек и блоков. Разделители, кнопки и поля остаются; лист персонажа, статблок и холст не меняются.</span>
+                  <span className="muted" style={{ maxWidth: "62ch" }}>Убирает рамки блоков и разделов, включая двойные, и разделители. Кнопки, поля и вкладки остаются; лист персонажа, статблок и холст не меняются.</span>
                 </span>
               </label>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
