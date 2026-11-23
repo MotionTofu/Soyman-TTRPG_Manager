@@ -335,6 +335,32 @@ export function saveRadiusOverride(px: number | null) {
   }
 }
 
+// Пользовательский тумблер обводок карточек и блоков (Настройки → Интерфейс).
+// Гасит только пару --card-border-width / -strong: разделители (--line),
+// кромка органов управления (--edge-width) и тушь-рамка остаются, иначе
+// экран теряет структуру. Лист персонажа, статблок, холст и плавающее окно
+// защищены — их рамки не гаснут (см. index.css).
+// Хранится в localStorage рядом со скруглением: это убеждение о виде, а не
+// свойство темы, и оно не должно слетать при её смене.
+const BORDERS_STORAGE_KEY = "rpgManagerCardBorders";
+
+export function loadCardBorders(): boolean {
+  try {
+    return localStorage.getItem(BORDERS_STORAGE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function saveCardBorders(on: boolean) {
+  try {
+    if (on) localStorage.removeItem(BORDERS_STORAGE_KEY);
+    else localStorage.setItem(BORDERS_STORAGE_KEY, "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 // Writes every CSS var for the theme onto :root. Call this on boot (as early
 // as possible, ideally before first paint) and again whenever the user
 // switches themes.
@@ -345,6 +371,16 @@ export function applyTheme(theme: Theme) {
   Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
   const radiusOverride = loadRadiusOverride();
   if (radiusOverride != null) root.style.setProperty("--card-radius", `${radiusOverride}px`);
+  // Обводки карточек: тема выше уже вернула 1px, поэтому «выключено» пишем
+  // поверх, а «включено» — только снимаем прошлое усиление (в темах его нет).
+  const borders = loadCardBorders();
+  root.setAttribute("data-card-borders", borders ? "on" : "off");
+  if (borders) {
+    if (!("--card-border-width-strong" in theme.vars)) root.style.removeProperty("--card-border-width-strong");
+  } else {
+    root.style.setProperty("--card-border-width", "0px");
+    root.style.setProperty("--card-border-width-strong", "0px");
+  }
   root.setAttribute("data-theme-mode", theme.mode);
   root.setAttribute("data-theme-id", theme.id);
   window.dispatchEvent(new Event(THEME_CHANGE_EVENT));

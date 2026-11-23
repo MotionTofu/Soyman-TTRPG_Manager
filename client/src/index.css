@@ -451,6 +451,27 @@
   color-scheme: dark;
 }
 
+/* Тумблер «Рамки и обводки» (Настройки → Интерфейс, themes.ts). Гасит только
+   пару обводки карточек/блоков; --line, --edge-width и тушь-рамка остаются
+   (§4.2). Значение на :root пишет applyTheme(), а поверхности со своей парой
+   (бумажные профили) переопределяют её у себя — им правило нужно адресно.
+   Лист персонажа и холст/статблок — исключения: их рамки не гаснут никогда.
+   Лист держится за body.sheet-fullscreen (его ставит CharacterDetailPage), а
+   не только за .sheet-page: модалки листа порталятся в body и тоже должны
+   остаться с рамками. */
+html[data-card-borders="off"] .paper-scope {
+  --card-border-width: 0px;
+  --card-border-width-strong: 0px;
+}
+html[data-card-borders="off"] body.sheet-fullscreen {
+  --card-border-width: 1px;
+  --card-border-width-strong: 1px;
+}
+html[data-card-borders="off"] body.sheet-fullscreen .paper-scope {
+  --card-border-width: 1px;
+  --card-border-width-strong: var(--edge-width);
+}
+
 /* Маскот SoyMan (components/SoyMan.tsx). Переменные объявлены НА САМОМ РИСУНКЕ,
    а не на :root: подстановка кастомных свойств происходит в месте объявления,
    поэтому `--soy-cloak: var(--accent)` на :root навсегда запомнил бы корневой

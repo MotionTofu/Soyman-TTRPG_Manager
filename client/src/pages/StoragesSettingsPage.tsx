@@ -17,6 +17,7 @@ import type { AppSettings, StorageProfile } from "../types";
 import {
   BUILTIN_THEMES, applyTheme, findTheme, loadThemePrefs,
   saveThemePrefs, loadRadiusOverride, saveRadiusOverride,
+  loadCardBorders, saveCardBorders,
 } from "../themes";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -58,6 +59,7 @@ export function StoragesSettingsPage() {
   // Appearance state moved from AppearanceSettingsPage
   const [prefs, setPrefs] = useState(loadThemePrefs());
   const [radius, setRadius] = useState(() => loadRadiusOverride() ?? 0);
+  const [cardBorders, setCardBorders] = useState(loadCardBorders);
   const [imageTreatment, setImageTreatment] = useState(loadImageTreatment);
   const appSettings = useResource<AppSettings>("/app-settings").data ?? null;
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
@@ -111,6 +113,11 @@ export function StoragesSettingsPage() {
   function changeRadius(px: number) {
     setRadius(px);
     saveRadiusOverride(px === 0 ? null : px);
+    applyTheme(findTheme(prefs.themeId));
+  }
+  function changeCardBorders(on: boolean) {
+    setCardBorders(on);
+    saveCardBorders(on);
     applyTheme(findTheme(prefs.themeId));
   }
   function changeHideFinance(hide: boolean) {
@@ -716,11 +723,18 @@ export function StoragesSettingsPage() {
               <span className="res-group__count">{BUILTIN_THEMES.length}</span>
             </summary>
             <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
-              <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>Тема применяется мгновенно. Скругление и обработка изображений — общие для всех тем.</p>
+              <p className="muted" style={{ margin: 0, maxWidth: "62ch" }}>Тема применяется мгновенно. Скругление, рамки и обработка изображений — общие для всех тем.</p>
               <label className="stack" style={{ maxWidth: 420, gap: 4 }}>
                 Скругление внешнего угла карточки: {radius}px
                 <input type="range" min={0} max={28} value={radius} onChange={(e) => changeRadius(Number(e.target.value))} />
                 <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Действует только на внешний угол карточки; плашки, чипы и бейджи внутри остаются прямоугольными (§4).</span>
+              </label>
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
+                <input type="checkbox" checked={cardBorders} onChange={(e) => changeCardBorders(e.target.checked)} />
+                <span className="stack" style={{ gap: 2 }}>
+                  Рамки и обводки
+                  <span className="muted" style={{ maxWidth: "62ch" }}>Обводки карточек и блоков. Разделители, кнопки и поля остаются; лист персонажа, статблок и холст не меняются.</span>
+                </span>
               </label>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", maxWidth: 420 }}>
                 <input type="checkbox" checked={imageTreatment} onChange={(e) => { setImageTreatment(e.target.checked); saveImageTreatment(e.target.checked); }} />

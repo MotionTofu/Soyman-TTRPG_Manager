@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { findTheme, migrateThemeId } from "./themes";
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  applyTheme, findTheme, loadCardBorders, migrateThemeId, saveCardBorders,
+} from "./themes";
 
 describe("migrateThemeId — перевод старого выбора на две темы v2", () => {
   it("новые id остаются", () => {
@@ -18,5 +21,39 @@ describe("migrateThemeId — перевод старого выбора на д�
   it("мусор → тема по умолчанию", () => {
     expect(migrateThemeId(42, null)).toBe("light");
     expect(findTheme("нет такой").id).toBe("light");
+  });
+});
+
+describe("обводки карточек — пользовательский тумблер", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.removeAttribute("style");
+    document.documentElement.removeAttribute("data-card-borders");
+  });
+
+  it("по умолчанию включены", () => {
+    expect(loadCardBorders()).toBe(true);
+  });
+
+  it("выключение пишет 0px в пару толщин и флаг на <html>", () => {
+    saveCardBorders(false);
+    applyTheme(findTheme("light"));
+    const root = document.documentElement;
+    expect(loadCardBorders()).toBe(false);
+    expect(root.getAttribute("data-card-borders")).toBe("off");
+    expect(root.style.getPropertyValue("--card-border-width")).toBe("0px");
+    expect(root.style.getPropertyValue("--card-border-width-strong")).toBe("0px");
+  });
+
+  it("включение возвращает 1px и снимает прошлое усиление", () => {
+    saveCardBorders(false);
+    applyTheme(findTheme("light"));
+    saveCardBorders(true);
+    applyTheme(findTheme("light"));
+    const root = document.documentElement;
+    expect(loadCardBorders()).toBe(true);
+    expect(root.getAttribute("data-card-borders")).toBe("on");
+    expect(root.style.getPropertyValue("--card-border-width")).toBe("1px");
+    expect(root.style.getPropertyValue("--card-border-width-strong")).toBe("");
   });
 });
