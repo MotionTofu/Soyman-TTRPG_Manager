@@ -35,7 +35,7 @@ describe("обводки карточек — пользовательский �
     expect(loadCardBorders()).toBe(true);
   });
 
-  it("выключение пишет 0px в пару толщин и флаг на <html>", () => {
+  it("выключение пишет 0px в пару толщин, гасит линии и ставит флаг на <html>", () => {
     saveCardBorders(false);
     applyTheme(findTheme("light"));
     const root = document.documentElement;
@@ -43,6 +43,9 @@ describe("обводки карточек — пользовательский �
     expect(root.getAttribute("data-card-borders")).toBe("off");
     expect(root.style.getPropertyValue("--card-border-width")).toBe("0px");
     expect(root.style.getPropertyValue("--card-border-width-strong")).toBe("0px");
+    expect(root.style.getPropertyValue("--line")).toBe("transparent");
+    // Цвет линий темы остаётся доступен защищённым поверхностям (index.css).
+    expect(root.style.getPropertyValue("--line-ink")).not.toBe("");
   });
 
   it("включение возвращает 1px и снимает прошлое усиление", () => {
@@ -55,5 +58,6 @@ describe("обводки карточек — пользовательский �
     expect(root.getAttribute("data-card-borders")).toBe("on");
     expect(root.style.getPropertyValue("--card-border-width")).toBe("1px");
     expect(root.style.getPropertyValue("--card-border-width-strong")).toBe("");
+    expect(root.style.getPropertyValue("--line")).toBe(findTheme("light").vars["--line"]);
   });
 });

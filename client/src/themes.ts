@@ -375,11 +375,15 @@ export function applyTheme(theme: Theme) {
   // поверх, а «включено» — только снимаем прошлое усиление (в темах его нет).
   const borders = loadCardBorders();
   root.setAttribute("data-card-borders", borders ? "on" : "off");
+  // Цвет линий темы под рукой у защищённых поверхностей даже при выключенных
+  // обводках: у 1 px рамок блоков отдельного токена нет, они берут --line.
+  root.style.setProperty("--line-ink", theme.vars["--line"] ?? "rgba(21,21,21,.16)");
   if (borders) {
     if (!("--card-border-width-strong" in theme.vars)) root.style.removeProperty("--card-border-width-strong");
   } else {
     root.style.setProperty("--card-border-width", "0px");
     root.style.setProperty("--card-border-width-strong", "0px");
+    root.style.setProperty("--line", "transparent");
   }
   root.setAttribute("data-theme-mode", theme.mode);
   root.setAttribute("data-theme-id", theme.id);
