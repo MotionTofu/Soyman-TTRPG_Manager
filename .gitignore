@@ -9,6 +9,9 @@ release/
 seed-full/
 *.tsbuildinfo
 
+# Разовые HTML-выгрузки приложения (книга LitM и подобное) — не исходники.
+exports/
+
 # Local runtime data — real campaign DBs, secrets, per-machine config.
 # Never commit these; they contain the user's actual game data / auth keys.
 server/data/
